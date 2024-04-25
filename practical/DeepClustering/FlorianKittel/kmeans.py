@@ -46,19 +46,3 @@ class MiniBatchKMeans:
                 clusters[cluster_id] = (1 - lr) * clusters[cluster_id] + lr * X[id]
 
         return clusters
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

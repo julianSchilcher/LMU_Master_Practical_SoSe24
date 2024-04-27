@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class KMeans:
     """A simple clustering method that forms k clusters by iteratively reassigning
     samples to the closest centroids and after that moves the centroids to the center
@@ -14,6 +15,7 @@ class KMeans:
         The number of iterations the algorithm will run for if it does not converge before that.
         Default is 500.
     """
+
     def __init__(self, k: int = 3, max_iterations: int = 500):
         self.K = k
         self.max_iterations = max_iterations
@@ -34,19 +36,19 @@ class KMeans:
             An array containing the indices of the clusters to which each sample belongs.
         """
         # Initialize centroids as k random samples from X
-        centroids: np.ndarray = self._initialize_random_centroids(X)
+        centroids = self._initialize_random_centroids(X)
         # Initialize clusters as one cluster for all samples
         clusters = np.zeros(np.shape(X)[0], dtype=int)
         # Iterate until convergence or for max iterations
         for _ in range(self.max_iterations):
             # Assign samples to the closest centroids (create clusters)
-            clusters: np.ndarray = self._create_clusters(centroids, X)
+            clusters = self._create_clusters(centroids, X)
             # Save current centroids for convergence check
             previous_centroids: np.ndarray = centroids
             # Calculate new centroids from the clusters
             centroids = self._compute_means(clusters, X)
             # If no centroids have changed => convergence
-            diff: np.ndarray = previous_centroids - centroids
+            diff = previous_centroids - centroids
             if not diff.any():
                 return clusters
         return clusters
@@ -67,7 +69,7 @@ class KMeans:
             An array containing the initial centroids.
         """
         m, n = np.shape(X)
-        centroids: np.ndarray = np.empty((self.K, n))
+        centroids = np.empty((self.K, n))
         for i in range(self.K):
             centroids[i] = X[np.random.choice(range(m))]
         return centroids
@@ -113,9 +115,9 @@ class KMeans:
             An array containing the updated centroids of the clusters.
         """
         _, n = np.shape(X)
-        centroids: np.ndarray = np.empty((self.K, n))
+        centroids = np.empty((self.K, n))
         for i in range(self.K):
-            points: np.ndarray = X[cluster_idx == i]
+            points = X[cluster_idx == i]
             centroids[i] = np.mean(points, axis=0)
         return centroids
 
@@ -134,7 +136,7 @@ class KMeans:
         int
             The index of the closest centroid to the given data point.
         """
-        distances: np.ndarray = np.empty(self.K)
+        distances = np.empty(self.K)
         for i in range(self.K):
             distances[i] = self._euclidean_distance(centroids[i], x)
         return np.argmin(distances)

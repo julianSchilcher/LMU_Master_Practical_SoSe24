@@ -1,6 +1,6 @@
 
 
-from .practical.ProcessMining.k_means_implementation import KMeans
+from practical.ProcessMining.k_means_implementation import KMeans
 import numpy as np
 import unittest
 

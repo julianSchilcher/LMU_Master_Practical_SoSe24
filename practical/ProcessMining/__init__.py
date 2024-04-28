@@ -1,3 +1,5 @@
-from .process_mining_dummy import hello_world
 
-__all__ = ["hello_world"]
+
+from k_means_implementation import KMeans
+
+__all__ = ["KMeans"]

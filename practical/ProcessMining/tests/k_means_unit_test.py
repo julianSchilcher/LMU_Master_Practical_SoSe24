@@ -34,19 +34,14 @@ class TestKMeans(unittest.TestCase):
         self.assertTrue(len(kmeans.centroids_history) < kmeans.max_iter)
 
 
-  
-if __name__ == '__main__':
 
-   
-
-
-    # generate data with sklearn using make_blobs 
-    X,y = make_blobs(n_samples=1000, centers=3, n_features=2,
-                    random_state=2)
-    
-    
-    kmeans = KMeans(n_clusters=3)
-    kmeans.fit(X)
-    kmeans.plot_clusters(X)
-    #kmeans.plot_clusters_iteratively(X)
-    unittest.main()
+        # generate data with sklearn using make_blobs 
+      #  X,y = make_blobs(n_samples=1000, centers=3, n_features=2,
+   #                     random_state=2)
+        
+        
+        #kmeans = KMeans(n_clusters=3)
+       # kmeans.fit(X)
+        #kmeans.plot_clusters(X)
+        #kmeans.plot_clusters_iteratively(X)
+      

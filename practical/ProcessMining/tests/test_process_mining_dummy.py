@@ -1,6 +1,6 @@
 
-#C:\Users\Lion\Desktop\Mastersemester4\Praktikum Process Mining\LMU_Master_Practical_SoSe24\practical\ProcessMining
-from practical.ProcessMining.k_means_implementation import KMeans
+
+from .practical.ProcessMining.k_means_implementation import KMeans
 import numpy as np
 import unittest
 

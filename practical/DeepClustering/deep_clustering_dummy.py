@@ -32,14 +32,14 @@ class MiniBatchKMeansVan:
     def fit(self, x: torch.Tensor) -> torch.Tensor:
         center_counts = torch.zeros(self.k)
         centroids = x[torch.randint(0, len(x), (self.k,))]
-        print(centroids)
+        # print(centroids)
 
         for _ in range(self.iterations):
             batch_index = torch.randint(0, len(x), (self.batch_size,))
             batch = x[batch_index]
-            print(batch)
+            # print(batch)
             distance = self.distance(batch, centroids)
-            print(distance)
+            # print(distance)
 
             for index, point in enumerate(batch):
                 center = distance[index]

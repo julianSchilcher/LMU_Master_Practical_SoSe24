@@ -67,7 +67,7 @@ class MiniBatchKMeans:
                 loss = eta * torch.sum(one_hot.T.unsqueeze(2) * x, dim=1)
                 loss_per_epoch += torch.sum(loss)
                 self.c += (- eta) * self.c + loss
-            print(f"loss (epoch {i}):", float(loss_per_epoch.cpu()))
+            # print(f"loss (epoch {i}):", float(loss_per_epoch.cpu()))
         return self
 
     def predict(self, X: np.ndarray):

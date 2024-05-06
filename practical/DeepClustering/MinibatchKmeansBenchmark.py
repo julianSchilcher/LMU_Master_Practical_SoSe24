@@ -66,7 +66,7 @@ def implementation_xuechun(data, n_clusters, seed):
     return labels
 
 
-if __name__ == "__main__":
+def run_benchmark():
     dataset_loaders = [load_optdigits, load_pendigits, load_har]
     implementations = [("Schmiedel", implementation_schmiedel), ("Xuechun", implementation_xuechun),
                        ("Schilcher", implementation_schilcher), ("Engel", implementation_engel),
@@ -97,3 +97,7 @@ if __name__ == "__main__":
             for key in results[name].keys():
                 print("{0}: {1} +- {2}".format(key, round(np.mean(results[name][key]), 3),
                                                round(np.std(results[name][key]), 3)))
+
+
+if __name__ == "__main__":
+    run_benchmark()

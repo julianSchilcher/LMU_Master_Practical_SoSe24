@@ -66,43 +66,6 @@ class KMeans:
         return np.argmin(distances, axis=0)
     
 
-#plotting of the final clustering result
-    def plot_clusters(self, X):
-            labels = self._assign_labels(X)
-
-            plt.figure(figsize=(8, 6))
-
-            for k in range(self.n_clusters):
-                plt.scatter(X[labels == k][:, 0], X[labels == k][:, 1], label=f'Cluster {k}')
-
-            plt.scatter(self.centroids[:, 0], self.centroids[:, 1], color='black', marker='x', label='Centroids')
-            plt.title('K-Means Clustering Result')
-            plt.xlabel('X')
-            plt.ylabel('Y')
-            plt.legend()
-            plt.show()
-
-#plotting of each centroid update step of kmeans
-    def plot_clusters_iteratively(self, X):
-        num_iterations = len(self.centroids_history)
-
-
-        num_rows = num_iterations // 2 + num_iterations % 2
-        plt.figure(figsize=(10, 10))
-        for i, (centroids, labels) in enumerate(zip(self.centroids_history, self.labels_history)):
-            plt.subplot(num_rows, 2, i + 1)
-
-            for k in range(self.n_clusters):
-                plt.scatter(X[labels == k][:, 0], X[labels == k][:, 1], label=f'Cluster {k}')
-
-            plt.scatter(centroids[:, 0], centroids[:, 1], color='black', marker='x', label='Centroids')
-            plt.title(f'Iteration {i}')
-            plt.xlabel('X')
-            plt.ylabel('Y')
-            plt.legend()
-        plt.tight_layout()
-        plt.show()
-
 
 
     

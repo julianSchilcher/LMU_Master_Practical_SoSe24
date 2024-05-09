@@ -272,7 +272,7 @@ class _DeepECT_Module(torch.nn.Module):
                 # calculate loss
                 nc_loss = self.cluster_tree.nc_loss()
                 dc_loss = self.cluster_tree.dc_loss()
-                rec_loss = autoencoder.loss(M, rec_loss_fn, self.device)
+                rec_loss, embedded, reconstructed = autoencoder.loss(M, rec_loss_fn, self.device)
                 
                 loss = nc_loss + dc_loss + rec_loss
 

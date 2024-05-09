@@ -4,36 +4,111 @@ from sklearn.utils import check_random_state
 from sklearn.cluster import KMeans
 from clustpy.deep._utils import set_torch_seed
 from clustpy.deep._train_utils import get_standard_initial_deep_clustering_setting
-
-
+from typing import List
 
 
 class Cluster_Node:
      
-    def __init__(self, center: np.ndarray, leaf_node=True):
-        if leaf_node:
-            self.center = torch.nn.Parameter(torch.tensor(center), requires_grad=True)
-        else: 
-            self.center = torch.tensor(center)
-
+    def __init__(self, center: np.ndarray, device: torch.device):
+        self.device = device
         self.left_child = None
         self.right_child = None
-        
+        self.weight = None
+        self.center = torch.nn.Parameter(torch.tensor(center, requires_grad=True, device= self.device, dtype=torch.float))
+        self.assignments = None
+
+    def is_leaf_node(self):
+        return self.left_child is None and self.right_child is None
     
     def from_leaf_to_inner(self):
-        self.center.requires_grad(False)
+        # inner node on cpu
+        self.center = self.center.data.cpu() # retrive data tensor from nn.Parameters
+        self.center.requires_grad = False
+        self.weight = torch.tensor([1.0, 1.0]) # initialise weights for left and right child
     
     def set_childs(self, left_child: np.ndarray, right_child: np.ndarray):
         self.from_leaf_to_inner()
-        self.left_child = torch.nn.Parameter(torch.tensor(left_child), requires_grad=True)
-        self.right_child = torch.nn.Parameter(torch.tensor(right_child), requires_grad=True)
+        self.left_child = Cluster_Node(left_child, self.device)
+        self.right_child = Cluster_Node(right_child, self.device)
 
+class Cluster_Tree:
+
+    def __init__(self, init_leafnode_centers: np.ndarray, device: torch.device):
+        self.root =  Cluster_Node(np.zeros(init_leafnode_centers.shape[1]), device)
+        self.root.set_childs(init_leafnode_centers[0], init_leafnode_centers[1])
+        self.pruning_nodes = [] # stores a list of nodes which weights fall below pruning treshold during current iteration and must be pruned in next iteration
+
+    
+    def get_all_leaf_nodes(self) -> List[Cluster_Node]:
+        leafnodes = []
+        self._collect_leafnodes(self.root, leafnodes)
+        return leafnodes
+        
+    def _collect_leafnodes(self, node: Cluster_Node, leafnodes: list):
+        if node.is_leaf_node():
+            leafnodes.append(node)
+        else:
+            self._collect_leafnodes(node.left_child, leafnodes)
+            self._collect_leafnodes(node.right_child, leafnodes)
+
+    def assign_to_nodes(self, minibatch: torch.tensor):
+        leafnodes = self.get_all_leaf_nodes()
+        leafnode_centers = list(map(lambda node: node.center.data, leafnodes))
+        leafnode_tensor = torch.stack(leafnode_centers, dim=0)
+
+        with torch.no_grad():
+            distance_matrix = torch.cdist(minibatch, leafnode_tensor, p=2) # kmeans uses L_2 norm (euclidean distance)
+        distance_matrix = distance_matrix.squeeze()
+        assignments = torch.argmin(distance_matrix, dim=1)
+        
+        for i, node in enumerate(leafnodes):
+            indices = (assignments == i).nonzero()
+            if len(indices) < 1:
+                node.assignments = None
+            else:
+                leafnode_data = minibatch[indices.squeeze()]
+                if leafnode_data.ndim == 1:
+                    leafnode_data = leafnode_data[None]
+            node.assignments = leafnode_data
+        self._assign_to_splitnodes(self.root) # assign samples recursively bottom up from leaf nodes to inner nodes
+    
+    def _assign_to_splitnodes(self, node: Cluster_Node):
+        if node.is_leaf_node():
+            return node.assignments
+        else:
+            left_assignments = self._assign_to_splitnodes(node.left_child)
+            right_assignments = self._assign_to_splitnodes(node.right_child)
+            if left_assignments == None or right_assignments == None:
+                node.assignments = left_assignments if right_assignments == None else right_assignments   
+            else:
+                node.assignments = torch.cat((left_assignments, right_assignments), dim=0)
+            return node.assignments
+    
+    def nc_loss(self):
+        pass
+
+    def dc_loss(self):
+        pass
+    
+    def adapt_inner_nodes(self):
+        pass
+
+    def pruning_necessary(self):
+        return len(self._nodes_to_prune) != 0
+
+    def prune_tree(self):
+        # reset list of nodes to prune
+        self._nodes_to_prune = []
+
+    def grow_tree(self):
+        pass
 
 
 class _DeepECT_Module(torch.nn.Module):
         """
         The _DeepECT_Module. Contains most of the algorithm specific procedures like the loss and tree-gow functions.
 
+        
         Parameters
         ----------
         init_centers : np.ndarray
@@ -49,11 +124,12 @@ class _DeepECT_Module(torch.nn.Module):
             Is augmentation invariance used
         """
 
-        def __init__(self, init_leafnode_centers: np.ndarray, augmentation_invariance: bool = False):
+        def __init__(self, init_leafnode_centers: np.ndarray, device: torch.device, augmentation_invariance: bool = False):
             super().__init__()
             self.augmentation_invariance = augmentation_invariance
             # Create initial cluster tree
-            self.cluster_tree = Cluster_Node(torch.empty(), leaf_node=False).set_childs(init_leafnode_centers[0], init_leafnode_centers[1])
+            self.cluster_tree = Cluster_Tree(init_leafnode_centers, device)
+            self.device = device
 
         def deepECT_loss(self, embedded: torch.Tensor, alpha: float) -> torch.Tensor:
             """
@@ -147,7 +223,7 @@ class _DeepECT_Module(torch.nn.Module):
             return loss
 
         def fit(self, autoencoder: torch.nn.Module, trainloader: torch.utils.data.DataLoader, max_iterations: int,
-                device: torch.device, optimizer: torch.optim.Optimizer, 
+                grow_interval: int, optimizer: torch.optim.Optimizer, 
                 rec_loss_fn: torch.nn.modules.loss._Loss) -> '_DeepECT_Module':
             """
             Trains the _DeepECT_Module in place.
@@ -160,8 +236,6 @@ class _DeepECT_Module(torch.nn.Module):
                 dataloader to be used for training
             max_iteratins : int
                 number of iterations for the clustering procedure.
-            device : torch.device
-                device to be trained on
             optimizer : torch.optim.Optimizer
                 the optimizer for training
             rec_loss_fn : torch.nn.modules.loss._Loss
@@ -174,15 +248,46 @@ class _DeepECT_Module(torch.nn.Module):
             self : _DKM_Module
                 this instance of the _DKM_Module
             """
-            # for alpha in self.alphas:
-            #     for e in range(n_epochs):
-            #         for batch in trainloader:
-            #             loss = self._loss(batch, alpha, autoencoder, cluster_loss_weight, rec_loss_fn, device)
-            #             # Backward pass
-            #             optimizer.zero_grad()
-            #             loss.backward()
-            #             optimizer.step()
+
+            train_iterator = iter(trainloader)
+
+            for e in range(max_iterations):
+                if self.cluster_tree.pruning_necessary():
+                    self.cluster_tree.prune_tree(self.pruning_nodes)                    
+                if e % grow_interval == 0:
+                    self.cluster_tree.grow_tree()
+                
+                # retrieve minibatch (endless)
+                try:
+                    # get next minibatch
+                    M = next(train_iterator)
+                except StopIteration:
+                    # after full epoch shuffle again
+                    train_iterator = iter(trainloader)
+                    M = next(train_iterator)
+
+                # assign data points to leafnodes and splitnodes 
+                self.cluster_tree.assign_to_nodes(M)
+
+                # calculate loss
+                nc_loss = self.cluster_tree.nc_loss()
+                dc_loss = self.cluster_tree.dc_loss()
+                rec_loss = autoencoder.loss(M, rec_loss_fn, self.device)
+                
+                loss = nc_loss + dc_loss + rec_loss
+
+                # optimizer_step with gradient descent
+                # !!! make sure that optimizer contains autoencoder-params and all new leaf node centers (old leaf node centers must be deleted in optimizer params) 
+                # ==> maybe new optimizer object after each tree grow step
+
+                # optimizer.zero_grad()
+                # loss.backward()
+                # optimizer.step()
+
+                # adapt centers of split nodes analytically
+                self.cluster_tree.adapt_inner_nodes()
             return self
+        
         
         def predict(self, embedded: torch.Tensor, alpha: float = 1000) -> torch.Tensor:
             # """
@@ -206,7 +311,7 @@ class _DeepECT_Module(torch.nn.Module):
             pass
     
 def _deep_ect(X: np.ndarray,  batch_size: int, pretrain_optimizer_params: dict,
-        clustering_optimizer_params: dict, pretrain_epochs: int, max_iterations: int,
+        clustering_optimizer_params: dict, pretrain_epochs: int, max_iterations: int, grow_interval: int,
         optimizer_class: torch.optim.Optimizer, rec_loss_fn: torch.nn.modules.loss._Loss, autoencoder: torch.nn.Module,
         embedding_size: int, custom_dataloaders: tuple, augmentation_invariance: bool,
         random_state: np.random.RandomState) -> (np.ndarray, np.ndarray, np.ndarray, np.ndarray, torch.nn.Module):
@@ -259,12 +364,12 @@ def _deep_ect(X: np.ndarray,  batch_size: int, pretrain_optimizer_params: dict,
         X, 2, batch_size, pretrain_optimizer_params, pretrain_epochs, optimizer_class, rec_loss_fn, autoencoder,
         embedding_size, custom_dataloaders, KMeans, None, random_state)
     # Setup DKM Module
-    dkm_module = _DeepECT_Module(init_leafnode_centers, augmentation_invariance).to(device)
+    dkm_module = _DeepECT_Module(init_leafnode_centers, device, augmentation_invariance).to(device)
     # Use DKM optimizer parameters (usually learning rate is reduced by a magnitude of 10)
-    optimizer = optimizer_class(list(autoencoder.parameters()) + list(dkm_module.parameters()),
+    optimizer = optimizer_class(list(autoencoder.parameters()),
                                 **clustering_optimizer_params)
     # DKM Training loop
-    dkm_module.fit(autoencoder, trainloader, max_iterations, device, optimizer, rec_loss_fn)
+    dkm_module.fit(autoencoder, trainloader, max_iterations, grow_interval, optimizer, rec_loss_fn)
     # Get labels
     dkm_labels = predict_batchwise(testloader, autoencoder, dkm_module, device)
     dkm_centers = dkm_module.centers.detach().cpu().numpy()
@@ -278,7 +383,7 @@ def _deep_ect(X: np.ndarray,  batch_size: int, pretrain_optimizer_params: dict,
 class DeepECT:
 
     def __init__(self, batch_size: int = 256, pretrain_optimizer_params: dict = None, clustering_optimizer_params: dict = None,
-                 pretrain_epochs: int = 50, max_iterations: int = 1000,
+                 pretrain_epochs: int = 50, max_iterations: int = 10000, grow_interval: int = 500,
                  optimizer_class: torch.optim.Optimizer = torch.optim.Adam,
                  rec_loss_fn: torch.nn.modules.loss._Loss = torch.nn.MSELoss(), autoencoder: torch.nn.Module = None,
                  embedding_size: int = 10, custom_dataloaders: tuple = None,
@@ -335,6 +440,7 @@ class DeepECT:
         self.clustering_optimizer_params = {"lr": 1e-4} if clustering_optimizer_params is None else clustering_optimizer_params
         self.pretrain_epochs = pretrain_epochs
         self.max_iterations = max_iterations
+        self.grow_interval = grow_interval
         self.optimizer_class = optimizer_class
         self.rec_loss_fn = rec_loss_fn
         self.autoencoder = autoencoder
@@ -367,6 +473,7 @@ class DeepECT:
                                                                                    self.clustering_optimizer_params,
                                                                                    self.pretrain_epochs,
                                                                                    self.max_iterations,
+                                                                                   self.grow_interval, 
                                                                                    self.optimizer_class, self.rec_loss_fn,
                                                                                    self.autoencoder,
                                                                                    self.embedding_size,

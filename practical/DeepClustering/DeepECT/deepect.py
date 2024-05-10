@@ -104,9 +104,39 @@ class Cluster_Tree:
         loss = torch.sum((leafnode_center_tensor - leafnode_minibatch_centers_tensor)**2)/len(leafnode_center_tensor)
         return loss
 
-    def dc_loss(self):
-        pass
+    def dc_loss(self, autoencoder: torch.nn.Module, batchsize: int):
+        sibling_losses = torch.tensor([])
+        number_nodes = self.calculate_sibling_loss(self.root, autoencoder, sibling_losses)
+        loss = torch.sum(sibling_losses)/(number_nodes*batchsize)
+        return loss
+        
+    def calculate_sibling_loss(self, root: Cluster_Node, autoencoder: torch.nn.Module, sibling_loss: torch.Tensor) -> int:
     
+        if root is None:
+            return 0
+        
+        # Traverse the left subtree
+        left_counter = self.sibling_loss(root.left_child)
+        
+        # Traverse the right subtree
+        right_counter = self.sibling_loss(root.right_child)
+        
+        # Calculate lc loss for siblings if they exist
+        if root.left_child and root.right_child:
+                loss_left = self.single_sibling_loss(root.left_child)
+                loss_right = self.single_sibling_loss(root.right_child)
+                torch.cat((sibling_loss, loss_left, loss_right))
+        return left_counter + right_counter + 1
+
+
+
+    def single_sibling_loss(self, node: Cluster_Node, sibling: Cluster_Node, autoencoder: torch.nn.Module):
+        sibling_direction = (node.center.detach() - sibling.center.detach())/torch.sum((node.center.detach() - sibling.center.detach())**2)
+        # transform tensor from 1d to 2d
+        sibling_direction = sibling_direction[None]
+        loss = -torch.sum(torch.abs(torch.matmul(sibling_direction, (autoencoder.encode(node.assignments) - node.center.detach()).T)))
+        return loss
+
     def adapt_inner_nodes(self):
         pass
 

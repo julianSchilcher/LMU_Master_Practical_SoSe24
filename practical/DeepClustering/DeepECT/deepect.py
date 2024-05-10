@@ -4,7 +4,7 @@ from sklearn.utils import check_random_state
 from sklearn.cluster import KMeans
 from clustpy.deep._utils import set_torch_seed
 from clustpy.deep._train_utils import get_standard_initial_deep_clustering_setting
-from typing import List
+from typing import List, Tuple
 
 
 class Cluster_Node:
@@ -84,8 +84,25 @@ class Cluster_Tree:
                 node.assignments = torch.cat((left_assignments, right_assignments), dim=0)
             return node.assignments
     
-    def nc_loss(self):
-        pass
+    def nc_loss(self, autoencoder: torch.nn.Module) -> torch.tensor:
+        leaf_nodes = self.get_all_leaf_nodes()
+        # convert the list of leaf nodes to a list of the corresponding leaf node centers as tensors
+        leafnode_centers = list(map(lambda node: node.center, leaf_nodes))
+        # !!! Maybe here a problem of concatenating parameter tensors !!
+        # reformat list of tensors to one sinlge tensor of shape (#leafnodes,#emb_features)
+        leafnode_center_tensor = torch.stack(leafnode_centers, dim=0) 
+        
+        # get the assignments for each leaf node (from the current minibatch)
+        leafnode_assignments = list(map(lambda node: node.assignments, leaf_nodes))
+        # calculate the center of the assignments from the current minibatch for each leaf node
+        with torch.no_grad(): # embedded space should not be optimized in this loss 
+            leafnode_minibatch_centers = list(map(lambda assignments: torch.sum(autoencoder.encode(assignments), axis=0)/len(assignments), leafnode_assignments))
+        # reformat list of tensors to one sinlge tensor of shape (#leafnodes,#emb_features)
+        leafnode_minibatch_centers_tensor = torch.stack(leafnode_minibatch_centers, dim=0)
+        
+        # calculate the distance between the current leaf node centers and the center of its assigned embeddings averaged over all leaf nodes
+        loss = torch.sum((leafnode_center_tensor - leafnode_minibatch_centers_tensor)**2)/len(leafnode_center_tensor)
+        return loss
 
     def dc_loss(self):
         pass
@@ -270,7 +287,7 @@ class _DeepECT_Module(torch.nn.Module):
                 self.cluster_tree.assign_to_nodes(M)
 
                 # calculate loss
-                nc_loss = self.cluster_tree.nc_loss()
+                nc_loss = self.cluster_tree.nc_loss(autoencoder)
                 dc_loss = self.cluster_tree.dc_loss()
                 rec_loss, embedded, reconstructed = autoencoder.loss(M, rec_loss_fn, self.device)
                 

@@ -8,8 +8,29 @@ from typing import List, Tuple
 
 
 class Cluster_Node:
+    """
+    This class represents a cluster node within a binary cluster tree. Each node in a cluster tree represents a cluster. The cluster is 
+    stored through its center (self.center). During the assignment of a new minibatch to the cluster tree, each node stores the samples which are 
+    nearest to its center (self.assignments). 
+    The centers of leaf nodes are optimized through autograd, whereas the center of inner nodes are adapted analytially with weights for each of its
+    child stored in self.weights.
+    """
      
-    def __init__(self, center: np.ndarray, device: torch.device):
+    def __init__(self, center: np.ndarray, device: torch.device) -> 'Cluster_Node':
+        """
+        Constructor for class Cluster_Node
+
+        Parameters
+        ----------
+        center : np.array
+            the initial center for this node
+        device : torch.device
+            device to be trained on
+
+        Returns
+        -------
+        Cluster_Node object
+        """
         self.device = device
         self.left_child = None
         self.right_child = None
@@ -18,33 +39,95 @@ class Cluster_Node:
         self.assignments = None
 
     def is_leaf_node(self):
+        """
+        Tests wether the this node is a leaf node.
+
+        Returns
+        -------
+        boolean
+            True if the node is a leaf node else False
+        """
         return self.left_child is None and self.right_child is None
     
     def from_leaf_to_inner(self):
+        """
+        Converts a leaf node to a inner node. Weights for its child are initialised and the centers are not trainable anymore.
+
+        """
         # inner node on cpu
         self.center = self.center.data.cpu() # retrive data tensor from nn.Parameters
         self.center.requires_grad = False
         self.weight = torch.tensor([1.0, 1.0]) # initialise weights for left and right child
     
     def set_childs(self, left_child: np.ndarray, right_child: np.ndarray):
+        """
+        Set new childs to this cluster node and therefore changes this node to an inner node.
+
+        Parameters
+        ----------
+        left_child : np.array
+            initial centers for the left child
+        right_child : np.array
+            initial centers for the right child
+
+        """
         self.from_leaf_to_inner()
         self.left_child = Cluster_Node(left_child, self.device)
         self.right_child = Cluster_Node(right_child, self.device)
 
 class Cluster_Tree:
+    """
+    This class represents a binary cluster tree. It provides multiple functionalities used for improving the cluster tree, like calculating
+    the DC and NC losses for the tree and assigning samples of a minibatch to the appropriate nodes. Furthermore it provides methods for
+    growing and pruning the tree as well as the analytical adaption of the inner nodes. 
+    """
 
-    def __init__(self, init_leafnode_centers: np.ndarray, device: torch.device):
+    def __init__(self, init_leafnode_centers: np.ndarray, device: torch.device) -> 'Cluster_Tree':
+        """
+        Constructor for class Cluster_Tree
+
+        Parameters
+        ----------
+        init_leafnode_ceners : np.array
+            the centers of the two initial leaf nodes of the tree given as a array of shape(2,#embedd_features)
+        device : torch.device
+            device to be trained on
+
+        Returns
+        -------
+        Cluster_Tree object
+        """
+        # center of root can be a dummy-center since its never needed
         self.root =  Cluster_Node(np.zeros(init_leafnode_centers.shape[1]), device)
+        # assign the 2 initial leaf nodes with its initial centers
         self.root.set_childs(init_leafnode_centers[0], init_leafnode_centers[1])
         self.pruning_nodes = [] # stores a list of nodes which weights fall below pruning treshold during current iteration and must be pruned in next iteration
 
     
     def get_all_leaf_nodes(self) -> List[Cluster_Node]:
+        """
+       Returns a list of all leaf node references of this tree
+
+        Returns
+        -------
+        List[Cluster_Node]
+            References of all leaf nodes in the tree
+        """
         leafnodes = []
         self._collect_leafnodes(self.root, leafnodes)
         return leafnodes
         
     def _collect_leafnodes(self, node: Cluster_Node, leafnodes: list):
+        """
+        Helper function for recursively collecting all leaf nodes
+
+        Parameters
+        ----------
+        node : Cluster_Node
+            The node where the search for leaf nodes begin
+        leafnodes : list
+            This list stores the leaf nodes founded by traversing the tree
+        """
         if node.is_leaf_node():
             leafnodes.append(node)
         else:
@@ -52,15 +135,30 @@ class Cluster_Tree:
             self._collect_leafnodes(node.right_child, leafnodes)
 
     def assign_to_nodes(self, minibatch: torch.tensor):
+        """
+        This method assigns all samples in the minibatch to its nearest nodes in the cluster tree. It is performed bottom up, so each
+        sample is first assigned to its nearest leaf node. Afterwards the samples are assigned recursivley to the inner nodes by merging
+        the assignments of the child node.
+
+        Parameters
+        ----------
+        minibatch : torch.Tensor
+            The minibatch with shape (#samples, #emb_features)
+        """
+        # retrieve all leaf nodes from the current tree
         leafnodes = self.get_all_leaf_nodes()
+        # transform it into a lis of leaf node centers and stack it into a tensor of shape (#leafnodes, #emb_features)
         leafnode_centers = list(map(lambda node: node.center.data, leafnodes))
         leafnode_tensor = torch.stack(leafnode_centers, dim=0)
 
+        #  calculate the distance from each sample in the minibatch to all leaf nodes
         with torch.no_grad():
             distance_matrix = torch.cdist(minibatch, leafnode_tensor, p=2) # kmeans uses L_2 norm (euclidean distance)
         distance_matrix = distance_matrix.squeeze()
+        # the sample gets the nearest node assigned
         assignments = torch.argmin(distance_matrix, dim=1)
         
+        # for each leafnode, check which samples it has got assigned and store the assigned samples in the leafnode
         for i, node in enumerate(leafnodes):
             indices = (assignments == i).nonzero()
             if len(indices) < 1:
@@ -73,18 +171,43 @@ class Cluster_Tree:
         self._assign_to_splitnodes(self.root) # assign samples recursively bottom up from leaf nodes to inner nodes
     
     def _assign_to_splitnodes(self, node: Cluster_Node):
-        if node.is_leaf_node():
+        """
+        Function for recursively assigning samples to inner nodes by merging the assignments of its two childs
+
+        Parameters
+        ----------
+        node : Cluster_Node
+            The node where the assignmets should be stored
+        """
+        if node.is_leaf_node(): # base case of recursion
             return node.assignments
         else:
-            left_assignments = self._assign_to_splitnodes(node.left_child)
+            # get assignments of left child
+            left_assignments = self._assign_to_splitnodes(node.left_child) 
+            # get assignments of right child
             right_assignments = self._assign_to_splitnodes(node.right_child)
+            # if one of the assignments is empty, then just use the assignments of the other node
             if left_assignments == None or right_assignments == None:
                 node.assignments = left_assignments if right_assignments == None else right_assignments   
             else:
+                # merge the assignments of the child nodes and store it in the nodes
                 node.assignments = torch.cat((left_assignments, right_assignments), dim=0)
             return node.assignments
     
     def nc_loss(self, autoencoder: torch.nn.Module) -> torch.Tensor:
+        """
+        Function for calculating the nc loss used for adopting the leaf node centers.
+
+        Parameters
+        ----------
+        autoencoder : torch.nn.Module
+            The autoencoder used for calculating the embeddings
+
+        Returns
+        -------
+        loss : torch.Tensor
+            the NC loss
+        """
         leaf_nodes = self.get_all_leaf_nodes()
         # convert the list of leaf nodes to a list of the corresponding leaf node centers as tensors
         leafnode_centers = list(map(lambda node: node.center, leaf_nodes))
@@ -107,8 +230,23 @@ class Cluster_Tree:
         return loss
 
     def dc_loss(self, autoencoder: torch.nn.Module, batchsize: int) -> torch.Tensor:
+        """
+        Function for calculating the overall dc loss used for improving the embedded space for a better clustering result.
+
+        Parameters
+        ----------
+        autoencoder : torch.nn.Module
+            The autoencoder used for calculating the embeddings
+        batchsize   : int
+            The batch size used for normalization here
+
+        Returns
+        -------
+        loss : torch.Tensor
+            the DC loss
+        """
         sibling_losses = [] # storing losses for each node in tree
-        number_nodes = self.calculate_sibling_loss(self.root, autoencoder, sibling_losses)
+        number_nodes = self._calculate_sibling_loss(self.root, autoencoder, sibling_losses)
         number_nodes = number_nodes - 1 # exclude root node
         # make sure that each node got a loss
         assert number_nodes == len(sibling_losses)
@@ -119,30 +257,63 @@ class Cluster_Tree:
         loss = torch.sum(sibling_losses)/(number_nodes*batchsize)
         return loss
         
-    def calculate_sibling_loss(self, root: Cluster_Node, autoencoder: torch.nn.Module, sibling_loss: torch.Tensor) -> int:
-    
+    def _calculate_sibling_loss(self, root: Cluster_Node, autoencoder: torch.nn.Module, sibling_loss: List[torch.Tensor]) -> int:
+        """
+        Helper function for recursively calculating the dc loss for each node. The losses are stored in the given list <sibling_loss>
+
+        Parameters
+        ----------
+        root : Cluster_Node
+            The node for which childs (siblings) the dc loss should be calculated 
+        autoencoder : torch.nn.Module
+            The autoencoder used for calculating the embeddings
+        sibling_loss : List[torch.Tensor]
+            Stores the loss for each node
+
+        Returns
+        -------
+        #nodes : int
+            Returns the number of nodes in the cluster tree
+        """
         if root is None:
             return 0
         
         # Traverse the left subtree
-        left_counter = self.calculate_sibling_loss(root.left_child, autoencoder, sibling_loss)
+        left_counter = self._calculate_sibling_loss(root.left_child, autoencoder, sibling_loss)
         
         # Traverse the right subtree
-        right_counter = self.calculate_sibling_loss(root.right_child, autoencoder, sibling_loss)
+        right_counter = self._calculate_sibling_loss(root.right_child, autoencoder, sibling_loss)
         
         # Calculate lc loss for siblings if they exist
         if root.left_child and root.right_child:
                 # calculate dc loss for left child with respect to the right child
-                loss_left = self.single_sibling_loss(root.left_child, root.right_child, autoencoder)
+                loss_left = self._single_sibling_loss(root.left_child, root.right_child, autoencoder)
                 # calculate dc loss for right child with respect to the left child
-                loss_right = self.single_sibling_loss(root.right_child, root.left_child, autoencoder)
+                loss_right = self._single_sibling_loss(root.right_child, root.left_child, autoencoder)
                 # store the losses
                 sibling_loss.extend([loss_left, loss_right])
         return left_counter + right_counter + 1
 
 
 
-    def single_sibling_loss(self, node: Cluster_Node, sibling: Cluster_Node, autoencoder: torch.nn.Module) -> torch.Tensor:
+    def _single_sibling_loss(self, node: Cluster_Node, sibling: Cluster_Node, autoencoder: torch.nn.Module) -> torch.Tensor:
+        """
+        Calculates a single dc loss for the node <node> with respect to its sibling <sibling>.
+
+        Parameters
+        ----------
+        node : Cluster_Node
+            The node for which the dc loss should be calculated
+        sibling : Cluster_Node
+            The sibling of the node for which the dc loss should be calculated
+        autoencoder : torch.nn.Module
+            The autoencoder used for calculating the embeddings
+
+        Returns
+        -------
+        loss : torch.Tensor
+            the dc loss for <node>
+        """
         # calculate direction (norm) vector between <node> and <sibling> 
         sibling_direction = (node.center.detach() - sibling.center.detach())/torch.sqrt(torch.sum((node.center.detach() - sibling.center.detach())**2))
         # transform tensor from 1d to 2d
@@ -193,28 +364,8 @@ class _DeepECT_Module(torch.nn.Module):
             self.cluster_tree = Cluster_Tree(init_leafnode_centers, device)
             self.device = device
 
-        def deepECT_loss(self, embedded: torch.Tensor, alpha: float) -> torch.Tensor:
-            """
-            Calculate the DeepECT loss of given embedded samples.
 
-            Parameters
-            ----------
-            embedded : torch.Tensor
-                the embedded samples
-    
-            Returns
-            -------
-            loss : torch.Tensor
-                the final DeepECT loss
-            """
-            # squared_diffs = squared_euclidean_distance(embedded, self.centers)
-            # probs = _dkm_get_probs(squared_diffs, alpha)
-            # loss = (squared_diffs.sqrt() * probs).sum(1).mean()
-            loss = None
-            return loss
-        
-
-        def dkm_augmentation_invariance_loss(self, embedded: torch.Tensor, embedded_aug: torch.Tensor,
+        def deepect_augmentation_invariance_loss(self, embedded: torch.Tensor, embedded_aug: torch.Tensor,
                                             alpha: float) -> torch.Tensor:
             """
             Calculate the DeepECT loss of given embedded samples with augmentation invariance.
@@ -242,45 +393,6 @@ class _DeepECT_Module(torch.nn.Module):
             # aug_loss = (squared_diffs_augmented.sqrt() * probs).sum(1).mean()
             # # average losses
             # loss = (clean_loss + aug_loss) / 2
-            loss = None
-            return loss
-
-        def _loss(self, batch: list, alpha: float, autoencoder: torch.nn.Module, cluster_loss_weight: float,
-                rec_loss_fn: torch.nn.modules.loss._Loss, device: torch.device) -> torch.Tensor:
-            """
-            Calculate the complete DeepECT + Autoencoder loss.
-
-            Parameters
-            ----------
-            batch : list
-                the minibatch
-            autoencoder : torch.nn.Module
-                the autoencoder
-            rec_loss_fn : torch.nn.modules.loss._Loss
-                loss function for the reconstruction
-            device : torch.device
-                device to be trained on
-
-            Returns
-            -------
-            loss : torch.Tensor
-                the final DeepECT + AE loss
-            """
-            # # Calculate combined total loss
-            # if self.augmentation_invariance:
-            #     # Calculate reconstruction loss
-            #     #batch[1] are augmented samples for training samples in batch[0]
-            #     ae_loss, embedded, _ = autoencoder.loss([batch[0], batch[2]], loss_fn, device)
-            #     ae_loss_aug, embedded_aug, _ = autoencoder.loss([batch[0], batch[1]], loss_fn, device)
-            #     ae_loss = (ae_loss + ae_loss_aug) / 2
-            #     # Calculate clustering loss
-            #     cluster_loss = self.dkm_augmentation_invariance_loss(embedded, embedded_aug, alpha)
-            # else:
-            #     # Calculate reconstruction loss
-            #     ae_loss, embedded, _ = autoencoder.loss(batch, loss_fn, device)
-            #     # Calculate clustering loss
-            #     cluster_loss = self.dkm_loss(embedded, alpha)
-            # loss = ae_loss + cluster_loss * cluster_loss_weight
             loss = None
             return loss
 

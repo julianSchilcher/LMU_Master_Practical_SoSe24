@@ -35,9 +35,7 @@ def sample_cluster_tree_with_assignments():
     """ 
     Helper method for creating a sample cluster tree with assignments
     """
-    deep_ect = _DeepECT_Module(np.array([[0,0], [1,1]]), 'cpu')
-    tree = deep_ect.cluster_tree
-    tree.root.left_child.set_childs(np.array([-2,-2]), np.array([-0.5,-0.5]))
+    tree = sample_cluster_tree()
     tree.assign_to_nodes(torch.tensor([[-3,-3], [10,10], [-0.4,-0.4],[0.4,0.3]]))
     return tree
 
@@ -70,11 +68,43 @@ def test_nc_loss():
     loss = tree.nc_loss(autoencoder)
     
     # calculate nc loss for the above example manually
-    loss_left_left_node = torch.sum((torch.tensor([-2,-2]) - torch.tensor([-3,-3]))**2)
-    loss_left_right_node = torch.sum((torch.tensor([-0.5,-0.5]) - torch.tensor([-0.4,-0.4]))**2)
-    loss_right_node = torch.sum((torch.tensor([1,1]) - (torch.tensor([10,10])+torch.tensor([0.4,0.3]))/2)**2)
+    loss_left_left_node = torch.sqrt(torch.sum((torch.tensor([-2,-2]) - torch.tensor([-3,-3]))**2))
+    loss_left_right_node = torch.sqrt(torch.sum((torch.tensor([-0.5,-0.5]) - torch.tensor([-0.4,-0.4]))**2))
+    loss_right_node = torch.sqrt(torch.sum((torch.tensor([1,1]) - (torch.tensor([10,10])+torch.tensor([0.4,0.3]))/2)**2))
     loss_test = (loss_left_left_node + loss_left_right_node + loss_right_node)/3
+
+    assert torch.all(torch.eq(loss, loss_test))
+
+def test_dc_loss():
+    tree = sample_cluster_tree_with_assignments()
     
-    assert torch.allclose(loss, loss_test) # take rounding into account (Cluster_Node works with float tensors, here we work with int tensors)
-                    
+    # calculate direction between left child of root and right child of root
+    projection_l_r = (torch.tensor([0,0], dtype=torch.float32) - torch.tensor([1,1], dtype=torch.float32))/np.sqrt(2)
+    projection_l_r = projection_l_r[None] # shape to 1x2 for matmul
+    # calculate dc-loss for left child of root
+    loss_l_r = torch.abs(torch.matmul(projection_l_r, (torch.tensor([0,0], dtype=torch.float32)[None] - torch.tensor([-3,-3], dtype=torch.float32)[None]).T)) + torch.abs(torch.matmul(projection_l_r, (torch.tensor([0,0], dtype=torch.float32)[None] -  torch.tensor([-0.4,-0.4])[None]).T))
+    # calculate direction between right child of root and left child of root (just flip vector)
+    projection_r_l = -projection_l_r
+    # calculate dc-loss for right child of root
+    loss_r_l = torch.abs(torch.matmul(projection_r_l, (torch.tensor([1,1], dtype=torch.float32)[None] - torch.tensor([10,10], dtype=torch.float32)[None]).T)) + torch.abs(torch.matmul(projection_r_l, (torch.tensor([1,1], dtype=torch.float32)[None] -  torch.tensor([0.4,0.3])[None]).T))
+    # calculate direction between root.left.left and root.left.right
+    projection_l_l_r = (torch.tensor([-2,-2], dtype=torch.float32) - torch.tensor([-0.5,-0.5]))/np.sqrt((-1.5)**2 + (-1.5)**2)
+    # calculate dc-loss for root.left.left
+    loss_l_l_r = torch.abs(torch.matmul(projection_l_l_r, (torch.tensor([-2,-2], dtype=torch.float32)[None] - torch.tensor([-3,-3], dtype=torch.float32)[None]).T))
+    # calculate direction between root.left.right and root.left.left (just flip vector)
+    projection_l_r_l = -projection_l_l_r
+    # calculate dc-loss for root.left.right
+    loss_l_r_l = torch.abs(torch.matmul(projection_l_r_l, (torch.tensor([-0.5,-0.5])[None] - torch.tensor([-0.4,-0.4])[None]).T))
+    # calculate overall dc loss
+    num_nodes = 4 # excluding root node
+    batch_size = 4
+    loss_manually = (loss_l_r + loss_r_l + loss_l_l_r + loss_l_r_l)/(num_nodes*batch_size)
+
+    # create mock-autoencoder, which represents just an identity function
+    encode = lambda x: x
+    autoencoder = type('Autoencoder', (), {'encode': encode})
+    # calculate dc loss of the tree 
+    loss = tree.dc_loss(autoencoder, 4)
+
+    assert torch.all(torch.eq(loss, loss_manually))
 

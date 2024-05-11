@@ -84,7 +84,7 @@ class Cluster_Tree:
                 node.assignments = torch.cat((left_assignments, right_assignments), dim=0)
             return node.assignments
     
-    def nc_loss(self, autoencoder: torch.nn.Module) -> torch.tensor:
+    def nc_loss(self, autoencoder: torch.nn.Module) -> torch.Tensor:
         leaf_nodes = self.get_all_leaf_nodes()
         # convert the list of leaf nodes to a list of the corresponding leaf node centers as tensors
         leafnode_centers = list(map(lambda node: node.center, leaf_nodes))
@@ -101,12 +101,21 @@ class Cluster_Tree:
         leafnode_minibatch_centers_tensor = torch.stack(leafnode_minibatch_centers, dim=0)
         
         # calculate the distance between the current leaf node centers and the center of its assigned embeddings averaged over all leaf nodes
-        loss = torch.sum((leafnode_center_tensor - leafnode_minibatch_centers_tensor)**2)/len(leafnode_center_tensor)
+        distance = torch.sum((leafnode_center_tensor - leafnode_minibatch_centers_tensor)**2, axis=1)
+        distance = torch.sqrt(distance)
+        loss = torch.sum(distance)/len(leafnode_center_tensor)
         return loss
 
-    def dc_loss(self, autoencoder: torch.nn.Module, batchsize: int):
-        sibling_losses = torch.tensor([])
+    def dc_loss(self, autoencoder: torch.nn.Module, batchsize: int) -> torch.Tensor:
+        sibling_losses = [] # storing losses for each node in tree
         number_nodes = self.calculate_sibling_loss(self.root, autoencoder, sibling_losses)
+        number_nodes = number_nodes - 1 # exclude root node
+        # make sure that each node got a loss
+        assert number_nodes == len(sibling_losses)
+
+        # transform list of losses for each node to a tensor
+        sibling_losses = torch.tensor(sibling_losses)
+        # calculate overall dc loss
         loss = torch.sum(sibling_losses)/(number_nodes*batchsize)
         return loss
         
@@ -116,26 +125,32 @@ class Cluster_Tree:
             return 0
         
         # Traverse the left subtree
-        left_counter = self.sibling_loss(root.left_child)
+        left_counter = self.calculate_sibling_loss(root.left_child, autoencoder, sibling_loss)
         
         # Traverse the right subtree
-        right_counter = self.sibling_loss(root.right_child)
+        right_counter = self.calculate_sibling_loss(root.right_child, autoencoder, sibling_loss)
         
         # Calculate lc loss for siblings if they exist
         if root.left_child and root.right_child:
-                loss_left = self.single_sibling_loss(root.left_child)
-                loss_right = self.single_sibling_loss(root.right_child)
-                torch.cat((sibling_loss, loss_left, loss_right))
+                # calculate dc loss for left child with respect to the right child
+                loss_left = self.single_sibling_loss(root.left_child, root.right_child, autoencoder)
+                # calculate dc loss for right child with respect to the left child
+                loss_right = self.single_sibling_loss(root.right_child, root.left_child, autoencoder)
+                # store the losses
+                sibling_loss.extend([loss_left, loss_right])
         return left_counter + right_counter + 1
 
 
 
-    def single_sibling_loss(self, node: Cluster_Node, sibling: Cluster_Node, autoencoder: torch.nn.Module):
-        sibling_direction = (node.center.detach() - sibling.center.detach())/torch.sum((node.center.detach() - sibling.center.detach())**2)
+    def single_sibling_loss(self, node: Cluster_Node, sibling: Cluster_Node, autoencoder: torch.nn.Module) -> torch.Tensor:
+        # calculate direction (norm) vector between <node> and <sibling> 
+        sibling_direction = (node.center.detach() - sibling.center.detach())/torch.sqrt(torch.sum((node.center.detach() - sibling.center.detach())**2))
         # transform tensor from 1d to 2d
         sibling_direction = sibling_direction[None]
-        loss = -torch.sum(torch.abs(torch.matmul(sibling_direction, (autoencoder.encode(node.assignments) - node.center.detach()).T)))
+        # project each sample assigned to <node> in the direction of its sibling and sum up the absolute projection values for each sample
+        loss = torch.sum(torch.abs(torch.matmul(sibling_direction, -(autoencoder.encode(node.assignments) - node.center.detach()).T)))
         return loss
+
 
     def adapt_inner_nodes(self):
         pass
@@ -318,7 +333,7 @@ class _DeepECT_Module(torch.nn.Module):
 
                 # calculate loss
                 nc_loss = self.cluster_tree.nc_loss(autoencoder)
-                dc_loss = self.cluster_tree.dc_loss()
+                dc_loss = self.cluster_tree.dc_loss(autoencoder, len(M))
                 rec_loss, embedded, reconstructed = autoencoder.loss(M, rec_loss_fn, self.device)
                 
                 loss = nc_loss + dc_loss + rec_loss

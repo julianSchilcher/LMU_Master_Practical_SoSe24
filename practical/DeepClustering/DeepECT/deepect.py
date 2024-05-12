@@ -5,7 +5,7 @@ from sklearn.cluster import KMeans
 from clustpy.deep import predict_batchwise, encode_batchwise
 from clustpy.deep._utils import set_torch_seed
 from clustpy.deep._train_utils import get_standard_initial_deep_clustering_setting
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
 import torch.utils
 import torch.utils.data
@@ -21,7 +21,10 @@ class Cluster_Node:
     """
 
     def __init__(
-        self, center: np.ndarray, device: torch.device, id: int = 0
+        self,
+        center: np.ndarray,
+        device: torch.device,
+        id: int = 0,
     ) -> "Cluster_Node":
         """
         Constructor for class Cluster_Node
@@ -72,7 +75,13 @@ class Cluster_Node:
             [1.0, 1.0]
         )  # initialise weights for left and right child
 
-    def set_childs(self, left_child: np.ndarray, right_child: np.ndarray):
+    def set_childs(
+        self,
+        optimizer: Union[torch.optim.Optimizer | None],
+        left_child: np.ndarray,
+        right_child: np.ndarray,
+        split: int = 0,
+    ):
         """
         Set new childs to this cluster node and therefore changes this node to an inner node.
 
@@ -82,11 +91,23 @@ class Cluster_Node:
             initial centers for the left child
         right_child : np.array
             initial centers for the right child
+        split : int
+            indicates the current split count (max count of clusters)
 
         """
         self.from_leaf_to_inner()
-        self.left_child = Cluster_Node(left_child, self.device, self.id + 1)
-        self.right_child = Cluster_Node(right_child, self.device, self.id + 2)
+        self.left_child = Cluster_Node(left_child, self.device, split + 1)
+        self.right_child = Cluster_Node(right_child, self.device, split + 2)
+        if optimizer is not None:
+            optimizer.add_param_group({"params": self.left_child.center})
+            optimizer.add_param_group({"params": self.right_child.center})
+
+    def clear_assignments(self):
+        self.assignments = None
+        if self.left_child is not None:
+            self.left_child.clear_assignments()
+        if self.right_child is not None:
+            self.right_child.clear_assignments()
 
 
 class Cluster_Tree:
@@ -116,7 +137,7 @@ class Cluster_Tree:
         # center of root can be a dummy-center since its never needed
         self.root = Cluster_Node(np.zeros(init_leafnode_centers.shape[1]), device)
         # assign the 2 initial leaf nodes with its initial centers
-        self.root.set_childs(init_leafnode_centers[0], init_leafnode_centers[1])
+        self.root.set_childs(None, init_leafnode_centers[0], init_leafnode_centers[1])
         self.pruning_nodes = (
             []
         )  # stores a list of nodes which weights fall below pruning treshold during current iteration and must be pruned in next iteration
@@ -151,7 +172,10 @@ class Cluster_Tree:
             self._collect_leafnodes(node.left_child, leafnodes)
             self._collect_leafnodes(node.right_child, leafnodes)
 
-    def assign_to_nodes(self, minibatch: torch.tensor):
+    def clear_assignments_from_nodes(self):
+        self.root.clear_assignments()
+
+    def assign_to_nodes(self, minibatch: torch.Tensor):
         """
         This method assigns all samples in the minibatch to its nearest nodes in the cluster tree. It is performed bottom up, so each
         sample is first assigned to its nearest leaf node. Afterwards the samples are assigned recursivley to the inner nodes by merging
@@ -180,13 +204,16 @@ class Cluster_Tree:
         # for each leafnode, check which samples it has got assigned and store the assigned samples in the leafnode
         for i, node in enumerate(leafnodes):
             indices = (assignments == i).nonzero()
-            if len(indices) < 1:
-                node.assignments = None
-            else:
+            if len(indices) > 0:
                 leafnode_data = minibatch[indices.squeeze()]
                 if leafnode_data.ndim == 1:
                     leafnode_data = leafnode_data[None]
-            node.assignments = leafnode_data
+                if node.assignments == None:
+                    node.assignments = leafnode_data
+                else:
+                    node.assignments = torch.cat(
+                        (node.assignments, leafnode_data), dim=0
+                    )
         # TODO: Is this necessary?
         self._assign_to_splitnodes(
             self.root
@@ -220,7 +247,7 @@ class Cluster_Tree:
                 )
             return node.assignments
 
-    def nc_loss(self, autoencoder: torch.nn.Module) -> torch.Tensor:
+    def nc_loss(self) -> torch.Tensor:
         """
         Function for calculating the nc loss used for adopting the leaf node centers.
 
@@ -247,9 +274,7 @@ class Cluster_Tree:
         with torch.no_grad():  # embedded space should not be optimized in this loss
             leafnode_minibatch_centers = list(
                 map(
-                    lambda assignments: torch.sum(
-                        autoencoder.encode(assignments), axis=0
-                    )
+                    lambda assignments: torch.sum(assignments, axis=0)
                     / len(assignments),
                     leafnode_assignments,
                 )
@@ -267,7 +292,7 @@ class Cluster_Tree:
         loss = torch.sum(distance) / len(leafnode_center_tensor)
         return loss
 
-    def dc_loss(self, autoencoder: torch.nn.Module, batchsize: int) -> torch.Tensor:
+    def dc_loss(self, batchsize: int) -> torch.Tensor:
         """
         Function for calculating the overall dc loss used for improving the embedded space for a better clustering result.
 
@@ -284,9 +309,7 @@ class Cluster_Tree:
             the DC loss
         """
         sibling_losses = []  # storing losses for each node in tree
-        number_nodes = self._calculate_sibling_loss(
-            self.root, autoencoder, sibling_losses
-        )
+        number_nodes = self._calculate_sibling_loss(self.root, sibling_losses)
         number_nodes = number_nodes - 1  # exclude root node
         # make sure that each node got a loss
         assert number_nodes == len(sibling_losses)
@@ -300,7 +323,6 @@ class Cluster_Tree:
     def _calculate_sibling_loss(
         self,
         root: Cluster_Node,
-        autoencoder: torch.nn.Module,
         sibling_loss: List[torch.Tensor],
     ) -> int:
         """
@@ -324,31 +346,23 @@ class Cluster_Tree:
             return 0
 
         # Traverse the left subtree
-        left_counter = self._calculate_sibling_loss(
-            root.left_child, autoencoder, sibling_loss
-        )
+        left_counter = self._calculate_sibling_loss(root.left_child, sibling_loss)
 
         # Traverse the right subtree
-        right_counter = self._calculate_sibling_loss(
-            root.right_child, autoencoder, sibling_loss
-        )
+        right_counter = self._calculate_sibling_loss(root.right_child, sibling_loss)
 
         # Calculate lc loss for siblings if they exist
         if root.left_child and root.right_child:
             # calculate dc loss for left child with respect to the right child
-            loss_left = self._single_sibling_loss(
-                root.left_child, root.right_child, autoencoder
-            )
+            loss_left = self._single_sibling_loss(root.left_child, root.right_child)
             # calculate dc loss for right child with respect to the left child
-            loss_right = self._single_sibling_loss(
-                root.right_child, root.left_child, autoencoder
-            )
+            loss_right = self._single_sibling_loss(root.right_child, root.left_child)
             # store the losses
             sibling_loss.extend([loss_left, loss_right])
         return left_counter + right_counter + 1
 
     def _single_sibling_loss(
-        self, node: Cluster_Node, sibling: Cluster_Node, autoencoder: torch.nn.Module
+        self, node: Cluster_Node, sibling: Cluster_Node
     ) -> torch.Tensor:
         """
         Calculates a single dc loss for the node <node> with respect to its sibling <sibling>.
@@ -378,7 +392,7 @@ class Cluster_Tree:
             torch.abs(
                 torch.matmul(
                     sibling_direction,
-                    -(autoencoder.encode(node.assignments) - node.center.detach()).T,
+                    -(node.assignments - node.center.detach()).T,
                 )
             )
         )
@@ -394,58 +408,43 @@ class Cluster_Tree:
         # reset list of nodes to prune
         self._nodes_to_prune = []
 
-    def grow_tree(
-        self,
-        dataset: torch.Tensor,
-        autoencoder: torch.nn.Module,
-        optimizer: torch.optim.Optimizer,
-    ):
+    def grow_tree(self, optimizer: torch.optim.Optimizer) -> None:
+        """Grows the tree at the leaf node with the highest squared distance between its assignments and center.
+        The distance is not normalized, so larger clusters will be chosen.
 
-        # Growing a tree by one leaf node is straight forward. We
-        # transform the dataset (or a representative sub-sample of it)
-        # onto the embedded space. Then, we determine the leaf node
-        # with the highest sum of squared distances between its center
-        # and the assigned data points. We selected this rule because it
-        # provides a good balance between the number of data points
-        # and data variance for this cluster.
-        # Next, we split the selected node and attach two new leaf
-        # nodes to it as children. We determine the initial centers for
-        # these new leaf nodes by applying two-means (k-means with
-        # k = 2) to the assigned data points
-
-        # Optimization: Store only a set of indices in the assignments -> no double assignments
-        with torch.no_grad():
-            leaf_nodes = self.get_all_leaf_nodes()
-            highest_dist_leaf_node = leaf_nodes[
-                torch.cat(
-                    [
-                        torch.sum(
-                            torch.sub(
-                                leaf.center.unsqueeze(0),
-                                autoencoder.encode(leaf.assignments),
-                            ).pow(2)
-                        )
-                        for leaf in leaf_nodes
-                    ]
-                ).argmax()
+        We transform the dataset (or a representative sub-sample of it)
+        onto the embedded space. Then, we determine the leaf node
+        with the highest sum of squared distances between its center
+        and the assigned data points. We selected this rule because it
+        provides a good balance between the number of data points
+        and data variance for this cluster.
+        Next, we split the selected node and attach two new leaf
+        nodes to it as children. We determine the initial centers for
+        these new leaf nodes by applying two-means (k-means with
+        k = 2) to the assigned data points.
+        """
+        leaf_nodes = self.get_all_leaf_nodes()
+        idx = torch.tensor(
+            [
+                torch.sum(
+                    torch.sub(
+                        leaf.center.unsqueeze(0),
+                        leaf.assignments,
+                    ).pow(2)
+                )
+                for leaf in leaf_nodes
             ]
-            child_assignments = KMeans(2).fit_predict(
-                autoencoder.encode(highest_dist_leaf_node.assignments).numpy()
-            )
-            highest_dist_leaf_node.set_childs(
-                np.where(
-                    child_assignments == 0, highest_dist_leaf_node.assignments.numpy()
-                ),
-                np.where(
-                    child_assignments == 1, highest_dist_leaf_node.assignments.numpy()
-                ),
-            )
-        # Adjust optimizer param groups
-        for param in optimizer.param_groups[highest_dist_leaf_node.id]["params"]:
-            param.requires_grad = False
-        optimizer.add_param_group({"params": highest_dist_leaf_node.left_child.center})
-        optimizer.add_param_group({"params": highest_dist_leaf_node.right_child.center})
-        pass
+        ).argmax()
+        highest_dist_leaf_node = leaf_nodes[idx]
+        child_assignments = KMeans(n_clusters=2, n_init="auto").fit(
+            highest_dist_leaf_node.assignments.numpy()
+        )
+        highest_dist_leaf_node.set_childs(
+            optimizer,
+            child_assignments.cluster_centers_[0],
+            child_assignments.cluster_centers_[1],
+            max([leaf.id for leaf in leaf_nodes]),
+        )
 
 
 class _DeepECT_Module(torch.nn.Module):
@@ -551,7 +550,14 @@ class _DeepECT_Module(torch.nn.Module):
             if self.cluster_tree.pruning_necessary():
                 self.cluster_tree.prune_tree(self.pruning_nodes)
             if e % grow_interval == 0:
-                self.cluster_tree.grow_tree(trainloader.dataset, autoencoder, optimizer)
+                with torch.no_grad():
+                    # self.cluster_tree.clear_assignments_from_nodes()
+                    for batch in trainloader:
+                        (x,) = batch
+                        embed = autoencoder.encode(x.to(self.device))
+                        self.cluster_tree.assign_to_nodes(embed)
+                    self.cluster_tree.grow_tree(optimizer)
+                    self.cluster_tree.clear_assignments_from_nodes()
 
             # retrieve minibatch (endless)
             try:
@@ -562,9 +568,12 @@ class _DeepECT_Module(torch.nn.Module):
                 train_iterator = iter(trainloader)
                 M = next(train_iterator)
 
+            # zero-grad optimizer
+            optimizer.zero_grad()
+
             # assign data points to leafnodes and splitnodes
             # TODO: must be embedded data points?
-            self.cluster_tree.assign_to_nodes(M)
+            self.cluster_tree.assign_to_nodes(autoencoder.encode(M))
 
             # calculate loss
             nc_loss = self.cluster_tree.nc_loss(autoencoder)
@@ -582,11 +591,13 @@ class _DeepECT_Module(torch.nn.Module):
             # https://discuss.pytorch.org/t/optimizer-step-only-for-a-specific-group-of-parameters/177541/3
 
             # optimizer.zero_grad()
-            # loss.backward()
-            # optimizer.step()
+            loss.backward()
+            optimizer.step()
 
             # adapt centers of split nodes analytically
             self.cluster_tree.adapt_inner_nodes()
+            # TODO: cleanup node assignments?
+            self.cluster_tree.clear_assignments_from_nodes()
         return self
 
     def predict(self, embedded: torch.Tensor, alpha: float = 1000) -> torch.Tensor:
@@ -671,7 +682,6 @@ def _deep_ect(
         The final autoencoder
     """
     # Get initial setting (device, dataloaders, pretrained AE and initial clustering result)
-    # TODO: Set clus
     (
         device,
         trainloader,

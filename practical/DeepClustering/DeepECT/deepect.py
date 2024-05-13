@@ -171,11 +171,10 @@ class Cluster_Tree:
         else:
             self._collect_leafnodes(node.left_child, leafnodes)
             self._collect_leafnodes(node.right_child, leafnodes)
-
     def clear_assignments_from_nodes(self):
         self.root.clear_assignments()
 
-    def assign_to_nodes(self, minibatch: torch.Tensor):
+    def assign_to_nodes(self, autoencoder: torch.nn.Module, minibatch: torch.tensor):
         """
         This method assigns all samples in the minibatch to its nearest nodes in the cluster tree. It is performed bottom up, so each
         sample is first assigned to its nearest leaf node. Afterwards the samples are assigned recursivley to the inner nodes by merging
@@ -183,6 +182,8 @@ class Cluster_Tree:
 
         Parameters
         ----------
+        autoencoder: torch.nn.Module
+            Autoencoder used to calculate the embeddings
         minibatch : torch.Tensor
             The minibatch with shape (#samples, #emb_features)
         """
@@ -194,9 +195,8 @@ class Cluster_Tree:
 
         #  calculate the distance from each sample in the minibatch to all leaf nodes
         with torch.no_grad():
-            distance_matrix = torch.cdist(
-                minibatch, leafnode_tensor, p=2
-            )  # kmeans uses L_2 norm (euclidean distance)
+            embeddings = autoencoder.encode(minibatch)
+            distance_matrix = torch.cdist(embeddings, leafnode_tensor, p=2) # kmeans uses L_2 norm (euclidean distance)
         distance_matrix = distance_matrix.squeeze()
         # the sample gets the nearest node assigned
         assignments = torch.argmin(distance_matrix, dim=1)
@@ -204,21 +204,14 @@ class Cluster_Tree:
         # for each leafnode, check which samples it has got assigned and store the assigned samples in the leafnode
         for i, node in enumerate(leafnodes):
             indices = (assignments == i).nonzero()
-            if len(indices) > 0:
+            if len(indices) < 1:
+                node.assignments = None # store None (pherhaps overwrite previous assignment)
+            else:
                 leafnode_data = minibatch[indices.squeeze()]
                 if leafnode_data.ndim == 1:
                     leafnode_data = leafnode_data[None]
-                if node.assignments == None:
-                    node.assignments = leafnode_data
-                else:
-                    node.assignments = torch.cat(
-                        (node.assignments, leafnode_data), dim=0
-                    )
-        # TODO: Is this necessary?
-        self._assign_to_splitnodes(
-            self.root
-        )  # assign samples recursively bottom up from leaf nodes to inner nodes
-
+                node.assignments = leafnode_data
+                
     def _assign_to_splitnodes(self, node: Cluster_Node):
         """
         Function for recursively assigning samples to inner nodes by merging the assignments of its two childs
@@ -525,102 +518,139 @@ class _DeepECT_Module(torch.nn.Module):
 
         Parameters
         ----------
-        autoencoder : torch.nn.Module
-            the autoencoder
-        trainloader : torch.utils.data.DataLoader
-            dataloader to be used for training
-        max_iteratins : int
-            number of iterations for the clustering procedure.
-        optimizer : torch.optim.Optimizer
-            the optimizer for training
-        rec_loss_fn : torch.nn.modules.loss._Loss
-            loss function for the reconstruction
-        cluster_loss_weight : float
-            weight of the clustering loss compared to the reconstruction loss
-
-        Returns
-        -------
-        self : _DKM_Module
-            this instance of the _DKM_Module
+        cluster_tree: Cluster_Node
+        augmentation_invariance : bool
+            Is augmentation invariance used
         """
 
-        train_iterator = iter(trainloader)
+        def __init__(self, init_leafnode_centers: np.ndarray, device: torch.device, augmentation_invariance: bool = False):
+            super().__init__()
+            self.augmentation_invariance = augmentation_invariance
+            # Create initial cluster tree
+            self.cluster_tree = Cluster_Tree(init_leafnode_centers, device)
+            self.device = device
 
-        for e in range(max_iterations):
-            if self.cluster_tree.pruning_necessary():
-                self.cluster_tree.prune_tree(self.pruning_nodes)
-            if e % grow_interval == 0:
-                with torch.no_grad():
-                    # self.cluster_tree.clear_assignments_from_nodes()
-                    for batch in trainloader:
-                        (x,) = batch
-                        embed = autoencoder.encode(x.to(self.device))
-                        self.cluster_tree.assign_to_nodes(embed)
-                    self.cluster_tree.grow_tree(optimizer)
-                    self.cluster_tree.clear_assignments_from_nodes()
 
-            # retrieve minibatch (endless)
-            try:
-                # get next minibatch
-                M = next(train_iterator)
-            except StopIteration:
-                # after full epoch shuffle again
-                train_iterator = iter(trainloader)
-                M = next(train_iterator)
+        def deepect_augmentation_invariance_loss(self, embedded: torch.Tensor, embedded_aug: torch.Tensor,
+                                            alpha: float) -> torch.Tensor:
+            """
+            Calculate the DeepECT loss of given embedded samples with augmentation invariance.
 
-            # zero-grad optimizer
-            optimizer.zero_grad()
+            Parameters
+            ----------
+            embedded : torch.Tensor
+                the embedded samples
+            embedded_aug : torch.Tensor
+                the embedded augmented samples
+            alpha : float
+                the alpha value
 
-            # assign data points to leafnodes and splitnodes
-            # TODO: must be embedded data points?
-            self.cluster_tree.assign_to_nodes(autoencoder.encode(M))
+            Returns
+            -------
+            loss : torch.Tensor
+                the final DKM loss
+            """
+            # # Get loss of non-augmented data
+            # squared_diffs = squared_euclidean_distance(embedded, self.centers)
+            # probs = _dkm_get_probs(squared_diffs, alpha)
+            # clean_loss = (squared_diffs.sqrt() * probs).sum(1).mean()
+            # # Get loss of augmented data
+            # squared_diffs_augmented = squared_euclidean_distance(embedded_aug, self.centers)
+            # aug_loss = (squared_diffs_augmented.sqrt() * probs).sum(1).mean()
+            # # average losses
+            # loss = (clean_loss + aug_loss) / 2
+            loss = None
+            return loss
 
-            # calculate loss
-            nc_loss = self.cluster_tree.nc_loss(autoencoder)
-            dc_loss = self.cluster_tree.dc_loss(autoencoder, len(M))
-            rec_loss, embedded, reconstructed = autoencoder.loss(
-                M, rec_loss_fn, self.device
-            )
+        def fit(self, autoencoder: torch.nn.Module, trainloader: torch.utils.data.DataLoader, max_iterations: int,
+                grow_interval: int, optimizer: torch.optim.Optimizer, 
+                rec_loss_fn: torch.nn.modules.loss._Loss) -> '_DeepECT_Module':
+            """
+            Trains the _DeepECT_Module in place.
 
-            loss = nc_loss + dc_loss + rec_loss
+            Parameters
+            ----------
+            autoencoder : torch.nn.Module
+                the autoencoder
+            trainloader : torch.utils.data.DataLoader
+                dataloader to be used for training
+            max_iteratins : int
+                number of iterations for the clustering procedure.
+            optimizer : torch.optim.Optimizer
+                the optimizer for training
+            rec_loss_fn : torch.nn.modules.loss._Loss
+                loss function for the reconstruction
+            cluster_loss_weight : float
+                weight of the clustering loss compared to the reconstruction loss
 
-            # optimizer_step with gradient descent
-            # !!! make sure that optimizer contains autoencoder-params and all new leaf node centers (old leaf node centers must be deleted in optimizer params)
-            # ==> maybe new optimizer object after each tree grow step
-            # --> Instead we can just set requires_grad to false and they won't be adjusted, but we retain the state
-            # https://discuss.pytorch.org/t/optimizer-step-only-for-a-specific-group-of-parameters/177541/3
+            Returns
+            -------
+            self : _DKM_Module
+                this instance of the _DKM_Module
+            """
 
-            # optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            train_iterator = iter(trainloader)
 
-            # adapt centers of split nodes analytically
-            self.cluster_tree.adapt_inner_nodes()
-            # TODO: cleanup node assignments?
-            self.cluster_tree.clear_assignments_from_nodes()
-        return self
+            for e in range(max_iterations):
+                if self.cluster_tree.pruning_necessary():
+                    self.cluster_tree.prune_tree(self.pruning_nodes)                    
+                if e % grow_interval == 0:
+                    self.cluster_tree.grow_tree()
+                
+                # retrieve minibatch (endless)
+                try:
+                    # get next minibatch
+                    M = next(train_iterator)
+                except StopIteration:
+                    # after full epoch shuffle again
+                    train_iterator = iter(trainloader)
+                    M = next(train_iterator)
 
-    def predict(self, embedded: torch.Tensor, alpha: float = 1000) -> torch.Tensor:
-        # """
-        # Prediction of given embedded samples. Returns the corresponding soft labels.
+                # assign data points to leafnodes and splitnodes 
+                self.cluster_tree.assign_to_nodes(autoencoder, M)
 
-        # Parameters
-        # ----------
-        # embedded : torch.Tensor
-        #     the embedded samples
-        # alpha : float
-        #     the alpha value (default: 1000)
+                # calculate loss
+                nc_loss = self.cluster_tree.nc_loss(autoencoder)
+                dc_loss = self.cluster_tree.dc_loss(autoencoder, len(M))
+                rec_loss, embedded, reconstructed = autoencoder.loss(M, rec_loss_fn, self.device)
+                
+                loss = nc_loss + dc_loss + rec_loss
 
-        # Returns
-        # -------
-        # pred : torch.Tensor
-        #     The predicted soft labels
-        # """
-        # squared_diffs = squared_euclidean_distance(embedded, self.centers)
-        # pred = _dkm_get_probs(squared_diffs, alpha)
-        # return pred
-        pass
+                # optimizer_step with gradient descent
+                # !!! make sure that optimizer contains autoencoder-params and all new leaf node centers (old leaf node centers must be deleted in optimizer params)
+                # ==> maybe new optimizer object after each tree grow step
+                # --> Instead we can just set requires_grad to false and they won't be adjusted, but we retain the state
+                # https://discuss.pytorch.org/t/optimizer-step-only-for-a-specific-group-of-parameters/177541/3
 
+                # optimizer.zero_grad()
+                # loss.backward()
+                # optimizer.step()
+
+                # adapt centers of split nodes analytically
+                self.cluster_tree.adapt_inner_nodes()
+            return self
+        
+        
+        def predict(self, embedded: torch.Tensor, alpha: float = 1000) -> torch.Tensor:
+            # """
+            # Prediction of given embedded samples. Returns the corresponding soft labels.
+
+            # Parameters
+            # ----------
+            # embedded : torch.Tensor
+            #     the embedded samples
+            # alpha : float
+            #     the alpha value (default: 1000)
+
+            # Returns
+            # -------
+            # pred : torch.Tensor
+            #     The predicted soft labels
+            # """
+            # squared_diffs = squared_euclidean_distance(embedded, self.centers)
+            # pred = _dkm_get_probs(squared_diffs, alpha)
+            # return pred
+            pass
 
 def _deep_ect(
     X: np.ndarray,

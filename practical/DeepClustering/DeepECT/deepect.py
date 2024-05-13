@@ -134,7 +134,7 @@ class Cluster_Tree:
             self._collect_leafnodes(node.left_child, leafnodes)
             self._collect_leafnodes(node.right_child, leafnodes)
 
-    def assign_to_nodes(self, minibatch: torch.tensor):
+    def assign_to_nodes(self, autoencoder: torch.nn.Module, minibatch: torch.tensor):
         """
         This method assigns all samples in the minibatch to its nearest nodes in the cluster tree. It is performed bottom up, so each
         sample is first assigned to its nearest leaf node. Afterwards the samples are assigned recursivley to the inner nodes by merging
@@ -142,6 +142,8 @@ class Cluster_Tree:
 
         Parameters
         ----------
+        autoencoder: torch.nn.Module
+            Autoencoder used to calculate the embeddings
         minibatch : torch.Tensor
             The minibatch with shape (#samples, #emb_features)
         """
@@ -153,7 +155,8 @@ class Cluster_Tree:
 
         #  calculate the distance from each sample in the minibatch to all leaf nodes
         with torch.no_grad():
-            distance_matrix = torch.cdist(minibatch, leafnode_tensor, p=2) # kmeans uses L_2 norm (euclidean distance)
+            embeddings = autoencoder.encode(minibatch)
+            distance_matrix = torch.cdist(embeddings, leafnode_tensor, p=2) # kmeans uses L_2 norm (euclidean distance)
         distance_matrix = distance_matrix.squeeze()
         # the sample gets the nearest node assigned
         assignments = torch.argmin(distance_matrix, dim=1)
@@ -167,8 +170,7 @@ class Cluster_Tree:
                 leafnode_data = minibatch[indices.squeeze()]
                 if leafnode_data.ndim == 1:
                     leafnode_data = leafnode_data[None]
-            node.assignments = leafnode_data
-        self._assign_to_splitnodes(self.root) # assign samples recursively bottom up from leaf nodes to inner nodes
+                node.assignments = leafnode_data
     
     def _assign_to_splitnodes(self, node: Cluster_Node):
         """
@@ -441,7 +443,7 @@ class _DeepECT_Module(torch.nn.Module):
                     M = next(train_iterator)
 
                 # assign data points to leafnodes and splitnodes 
-                self.cluster_tree.assign_to_nodes(M)
+                self.cluster_tree.assign_to_nodes(autoencoder, M)
 
                 # calculate loss
                 nc_loss = self.cluster_tree.nc_loss(autoencoder)

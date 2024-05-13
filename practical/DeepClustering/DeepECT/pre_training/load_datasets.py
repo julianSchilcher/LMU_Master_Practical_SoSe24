@@ -12,13 +12,20 @@ transform = transforms.ToTensor()
 def minist_dataset():
     minist_train = datasets.MNIST(root="./data", train=True, download=True, transform=transform)
     minist_test = datasets.MNIST(root="./data", train=False, download=True, transform=transform)
-
-    return minist_train, minist_test
+    data = []
+    labels = []
+    for train, label in minist_train:
+        data.append(train.view(train.size(0), -1))
+        labels.append(label)
+    for test, label in minist_test:
+        data.append(test.view(test.size(0), -1))
+        labels.append(label)
+    data = torch.cat(data, dim=0)
+    labels = torch.cat(labels,dim=0)
+    return data, labels
 
 def load_usps():
     # Can be downloaded here: https://github.com/marionmari/Graph_stuff/tree/master/usps_digit_data
-    dataset_dir = "/Users/zy/LMU_Master_Practical_SoSe24/practical/DeepClustering/DeepECT/pre_training/data"  # Define the dataset_dir variable
-
     file_path = Path(f"{dataset_dir}/usps_resampled.mat")
 
     if not file_path.exists():
@@ -47,9 +54,11 @@ def reuters_dataset():
     
     # train_docs, test_docs, train_labels, test_labels = train_test_split(docs_list, labels_list, test_size=)
     #  need to determine the test_size
+    return docs_list, labels_list
 
 def fashion_minist():
-    fashion_minist_train = datasets.FashionMNIST("./data", train=True, download=True, transform=transform)
-    fashion_minist_test = datasets.FashionMNIST("./data", train=False, download=True, transform=transform)
-    
-    return fashion_minist_train,fashion_minist_test    
+    fashion_mnist_train = datasets.FashionMNIST("./data", train=True, download=True, transform=transform)
+    fashion_mnist_test = datasets.FashionMNIST("./data", train=False, download=True, transform=transform)
+    data = torch.cat([fashion_mnist_train.data, fashion_mnist_test.data], dim=0)
+    labels = torch.cat([fashion_mnist_train.targets, fashion_mnist_test.targets], dim=0)
+    return data,labels    

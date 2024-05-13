@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.data
 
+data = ...  # Define the variable "data" with the appropriate value
 feature_dim=data.shape[0]
 layer_dims = [500, 500, 2000, 10]
 loss_fn = nn.MSELoss()

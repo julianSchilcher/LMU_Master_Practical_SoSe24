@@ -17,6 +17,8 @@ def minist_dataset():
 
 def load_usps():
     # Can be downloaded here: https://github.com/marionmari/Graph_stuff/tree/master/usps_digit_data
+    dataset_dir = "/Users/zy/LMU_Master_Practical_SoSe24/practical/DeepClustering/DeepECT/pre_training/data"  # Define the dataset_dir variable
+
     file_path = Path(f"{dataset_dir}/usps_resampled.mat")
 
     if not file_path.exists():

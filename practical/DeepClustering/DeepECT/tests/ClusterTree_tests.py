@@ -38,12 +38,17 @@ def sample_cluster_tree():
     tree.root.left_child.set_childs(None, np.array([-2, -2]), np.array([-0.5, -0.5]))
     return tree
 
-def sample_cluster_tree_with_assignments(autoencoder):
+def sample_cluster_tree_with_assignments():
     """ 
     Helper method for creating a sample cluster tree with assignments
     """
+    # create mock-autoencoder, which represents just an identity function
+    encode = lambda x: x
+    autoencoder = type('Autoencoder', (), {'encode': encode})
+
     tree = sample_cluster_tree()
-    tree.assign_to_nodes(autoencoder, torch.tensor([[-3,-3], [10,10], [-0.4,-0.4],[0.4,0.3]]))
+    minibatch = torch.tensor([[-3,-3], [10,10], [-0.4,-0.4],[0.4,0.3]])
+    tree.assign_to_nodes(autoencoder.encode(minibatch))
     tree._assign_to_splitnodes(tree.root)
     return tree
 
@@ -94,9 +99,8 @@ def test_cluster_tree_growth():
 
 
 def test_cluster_tree_assignment():
-    encode = lambda x: x
-    autoencoder = type('Autoencoder', (), {'encode': encode})
-    tree = sample_cluster_tree_with_assignments(autoencoder)
+
+    tree = sample_cluster_tree_with_assignments()
 
     # check if all assignments made correct
     assert torch.all(
@@ -128,14 +132,10 @@ def test_cluster_tree_assignment():
 
 def test_nc_loss():
 
-    # create mock-autoencoder, which represents just an identity function
-    encode = lambda x: x
-    autoencoder = type('Autoencoder', (), {'encode': encode})
-
-    tree = sample_cluster_tree_with_assignments(autoencoder)
+    tree = sample_cluster_tree_with_assignments()
 
     # calculate nc loss for the above example
-    loss = tree.nc_loss(autoencoder)
+    loss = tree.nc_loss()
 
     # calculate nc loss for the above example manually
     loss_left_left_node = torch.sqrt(
@@ -160,11 +160,7 @@ def test_nc_loss():
 
 def test_dc_loss():
 
-    # create mock-autoencoder, which represents just an identity function
-    encode = lambda x: x
-    autoencoder = type('Autoencoder', (), {'encode': encode})
-
-    tree = sample_cluster_tree_with_assignments(autoencoder)
+    tree = sample_cluster_tree_with_assignments()
     
     # calculate direction between left child of root and right child of root
     projection_l_r = (
@@ -240,10 +236,7 @@ def test_dc_loss():
         num_nodes * batch_size
     )
 
-    # create mock-autoencoder, which represents just an identity function
-    encode = lambda x: x
-    autoencoder = type("Autoencoder", (), {"encode": encode})
     # calculate dc loss of the tree
-    loss = tree.dc_loss(autoencoder, 4)
+    loss = tree.dc_loss(batch_size)
 
     assert torch.all(torch.eq(loss, loss_manually))

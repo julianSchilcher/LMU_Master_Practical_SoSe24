@@ -391,8 +391,33 @@ class Cluster_Tree:
         )
         return loss
 
-    def adapt_inner_nodes(self):
-        pass
+    def adapt_inner_nodes(self, root: Cluster_Node):
+        """
+        Function for recursively assigning samples to inner nodes by merging the assignments of its two childs
+
+        Parameters
+        ----------
+        node : Cluster_Node
+            The node where the assignmets should be stored
+        """
+        if root is None:
+            return
+
+        # Traverse the left subtree
+        self.adapt_inner_nodes(root.left_child)
+
+        # Traverse the right subtree
+        self.adapt_inner_nodes(root.right_child)
+
+        # adapt node based on this 2 childs
+        if root.left_child and root.right_child:
+            # adapt weight for left child
+            root.weight[0] = 0.5*(root.weight[0] + len(root.left_child.assignments))
+            # adapt weight for right child
+            root.weight[1] = 0.5*(root.weight[1] + len(root.right_child.assignments))
+            # adapt center of parent based on the new weights
+            child_centers = torch.stack((root.left_child.center, root.right_child.center), dim=0)
+            root.center = (torch.sum(child_centers*root.weight.reshape(2,1), axis=0))/torch.sum(root.weight)
 
     def pruning_necessary(self):
         return len(self._nodes_to_prune) != 0

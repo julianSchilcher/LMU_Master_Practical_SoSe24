@@ -391,7 +391,7 @@ class Cluster_Tree:
         )
         return loss
 
-    def adapt_inner_nodes(self, root: Cluster_Node):
+    def adapt_inner_nodes(self, root: Cluster_Node, pruning_treshhold: float):
         """
         Function for recursively assigning samples to inner nodes by merging the assignments of its two childs
 
@@ -413,8 +413,14 @@ class Cluster_Tree:
         if root.left_child and root.right_child:
             # adapt weight for left child
             root.weight[0] = 0.5*(root.weight[0] + len(root.left_child.assignments))
+            # check wether this node should be pruned in next iteration
+            if root.weight[0] < pruning_treshhold:
+                self._nodes_to_prune.append(root.left_child)
             # adapt weight for right child
             root.weight[1] = 0.5*(root.weight[1] + len(root.right_child.assignments))
+            # check wether this node should be pruned in next iteration
+            if root.weight[1] < pruning_treshhold:
+                self._nodes_to_prune.append(root.right_child)
             # adapt center of parent based on the new weights
             child_centers = torch.stack((root.left_child.center, root.right_child.center), dim=0)
             root.center = (torch.sum(child_centers*root.weight.reshape(2,1), axis=0))/torch.sum(root.weight)
@@ -530,7 +536,7 @@ class _DeepECT_Module(torch.nn.Module):
         return loss
 
     def fit(self, autoencoder: torch.nn.Module, trainloader: torch.utils.data.DataLoader, max_iterations: int,
-            grow_interval: int, optimizer: torch.optim.Optimizer, 
+            grow_interval: int, pruning_threshold: float, optimizer: torch.optim.Optimizer, 
             rec_loss_fn: torch.nn.modules.loss._Loss) -> '_DeepECT_Module':
         """
         Trains the _DeepECT_Module in place.
@@ -594,7 +600,7 @@ class _DeepECT_Module(torch.nn.Module):
             # optimizer.step()
 
             # adapt centers of split nodes analytically
-            self.cluster_tree.adapt_inner_nodes()
+            self.cluster_tree.adapt_inner_nodes(pruning_threshold)
             # TODO: cleanup node assignments? I think not necessary
             # self.cluster_tree.clear_assignments_from_nodes()
         return self
@@ -629,6 +635,7 @@ def _deep_ect(
     pretrain_epochs: int,
     max_iterations: int,
     grow_interval: int,
+    pruning_threshold: float,
     optimizer_class: torch.optim.Optimizer,
     rec_loss_fn: torch.nn.modules.loss._Loss,
     autoencoder: torch.nn.Module,
@@ -738,6 +745,7 @@ class DeepECT:
         pretrain_epochs: int = 50,
         max_iterations: int = 10000,
         grow_interval: int = 500,
+        pruning_threshold: float = 0.1,
         optimizer_class: torch.optim.Optimizer = torch.optim.Adam,
         rec_loss_fn: torch.nn.modules.loss._Loss = torch.nn.MSELoss(),
         autoencoder: torch.nn.Module = None,
@@ -807,6 +815,7 @@ class DeepECT:
         self.pretrain_epochs = pretrain_epochs
         self.max_iterations = max_iterations
         self.grow_interval = grow_interval
+        self.pruning_threshold = pruning_threshold,
         self.optimizer_class = optimizer_class
         self.rec_loss_fn = rec_loss_fn
         self.autoencoder = autoencoder
@@ -841,6 +850,7 @@ class DeepECT:
             self.pretrain_epochs,
             self.max_iterations,
             self.grow_interval,
+            self.pruning_threshold,
             self.optimizer_class,
             self.rec_loss_fn,
             self.autoencoder,

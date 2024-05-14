@@ -404,10 +404,10 @@ class Cluster_Tree:
             return
 
         # Traverse the left subtree
-        self.adapt_inner_nodes(root.left_child)
+        self.adapt_inner_nodes(root.left_child, pruning_treshhold)
 
         # Traverse the right subtree
-        self.adapt_inner_nodes(root.right_child)
+        self.adapt_inner_nodes(root.right_child, pruning_treshhold)
 
         # adapt node based on this 2 childs
         if root.left_child and root.right_child:
@@ -423,7 +423,8 @@ class Cluster_Tree:
                 self._nodes_to_prune.append(root.right_child)
             # adapt center of parent based on the new weights
             child_centers = torch.stack((root.left_child.center, root.right_child.center), dim=0)
-            root.center = (torch.sum(child_centers*root.weight.reshape(2,1), axis=0))/torch.sum(root.weight)
+            with torch.no_grad():
+                root.center = (torch.sum(child_centers*root.weight.reshape(2,1), axis=0))/torch.sum(root.weight)
 
     def pruning_necessary(self):
         return len(self._nodes_to_prune) != 0

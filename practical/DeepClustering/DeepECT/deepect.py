@@ -43,7 +43,7 @@ class Cluster_Node:
         self.device = device
         self.left_child = None
         self.right_child = None
-        self.weight = None
+        self.weight = torch.tensor(1.0)
         self.center = torch.nn.Parameter(
             torch.tensor(
                 center, requires_grad=True, device=self.device, dtype=torch.float
@@ -65,39 +65,39 @@ class Cluster_Node:
 
     def from_leaf_to_inner(self):
         """
-        Converts a leaf node to a inner node. Weights for its child are initialised and the centers are not trainable anymore.
+        Converts a leaf node to an inner node. Weights for its child are initialised and the centers are not trainable anymore.
 
         """
         # inner node on cpu
         self.center = self.center.data.cpu()  # retrieve data tensor from nn.Parameters
         self.center.requires_grad = False
-        self.weight = torch.tensor(
-            [1.0, 1.0]
-        )  # initialise weights for left and right child
+        self.left_child.weight = torch.tensor(1.0)
+        self.right_child.weight = torch.tensor(1.0)
 
     def set_childs(
         self,
         optimizer: Union[torch.optim.Optimizer | None],
-        left_child: np.ndarray,
-        right_child: np.ndarray,
+        left_child_centers: np.ndarray,
+        right_child_centers: np.ndarray,
         split: int = 0,
-    ):
+        ):
         """
         Set new childs to this cluster node and therefore changes this node to an inner node.
 
         Parameters
         ----------
-        left_child : np.array
+        left_child_centers : np.array
             initial centers for the left child
-        right_child : np.array
+        right_child_centers : np.array
             initial centers for the right child
         split : int
             indicates the current split count (max count of clusters)
 
         """
+        self.left_child = Cluster_Node(left_child_centers, self.device, split + 1)
+        self.right_child = Cluster_Node(right_child_centers, self.device, split + 2)
         self.from_leaf_to_inner()
-        self.left_child = Cluster_Node(left_child, self.device, split + 1)
-        self.right_child = Cluster_Node(right_child, self.device, split + 2)
+
         if optimizer is not None:
             optimizer.add_param_group({"params": self.left_child.center})
             optimizer.add_param_group({"params": self.right_child.center})

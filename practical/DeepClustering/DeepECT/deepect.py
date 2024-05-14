@@ -1,14 +1,15 @@
-import torch
-import numpy as np
-from sklearn.utils import check_random_state
-from sklearn.cluster import KMeans
-from clustpy.deep import predict_batchwise, encode_batchwise
-from clustpy.deep._utils import set_torch_seed
-from clustpy.deep._train_utils import get_standard_initial_deep_clustering_setting
 from typing import List, Tuple, Union
 
+import numpy as np
+import torch
 import torch.utils
 import torch.utils.data
+from clustpy.deep import encode_batchwise, predict_batchwise
+from clustpy.deep._train_utils import \
+    get_standard_initial_deep_clustering_setting
+from clustpy.deep._utils import set_torch_seed
+from sklearn.cluster import KMeans
+from sklearn.utils import check_random_state
 
 
 class Cluster_Node:
@@ -394,12 +395,57 @@ class Cluster_Tree:
     def adapt_inner_nodes(self):
         pass
 
-    def pruning_necessary(self):
-        return len(self._nodes_to_prune) != 0
+    def prune_tree(self, pruning_treshhold: float):
+        """
+        Prunes the tree by removing nodes with weights below the given pruning threshold.
 
-    def prune_tree(self):
-        # reset list of nodes to prune
-        self._nodes_to_prune = []
+        Args:
+            pruning_treshhold (float): The threshold value for pruning. Nodes with weights below this threshold will be removed.
+
+        Returns:
+            None
+
+        """
+        def prune_node(parent: Cluster_Node, child_attr: str):
+            """
+            Prunes the child node of the given parent node.
+
+            Args:
+                parent (Cluster_Node): The parent node.
+                child_attr (str): The attribute name of the child node to be pruned.
+
+            Returns:
+                None
+
+            """
+            child = getattr(parent, child_attr)
+            if child:
+                # TODO this needs to be checked
+                if child.weight < pruning_treshhold or (not child.is_leaf_node() and max(child.left_child.weight if child.left_child else 0, child.right_child.weight if child.right_child else 0) >= pruning_treshhold):
+                    surviving_child = None
+                    if not child.is_leaf_node():
+                        surviving_child = child.left_child if child.left_child and child.left_child.weight >= 0.1 else child.right_child
+                    setattr(parent, child_attr, surviving_child)
+
+        def prune_recursive(node: Cluster_Node):
+            """
+            Recursively prunes the tree starting from the given node.
+
+            Args:
+                node (Cluster_Node): The starting node for pruning.
+
+            Returns:
+                None
+
+            """
+            if node.left_child:
+                prune_recursive(node.left_child)
+            if node.right_child:
+                prune_recursive(node.right_child)
+            prune_node(node, 'left_child')
+            prune_node(node, 'right_child')
+
+        prune_recursive(self.root)
 
     def grow_tree(self, optimizer: torch.optim.Optimizer) -> None:
         """Grows the tree at the leaf node with the highest squared distance between its assignments and center.
@@ -505,6 +551,7 @@ class _DeepECT_Module(torch.nn.Module):
         return loss
 
     def fit(self, autoencoder: torch.nn.Module, trainloader: torch.utils.data.DataLoader, max_iterations: int,
+            pruning_treshhold: float,
             grow_interval: int, optimizer: torch.optim.Optimizer, 
             rec_loss_fn: torch.nn.modules.loss._Loss) -> '_DeepECT_Module':
         """
@@ -534,8 +581,8 @@ class _DeepECT_Module(torch.nn.Module):
         train_iterator = iter(trainloader)
 
         for e in range(max_iterations):
-            if self.cluster_tree.pruning_necessary():
-                self.cluster_tree.prune_tree(self.pruning_nodes)                    
+
+            self.cluster_tree.prune_tree(pruning_treshhold)                    
             if e % grow_interval == 0:
                 self.cluster_tree.grow_tree()
             
@@ -603,6 +650,7 @@ def _deep_ect(
     clustering_optimizer_params: dict,
     pretrain_epochs: int,
     max_iterations: int,
+    pruning_treshold: float,
     grow_interval: int,
     optimizer_class: torch.optim.Optimizer,
     rec_loss_fn: torch.nn.modules.loss._Loss,
@@ -629,6 +677,8 @@ def _deep_ect(
         number of epochs for the pretraining of the autoencoder
     max_iterations : int
         number of iterations for the actual clustering procedure.
+    pruning_treshold : float
+        the treshold for pruning the tree
     optimizer_class : torch.optim.Optimizer
         the optimizer
     rec_loss_fn : torch.nn.modules.loss._Loss
@@ -691,7 +741,7 @@ def _deep_ect(
     )
     # DKM Training loop
     dkm_module.fit(
-        autoencoder, trainloader, max_iterations, grow_interval, optimizer, rec_loss_fn
+        autoencoder, trainloader, max_iterations, pruning_treshold, grow_interval, optimizer, rec_loss_fn
     )
     # Get labels
     dkm_labels = predict_batchwise(testloader, autoencoder, dkm_module, device)
@@ -712,6 +762,7 @@ class DeepECT:
         clustering_optimizer_params: dict = None,
         pretrain_epochs: int = 50,
         max_iterations: int = 10000,
+        prunining_treshold: float = 0.1,
         grow_interval: int = 500,
         optimizer_class: torch.optim.Optimizer = torch.optim.Adam,
         rec_loss_fn: torch.nn.modules.loss._Loss = torch.nn.MSELoss(),
@@ -781,6 +832,7 @@ class DeepECT:
         )
         self.pretrain_epochs = pretrain_epochs
         self.max_iterations = max_iterations
+        self.pruning_treshhold = prunining_treshold
         self.grow_interval = grow_interval
         self.optimizer_class = optimizer_class
         self.rec_loss_fn = rec_loss_fn
@@ -815,6 +867,7 @@ class DeepECT:
             self.clustering_optimizer_params,
             self.pretrain_epochs,
             self.max_iterations,
+            self.pruning_treshhold,
             self.grow_interval,
             self.optimizer_class,
             self.rec_loss_fn,

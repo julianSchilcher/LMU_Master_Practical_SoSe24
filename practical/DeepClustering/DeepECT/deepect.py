@@ -1,15 +1,14 @@
+import torch
+import numpy as np
+from sklearn.utils import check_random_state
+from sklearn.cluster import KMeans
+from clustpy.deep import predict_batchwise, encode_batchwise
+from clustpy.deep._utils import set_torch_seed
+from clustpy.deep._train_utils import get_standard_initial_deep_clustering_setting
 from typing import List, Tuple, Union
 
-import numpy as np
-import torch
 import torch.utils
 import torch.utils.data
-from clustpy.deep import encode_batchwise, predict_batchwise
-from clustpy.deep._train_utils import \
-    get_standard_initial_deep_clustering_setting
-from clustpy.deep._utils import set_torch_seed
-from sklearn.cluster import KMeans
-from sklearn.utils import check_random_state
 
 
 class Cluster_Node:
@@ -421,7 +420,7 @@ class Cluster_Tree:
                 None
 
             """
-            child = getattr(parent, child_attr)
+            child: Cluster_Node = getattr(parent, child_attr)
             if child:
                 # TODO this needs to be checked
                 if child.weight < pruning_treshhold or (not child.is_leaf_node() and max(child.left_child.weight if child.left_child else 0, child.right_child.weight if child.right_child else 0) >= pruning_treshhold):

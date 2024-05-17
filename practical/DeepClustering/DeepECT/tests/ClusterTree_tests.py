@@ -4,6 +4,7 @@ from practical.DeepClustering.DeepECT.deepect import (
 )
 import numpy as np
 import torch
+import torch.utils.data
 
 
 def test_Cluster_Node():
@@ -83,9 +84,9 @@ def test_cluster_tree_growth():
     )
     encode = lambda x: x
     autoencoder = type("Autoencoder", (), {"encode": encode})
-    dataset = torch.tensor([[-3, -3], [10, 10], [-0.4, -0.4], [0.4, 0.3]])
-    tree.assign_to_nodes(autoencoder.encode(dataset))
-    tree.grow_tree(optimizer)
+    dataset = torch.tensor([[-3, -3], [10, 10], [-0.4, -0.4], [0.4, 0.3]], device="cpu")
+    dataloader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(dataset), batch_size=2)
+    tree.grow_tree(dataloader, autoencoder, optimizer, "cpu")
     assert torch.allclose(
         torch.tensor([10.0, 10.0]), tree.root.right_child.right_child.center
     ) or torch.allclose(

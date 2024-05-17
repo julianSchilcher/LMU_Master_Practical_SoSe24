@@ -1,4 +1,4 @@
-from practical.ProcessMining.kmeans import Kmeans
+from practical.ProcessMining.k_means import Kmeans
 
 from sklearn.datasets import make_blobs
 
@@ -11,7 +11,6 @@ def test_kmeans():
                      n_features=2)
     kmeans = Kmeans(k=centers, iterations=100)
     kmeans.kmeans(X)
-    kmeans.plot_clusters(X)
     assert kmeans.cluster_indices is not None
     assert kmeans.centroids is not None
     assert len(kmeans.cluster_indices) == n_samples

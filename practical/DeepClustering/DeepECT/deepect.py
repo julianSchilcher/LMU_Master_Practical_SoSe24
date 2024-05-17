@@ -49,7 +49,8 @@ class Cluster_Node:
                 center, requires_grad=True, device=self.device, dtype=torch.float
             )
         )
-        self.assignments = None
+        self.assignments: Union[torch.Tensor | None] = None
+        self.sum_squared_dist: Union[torch.Tensor | None] = None
         self.id = id
 
     def is_leaf_node(self):
@@ -192,25 +193,27 @@ class Cluster_Tree:
         leafnodes = self.get_all_leaf_nodes()
         # transform it into a list of leaf node centers and stack it into a tensor of shape (#leafnodes, #emb_features)
         leafnode_centers = list(map(lambda node: node.center.data, leafnodes))
-        leafnode_tensor = torch.stack(leafnode_centers, dim=0)
+        leafnode_tensor = torch.stack(leafnode_centers, dim=0) # (k, d)
 
         #  calculate the distance from each sample in the minibatch to all leaf nodes
         with torch.no_grad():
-            distance_matrix = torch.cdist(minibatch_embedded, leafnode_tensor, p=2) # kmeans uses L_2 norm (euclidean distance)
-        distance_matrix = distance_matrix.squeeze()
+            distance_matrix = torch.cdist(minibatch_embedded, leafnode_tensor, p=2) # kmeans uses L_2 norm (euclidean distance) (b, k)
+        distance_matrix = distance_matrix.squeeze() # (b, k)
         # the sample gets the nearest node assigned
-        assignments = torch.argmin(distance_matrix, dim=1)
+        min_dists, assignments = torch.min(distance_matrix, dim=1)
 
         # for each leafnode, check which samples it has got assigned and store the assigned samples in the leafnode
         for i, node in enumerate(leafnodes):
             indices = (assignments == i).nonzero()
             if len(indices) < 1:
-                node.assignments = None # store None (pherhaps overwrite previous assignment)
+                node.assignments = None # store None (perhaps overwrite previous assignment)
+                node.sum_squared_dist = None 
             else:
                 leafnode_data = minibatch_embedded[indices.squeeze()]
                 if leafnode_data.ndim == 1:
                     leafnode_data = leafnode_data[None]
                 node.assignments = leafnode_data
+                node.sum_squared_dist = torch.sum(min_dists[indices.squeeze()].pow(2))
                 
     def _assign_to_splitnodes(self, node: Cluster_Node):
         """
@@ -401,7 +404,11 @@ class Cluster_Tree:
         # reset list of nodes to prune
         self._nodes_to_prune = []
 
-    def grow_tree(self, optimizer: torch.optim.Optimizer) -> None:
+    def grow_tree(self, 
+                  dataloader: torch.utils.data.DataLoader,
+                  autoencoder: torch.nn.Module,
+                  optimizer: torch.optim.Optimizer,
+                  device: Union[torch.device|str]) -> None:
         """Grows the tree at the leaf node with the highest squared distance between its assignments and center.
         The distance is not normalized, so larger clusters will be chosen.
 
@@ -417,27 +424,37 @@ class Cluster_Tree:
         k = 2) to the assigned data points.
         """
         leaf_nodes = self.get_all_leaf_nodes()
-        idx = torch.tensor(
-            [
-                torch.sum(
-                    torch.sub(
-                        leaf.center.unsqueeze(0),
-                        leaf.assignments,
-                    ).pow(2)
-                )
-                for leaf in leaf_nodes
-            ]
-        ).argmax()
-        highest_dist_leaf_node = leaf_nodes[idx]
-        child_assignments = KMeans(n_clusters=2, n_init="auto").fit(
-            highest_dist_leaf_node.assignments.numpy()
-        )
-        highest_dist_leaf_node.set_childs(
-            optimizer,
-            child_assignments.cluster_centers_[0],
-            child_assignments.cluster_centers_[1],
-            max([leaf.id for leaf in leaf_nodes]),
-        )
+        batched_seqential_loader = torch.utils.data.DataLoader(dataloader.dataset, dataloader.batch_size, shuffle=False)
+        with torch.no_grad():
+            leaf_node_dist_sums = torch.zeros(len(leaf_nodes), dtype=torch.float, device="cpu")
+            for batch in batched_seqential_loader:
+                (x, ) = batch
+                embed = autoencoder.encode(x.to(device))
+                self.assign_to_nodes(embed)
+                leaf_node_dist_sums += torch.stack([
+                    leaf.sum_squared_dist.cpu() if leaf.sum_squared_dist is not None else torch.tensor(0, dtype=torch.float32, device="cpu")
+                    for leaf in leaf_nodes
+                ], dim=0)
+
+            idx = leaf_node_dist_sums.argmax()
+            highest_dist_leaf_node = leaf_nodes[idx]
+            # get all assignments for highest dist leaf node
+            assignments = []
+            for batch in batched_seqential_loader:
+                (x, ) = batch
+                embed = autoencoder.encode(x.to(device))
+                self.assign_to_nodes(embed)
+                if highest_dist_leaf_node.assignments is not None:
+                    assignments.append(highest_dist_leaf_node.assignments.cpu())
+            child_assignments = KMeans(n_clusters=2, n_init="auto").fit(
+                torch.cat(assignments, dim=0).numpy()
+            )
+            highest_dist_leaf_node.set_childs(
+                optimizer,
+                child_assignments.cluster_centers_[0],
+                child_assignments.cluster_centers_[1],
+                max([leaf.id for leaf in leaf_nodes]),
+            )
 
 
 class _DeepECT_Module(torch.nn.Module):
@@ -506,7 +523,7 @@ class _DeepECT_Module(torch.nn.Module):
 
     def fit(self, autoencoder: torch.nn.Module, trainloader: torch.utils.data.DataLoader, max_iterations: int,
             grow_interval: int, optimizer: torch.optim.Optimizer, 
-            rec_loss_fn: torch.nn.modules.loss._Loss) -> '_DeepECT_Module':
+            rec_loss_fn: torch.nn.modules.loss._Loss, device: Union[torch.device|str]) -> '_DeepECT_Module':
         """
         Trains the _DeepECT_Module in place.
 
@@ -537,7 +554,7 @@ class _DeepECT_Module(torch.nn.Module):
             if self.cluster_tree.pruning_necessary():
                 self.cluster_tree.prune_tree(self.pruning_nodes)                    
             if e % grow_interval == 0:
-                self.cluster_tree.grow_tree()
+                self.cluster_tree.grow_tree(trainloader, autoencoder, optimizer, device=device)
             
             # retrieve minibatch (endless)
             try:

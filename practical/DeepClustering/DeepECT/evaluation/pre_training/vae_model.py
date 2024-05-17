@@ -4,7 +4,9 @@ import torch.nn.functional as F
 import torch.utils.data
 import os
 from vae.stacked_ae import stacked_ae
-# from clustpy.deep import detect_device, get_trained_autoencoder, get_dataloader
+import sys
+sys.path.append("DeepECT/evaluation/pre_training/ClustPy")
+from ClustPy.clustpy.deep import detect_device, get_trained_autoencoder, get_dataloader
 import config
 
 cfg = config.get_config()
@@ -18,8 +20,8 @@ class PureVae:
         # self.device = detect_device()
         self.loss = cfg.training.loss_fn(loss)
     def forward(self, data):
-        # train_loader = torch.utils.data.DataLoader(data, batch_size=256, shuffle=True, pin_memory=True)
-        # ae = get_trained_autoencoder(train_loader, optimizer_params={"lr":self.lr}, n_epochs=self.epochs, device=self.device, optimizer_class=torch.optim.Adam, loss_fn=self.loss, embedding_size=10)
+        train_loader = torch.utils.data.DataLoader(data, batch_size=256, shuffle=True, pin_memory=True)
+        ae = get_trained_autoencoder(train_loader, optimizer_params={"lr":self.lr}, n_epochs=self.epochs, device=self.device, optimizer_class=torch.optim.Adam, loss_fn=self.loss, embedding_size=10)
         return 
         
         
@@ -36,9 +38,11 @@ class LayerwiseVae:
 
     def total_loss(self, train_loader, model, loss_fn):
         total_loss = 0.0
-        for input in train_loader:
-            pred = model.forward(input)[1]
-            total_loss += loss_fn(pred, input).item()
+        for inputs, _ in train_loader:
+            if isinstance(inputs, list):
+                inputs = torch.tensor(inputs, dtype=torch.float32).to(next(model.parameters()).device)
+            pred = model(inputs)
+            total_loss += loss_fn(pred, inputs).item()
         return total_loss
 
     def layerwise(self, data):
@@ -56,9 +60,9 @@ class LayerwiseVae:
                     weight_initalizer=torch.nn.init.xavier_normal_,
                     activation_fn=lambda x: F.relu(x),
                     loss_fn=loss_fn,
-                    optimizer_fn=lambda parameters: torch.optim.Adam(parameters, lr=0.0001))
+                    optimizer_fn=lambda parameters: torch.optim.Adam(parameters, lr=0.0001)).cuda()
             model.pretrain(train_loader, steps_per_layer, corruption_fn=self.add_noise)
-            model.refine_training(train_loader, refine_training_steps, corruption_fn=self.add_noise).cuda()
+            model.refine_training(train_loader, refine_training_steps, corruption_fn=self.add_noise)
             loss = self.total_loss(train_loader, model, loss_fn)
             
             loss_file = os.path.join(self.vae_pretraining, 'loss.log')

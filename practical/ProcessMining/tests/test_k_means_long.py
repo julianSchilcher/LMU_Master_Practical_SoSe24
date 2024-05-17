@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from practical.ProcessMining.kMeans import KMeans
+from practical.ProcessMining.k_means_long import KMeans
 
 
 @pytest.fixture

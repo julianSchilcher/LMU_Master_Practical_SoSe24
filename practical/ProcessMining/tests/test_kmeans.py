@@ -1,4 +1,4 @@
-from practical.ProcessMining.kmeans import Kmeans
+from practical.ProcessMining.k_means import Kmeans
 
 from sklearn.datasets import make_blobs
 

@@ -17,3 +17,6 @@ def test_kmeans():
     assert len(kmeans.cluster_indices) == n_samples
     assert len(set(kmeans.cluster_indices)) == centers
     assert len(kmeans.centroids) == centers
+
+if __name__ == "__main__":
+    test_kmeans()

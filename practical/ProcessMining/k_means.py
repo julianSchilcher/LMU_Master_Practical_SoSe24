@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.cm
 
 class Kmeans:
     def __init__(self, k=3, iterations=50):
@@ -23,7 +24,7 @@ class Kmeans:
 
     def plot_clusters(self, data):
         # Color the data points according to their cluster
-        cmap = plt.cm.get_cmap(lut=self.k)
+        cmap = matplotlib.cm.get_cmap(lut=self.k)
         for i in range(self.k):
             plt.scatter(data[self.cluster_indices == i][:, 0], 
                         data[self.cluster_indices == i][:, 1], 

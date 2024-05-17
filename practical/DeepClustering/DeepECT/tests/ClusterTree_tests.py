@@ -241,3 +241,18 @@ def test_dc_loss():
     loss = tree.dc_loss(batch_size)
 
     assert torch.all(torch.eq(loss, loss_manually))
+
+def test_adaption_inner_nodes():
+    tree = sample_cluster_tree_with_assignments()
+
+    tree.adapt_inner_nodes(tree.root, 0.1)
+
+    # calculate adaption manually
+    root_weigth = torch.tensor([0.5*(1 + 2), 0.5*(1 + 2)])
+    root_left_weight = torch.tensor([0.5*(1 + 1), 0.5*(1 + 1)])
+    new_root_left = (root_left_weight[0] * torch.tensor([-2, -2]) + root_left_weight[1] * torch.tensor([-0.5, -0.5]))/(torch.sum(root_left_weight))
+    new_root = (root_weigth[0] * new_root_left + root_weigth[1] * torch.tensor([1,1]))/(torch.sum(root_weigth))
+    
+    # compare results
+    assert torch.all(torch.eq(tree.root.center, new_root))
+    assert torch.all(torch.eq(tree.root.left_child.center, new_root_left))

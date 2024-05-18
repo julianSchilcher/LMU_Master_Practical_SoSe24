@@ -103,13 +103,6 @@ class Cluster_Node:
             optimizer.add_param_group({"params": self.left_child.center})
             optimizer.add_param_group({"params": self.right_child.center})
 
-    def clear_assignments(self):
-        self.assignments = None
-        if self.left_child is not None:
-            self.left_child.clear_assignments()
-        if self.right_child is not None:
-            self.right_child.clear_assignments()
-
 
 class Cluster_Tree:
     """
@@ -173,9 +166,6 @@ class Cluster_Tree:
             self._collect_leafnodes(node.left_child, leafnodes)
             self._collect_leafnodes(node.right_child, leafnodes)
             
-    def clear_assignments_from_nodes(self):
-        self.root.clear_assignments()
-
     def assign_to_nodes(self, minibatch_embedded: torch.tensor):
         """
         This method assigns all samples in the minibatch to its nearest nodes in the cluster tree. It is performed bottom up, so each

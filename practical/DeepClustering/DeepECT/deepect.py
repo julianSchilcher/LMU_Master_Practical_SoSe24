@@ -626,12 +626,11 @@ class _DeepECT_Module(torch.nn.Module):
 
         train_iterator = iter(trainloader)
 
-        for e in range(1, max_iterations+1):
-
+        for e in range(max_iterations):
             self.cluster_tree.prune_tree(pruning_threshold)                    
-            if e % grow_interval == 0:
+            if e > 0 and e % grow_interval == 0:
                 self.cluster_tree.grow_tree(trainloader, autoencoder, optimizer, device=device)
-            
+
             # retrieve minibatch (endless)
             try:
                 # get next minibatch
@@ -646,18 +645,11 @@ class _DeepECT_Module(torch.nn.Module):
 
             self.cluster_tree.assign_to_nodes(embedded)
 
-            # calculate loss
+            # calculate cluster loss
             nc_loss = self.cluster_tree.nc_loss()
-            dc_loss = self.cluster_tree.dc_loss(len(M))
-            
+            dc_loss = self.cluster_tree.dc_loss(len(M))            
             
             loss = nc_loss + dc_loss + rec_loss
-
-            # optimizer_step with gradient descent
-            # !!! make sure that optimizer contains autoencoder-params and all new leaf node centers (old leaf node centers must be deleted in optimizer params)
-            # ==> maybe new optimizer object after each tree grow step
-            # --> Instead we can just set requires_grad to false and they won't be adjusted, but we retain the state
-            # https://discuss.pytorch.org/t/optimizer-step-only-for-a-specific-group-of-parameters/177541/3
 
             optimizer.zero_grad()
             loss.backward()
@@ -665,8 +657,6 @@ class _DeepECT_Module(torch.nn.Module):
 
             # adapt centers of split nodes analytically
             self.cluster_tree.adapt_inner_nodes(self.cluster_tree.root, pruning_threshold)
-            # TODO: cleanup node assignments? I think not necessary
-            # self.cluster_tree.clear_assignments_from_nodes()
         return self
         
         

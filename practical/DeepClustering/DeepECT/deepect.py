@@ -90,10 +90,16 @@ class Cluster_Node:
 
         """
         # inner node on cpu
-        self.center = self.center.data.cpu()  # retrieve data tensor from nn.Parameters
         self.center.requires_grad = False
         self.assignments = None
         self.sum_squared_dist = None
+
+    def prune(self):
+        if self.left_child is not None:
+            self.left_child.prune()
+        if self.right_child is not None:
+            self.right_child.prune()
+        self.from_leaf_to_inner()
 
     def set_childs(
         self,
@@ -152,10 +158,7 @@ class Cluster_Tree:
         self.root = Cluster_Node(np.zeros(init_leafnode_centers.shape[1]), device)
         # assign the 2 initial leaf nodes with its initial centers
         self.root.set_childs(None, init_leafnode_centers[0], init_leafnode_centers[1])
-        self.pruning_nodes = (
-            []
-        )  # stores a list of nodes which weights fall below pruning treshold during current iteration and must be pruned in next iteration
-
+        
     def clear_node_assignments(self):
         self.root.clear_assignments()
 
@@ -514,22 +517,23 @@ class Cluster_Tree:
                 Returns:
                     None
                 """
-                child_node = getattr(parent, child_attr)
+                child_node: Cluster_Node = getattr(parent, child_attr)
                 sibling_attr = 'left_child' if child_attr == 'right_child' else 'right_child'
-                sibling_node = getattr(parent, sibling_attr)
+                sibling_node: Cluster_Node = getattr(parent, sibling_attr)
 
                 if sibling_node is None:
-                    if parent == self.root:
-                        self.root = child_node
-                        self.root.parent = None
-                    else:
-                        grandparent = parent.parent
-                        if grandparent.left_child == parent:
-                            grandparent.left_child = child_node
-                        else:
-                            grandparent.right_child = child_node
-                        if child_node is not None:
-                            child_node.parent = grandparent
+                    # if parent == self.root:
+                    #     self.root = child_node
+                    #     self.root.parent = None
+                    # else:
+                    #     grandparent = parent.parent
+                    #     if grandparent.left_child == parent:
+                    #         grandparent.left_child = child_node
+                    #     else:
+                    #         grandparent.right_child = child_node
+                    #     if child_node is not None:
+                    #         child_node.parent = grandparent
+                    raise ValueError(sibling_node)
                 else:
                     if parent == self.root:
                         self.root = sibling_node
@@ -541,6 +545,10 @@ class Cluster_Tree:
                         else:
                             grandparent.right_child = sibling_node
                         sibling_node.parent = grandparent
+                    child_node.prune()
+                    del child_node
+                    del parent
+                
 
             def prune_recursive(node: Cluster_Node):
                 """
@@ -793,7 +801,7 @@ class _DeepECT_Module(torch.nn.Module):
                 self.cluster_tree.assign_to_nodes(embeddings)
                 self.cluster_tree._assign_to_splitnodes(self.cluster_tree.root)
                 # retrieve a list which stores the assigned sample indices for each node in <cluster_nodes>
-                assignments_list = list(map(lambda node: node.assignment_indices if node.assignment_indices is not None else torch.tensor([], dtype=torch.float, device=self.device), cluster_nodes))
+                assignments_list = list(map(lambda node: node.assignment_indices if node.assignment_indices is not None else torch.tensor([], dtype=torch.int, device=self.device), cluster_nodes))
                 # create a 1-dim. tensor which stores the labels for the samples
                 labels = torch.cat([torch.full((len(assignments) if assignments is not None else 0,), i, dtype=torch.int) for i, assignments in enumerate(assignments_list)])
                 # flatten the list of assignments for each node to a single 1-dim. tensor
@@ -1059,7 +1067,7 @@ if __name__ == "__main__":
         [1, 1.1, 3], [2, 0, 2.9]
         ], dtype=np.float32)
     autoencoder = FeedforwardAutoencoder(layers=[3,2])
-    deepect = DeepECT(batch_size=2, number_classes=3, pretrain_epochs=5, max_iterations=20, grow_interval=5, embedding_size=2)
+    deepect = DeepECT(batch_size=2, pruning_threshold=0.05, number_classes=3, pretrain_epochs=5, max_iterations=20, grow_interval=5, embedding_size=2)
     deepect.fit(dataset)
     print(deepect.DeepECT_labels_)
     print(deepect.DeepECT_cluster_centers_)

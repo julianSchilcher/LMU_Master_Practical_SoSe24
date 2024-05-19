@@ -1,0 +1,44 @@
+Downloading http://fashion-mnist.s3-website.eu-central-1.amazonaws.com/train-images-idx3-ubyte.gz
+Downloading http://fashion-mnist.s3-website.eu-central-1.amazonaws.com/train-images-idx3-ubyte.gz to /home/stud/xuechun/pratical/evaluation/pre_training/datasets/mnist/FashionMNIST/raw/train-images-idx3-ubyte.gz
+  0%|          | 0/26421880 [00:00<?, ?it/s]  2%|▏         | 622592/26421880 [00:00<00:04, 5660079.89it/s]  5%|▌         | 1441792/26421880 [00:00<00:03, 6818373.59it/s]  9%|▊         | 2260992/26421880 [00:00<00:03, 7394830.49it/s] 12%|█▏        | 3112960/26421880 [00:00<00:03, 7750820.24it/s] 15%|█▌        | 4063232/26421880 [00:00<00:02, 8312185.95it/s] 19%|█▉        | 4980736/26421880 [00:00<00:02, 8545315.01it/s] 23%|██▎       | 6127616/26421880 [00:00<00:02, 9480888.49it/s] 27%|██▋       | 7110656/26421880 [00:00<00:02, 9365210.82it/s] 31%|███       | 8159232/26421880 [00:00<00:01, 9650869.65it/s] 35%|███▌      | 9306112/26421880 [00:01<00:01, 10182728.95it/s] 40%|███▉      | 10452992/26421880 [00:01<00:01, 10566148.70it/s] 44%|████▎     | 11534336/26421880 [00:01<00:01, 10525434.52it/s] 48%|████▊     | 12681216/26421880 [00:01<00:01, 10764671.70it/s] 52%|█████▏    | 13828096/26421880 [00:01<00:01, 10928866.14it/s] 57%|█████▋    | 14974976/26421880 [00:01<00:01, 11088432.14it/s] 61%|██████    | 16121856/26421880 [00:01<00:00, 11169003.05it/s] 65%|██████▌   | 17301504/26421880 [00:01<00:00, 11281122.62it/s] 70%|██████▉   | 18481152/26421880 [00:01<00:00, 11307082.79it/s] 74%|███████▍  | 19628032/26421880 [00:01<00:00, 11327856.80it/s] 79%|███████▊  | 20774912/26421880 [00:02<00:00, 11204160.03it/s] 83%|████████▎ | 21921792/26421880 [00:02<00:00, 11250372.44it/s] 87%|████████▋ | 23068672/26421880 [00:02<00:00, 11291731.97it/s] 92%|█████████▏| 24215552/26421880 [00:02<00:00, 11298890.70it/s] 96%|█████████▌| 25362432/26421880 [00:02<00:00, 11336439.45it/s]100%|██████████| 26421880/26421880 [00:02<00:00, 10360220.86it/s]
+Extracting /home/stud/xuechun/pratical/evaluation/pre_training/datasets/mnist/FashionMNIST/raw/train-images-idx3-ubyte.gz to /home/stud/xuechun/pratical/evaluation/pre_training/datasets/mnist/FashionMNIST/raw
+
+Downloading http://fashion-mnist.s3-website.eu-central-1.amazonaws.com/train-labels-idx1-ubyte.gz
+Downloading http://fashion-mnist.s3-website.eu-central-1.amazonaws.com/train-labels-idx1-ubyte.gz to /home/stud/xuechun/pratical/evaluation/pre_training/datasets/mnist/FashionMNIST/raw/train-labels-idx1-ubyte.gz
+  0%|          | 0/29515 [00:00<?, ?it/s]100%|██████████| 29515/29515 [00:00<00:00, 2913849.18it/s]
+Extracting /home/stud/xuechun/pratical/evaluation/pre_training/datasets/mnist/FashionMNIST/raw/train-labels-idx1-ubyte.gz to /home/stud/xuechun/pratical/evaluation/pre_training/datasets/mnist/FashionMNIST/raw
+
+Downloading http://fashion-mnist.s3-website.eu-central-1.amazonaws.com/t10k-images-idx3-ubyte.gz
+Downloading http://fashion-mnist.s3-website.eu-central-1.amazonaws.com/t10k-images-idx3-ubyte.gz to /home/stud/xuechun/pratical/evaluation/pre_training/datasets/mnist/FashionMNIST/raw/t10k-images-idx3-ubyte.gz
+  0%|          | 0/4422102 [00:00<?, ?it/s] 14%|█▍        | 622592/4422102 [00:00<00:00, 6172023.92it/s] 29%|██▉       | 1277952/4422102 [00:00<00:00, 6275845.10it/s] 46%|████▌     | 2031616/4422102 [00:00<00:00, 6780356.71it/s] 66%|██████▌   | 2916352/4422102 [00:00<00:00, 7584213.25it/s] 90%|████████▉ | 3964928/4422102 [00:00<00:00, 8529756.31it/s]100%|██████████| 4422102/4422102 [00:00<00:00, 7883984.04it/s]
+Extracting /home/stud/xuechun/pratical/evaluation/pre_training/datasets/mnist/FashionMNIST/raw/t10k-images-idx3-ubyte.gz to /home/stud/xuechun/pratical/evaluation/pre_training/datasets/mnist/FashionMNIST/raw
+
+Downloading http://fashion-mnist.s3-website.eu-central-1.amazonaws.com/t10k-labels-idx1-ubyte.gz
+Downloading http://fashion-mnist.s3-website.eu-central-1.amazonaws.com/t10k-labels-idx1-ubyte.gz to /home/stud/xuechun/pratical/evaluation/pre_training/datasets/mnist/FashionMNIST/raw/t10k-labels-idx1-ubyte.gz
+  0%|          | 0/5148 [00:00<?, ?it/s]100%|██████████| 5148/5148 [00:00<00:00, 30326231.73it/s]
+/home/stud/xuechun/pratical/evaluation/pre_training/load_datasets.py:25: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  return  torch.tensor(data, dtype=torch.float32), torch.tensor(labels, dtype= torch.float32)
+/home/stud/xuechun/pratical/evaluation/pre_training/load_datasets.py:72: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.clone().detach() or sourceTensor.clone().detach().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  return  torch.tensor(data, dtype=torch.float32), torch.tensor(labels, dtype= torch.float32)
+Extracting /home/stud/xuechun/pratical/evaluation/pre_training/datasets/mnist/FashionMNIST/raw/t10k-labels-idx1-ubyte.gz to /home/stud/xuechun/pratical/evaluation/pre_training/datasets/mnist/FashionMNIST/raw
+
+Model saved to /home/stud/xuechun/pratical/evaluation/pre_training/model/layer_wise/MNIST_pre/vae_MNIST_0
+Model saved to /home/stud/xuechun/pratical/evaluation/pre_training/model/layer_wise/MNIST_pre/vae_MNIST_1
+Model saved to /home/stud/xuechun/pratical/evaluation/pre_training/model/layer_wise/MNIST_pre/vae_MNIST_2
+Model saved to /home/stud/xuechun/pratical/evaluation/pre_training/model/layer_wise/MNIST_pre/vae_MNIST_3
+Model saved to /home/stud/xuechun/pratical/evaluation/pre_training/model/layer_wise/MNIST_pre/vae_MNIST_4
+Model saved to /home/stud/xuechun/pratical/evaluation/pre_training/model/layer_wise/MNIST_pre/vae_MNIST_5
+Model saved to /home/stud/xuechun/pratical/evaluation/pre_training/model/layer_wise/MNIST_pre/vae_MNIST_6
+Model saved to /home/stud/xuechun/pratical/evaluation/pre_training/model/layer_wise/MNIST_pre/vae_MNIST_7
+Model saved to /home/stud/xuechun/pratical/evaluation/pre_training/model/layer_wise/MNIST_pre/vae_MNIST_8
+Model saved to /home/stud/xuechun/pratical/evaluation/pre_training/model/layer_wise/MNIST_pre/vae_MNIST_9
+Model saved to /home/stud/xuechun/pratical/evaluation/pre_training/model/layer_wise/Fashion_MNIST_pre/vae_Fashion_MNIST_0
+Model saved to /home/stud/xuechun/pratical/evaluation/pre_training/model/layer_wise/Fashion_MNIST_pre/vae_Fashion_MNIST_1
+Model saved to /home/stud/xuechun/pratical/evaluation/pre_training/model/layer_wise/Fashion_MNIST_pre/vae_Fashion_MNIST_2
+Model saved to /home/stud/xuechun/pratical/evaluation/pre_training/model/layer_wise/Fashion_MNIST_pre/vae_Fashion_MNIST_3
+Model saved to /home/stud/xuechun/pratical/evaluation/pre_training/model/layer_wise/Fashion_MNIST_pre/vae_Fashion_MNIST_4
+Model saved to /home/stud/xuechun/pratical/evaluation/pre_training/model/layer_wise/Fashion_MNIST_pre/vae_Fashion_MNIST_5
+Model saved to /home/stud/xuechun/pratical/evaluation/pre_training/model/layer_wise/Fashion_MNIST_pre/vae_Fashion_MNIST_6
+Model saved to /home/stud/xuechun/pratical/evaluation/pre_training/model/layer_wise/Fashion_MNIST_pre/vae_Fashion_MNIST_7
+Model saved to /home/stud/xuechun/pratical/evaluation/pre_training/model/layer_wise/Fashion_MNIST_pre/vae_Fashion_MNIST_8
+Model saved to /home/stud/xuechun/pratical/evaluation/pre_training/model/layer_wise/Fashion_MNIST_pre/vae_Fashion_MNIST_9

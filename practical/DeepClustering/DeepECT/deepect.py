@@ -473,15 +473,9 @@ class Cluster_Tree:
             # adapt weight for left child
             left_child_len_assignments = len(root.left_child.assignments if root.left_child.assignments is not None else [])
             root.left_child.weight = 0.5*(root.left_child.weight + left_child_len_assignments)
-            # check whether this node should be pruned in next iteration
-            if root.left_child.weight < pruning_threshold:
-                self.pruning_nodes.append(root.left_child)
             # adapt weight for right child
             right_child_len_assignments = len(root.right_child.assignments if root.right_child.assignments is not None else [])
             root.right_child.weight = 0.5*(root.right_child.weight + right_child_len_assignments)
-            # check wether this node should be pruned in next iteration
-            if root.right_child.weight < pruning_threshold:
-                self.pruning_nodes.append(root.right_child)
             # adapt center of parent based on the new weights
             with torch.no_grad():
                 child_centers = torch.stack((root.left_child.weight * root.left_child.center, 
@@ -774,6 +768,7 @@ class _DeepECT_Module(torch.nn.Module):
         cluster_nodes = nodes[:number_nodes_necessary][-number_classes:]
         with torch.no_grad():
         # perform prediction batchwise
+<<<<<<< Updated upstream
             predictions = []
             for batch in dataloader:
                 # calculate embeddings of the samples which should be predicted

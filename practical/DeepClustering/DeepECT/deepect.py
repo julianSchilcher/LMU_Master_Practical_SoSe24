@@ -1,15 +1,16 @@
-import torch
-import numpy as np
-from sklearn.utils import check_random_state
-from sklearn.cluster import KMeans
-from clustpy.deep import predict_batchwise, encode_batchwise
-from clustpy.deep._utils import set_torch_seed
-from clustpy.deep._train_utils import get_standard_initial_deep_clustering_setting
 from typing import List, Tuple, Union
 from queue import Queue
 
+import numpy as np
+import torch
 import torch.utils
 import torch.utils.data
+from clustpy.deep import encode_batchwise, predict_batchwise
+from clustpy.deep._train_utils import \
+    get_standard_initial_deep_clustering_setting
+from clustpy.deep._utils import set_torch_seed
+from sklearn.cluster import KMeans
+from sklearn.utils import check_random_state
 
 
 class Cluster_Node:
@@ -475,13 +476,12 @@ class Cluster_Tree:
                 root.center = torch.sum(child_centers, axis=0)/torch.add(root.left_child.weight, root.right_child.weight)
             root.assignments = torch.zeros(left_child_len_assignments+right_child_len_assignments, dtype=torch.int8, device=root.device)
 
-
     def prune_tree(self, pruning_threshold: float):
         """
         Prunes the tree by removing nodes with weights below the given pruning threshold.
 
         Args:
-            pruning_treshhold (float): The threshold value for pruning. Nodes with weights below this threshold will be removed.
+            pruning_threshold (float): The threshold value for pruning. Nodes with weights below this threshold will be removed.
 
         Returns:
             None
@@ -499,35 +499,54 @@ class Cluster_Tree:
                 None
 
             """
-            child: Cluster_Node = getattr(parent, child_attr)
-            if child:
-                # TODO this needs to be checked
-                if child.weight < pruning_threshold or (not child.is_leaf_node() and max(child.left_child.weight if child.left_child is not None else 0, child.right_child.weight if child.right_child is not None else 0) >= pruning_threshold):
-                    surviving_child = None
-                    if not child.is_leaf_node():
-                        surviving_child = child.left_child if child.left_child is not None and child.left_child.weight >= pruning_threshold else child.right_child
-                    setattr(parent, child_attr, surviving_child)
+            child_node = getattr(parent, child_attr)
+            sibling_attr = 'left_child' if child_attr == 'right_child' else 'right_child'
+            sibling_node = getattr(parent, sibling_attr)
 
-        def prune_recursive(node: Cluster_Node):
+            if sibling_node is None:
+                # Replace the parent with the child node itself
+                if parent == self.root:
+                    # Special case: If the root node itself
+                    self.root = child_node
+                else:
+                    setattr(parent, child_attr, child_node)
+            else:
+                # Replace the parent node with the sibling node
+                if parent == self.root:
+                    self.root = sibling_node
+                else:
+                    setattr(parent, child_attr, sibling_node)
+
+        def prune_recursive(node: Cluster_Node, parent: Cluster_Node = None, child_attr: str = None):
             """
             Recursively prunes the tree starting from the given node.
 
             Args:
                 node (Cluster_Node): The starting node for pruning.
+                parent (Cluster_Node): The parent node of the current node.
+                child_attr (str): The attribute name of the current node in the parent node.
 
             Returns:
                 None
 
             """
             if node.left_child:
-                prune_recursive(node.left_child)
+                prune_recursive(node.left_child, node, 'left_child')
             if node.right_child:
-                prune_recursive(node.right_child)
-            prune_node(node, 'left_child')
-            prune_node(node, 'right_child')
+                prune_recursive(node.right_child, node, 'right_child')
+
+            if node.weight < pruning_threshold:
+                if parent is not None:
+                    prune_node(parent, child_attr)
+                else:
+                    # Special case for the root node
+                    if self.root.left_child and self.root.left_child.weight < pruning_threshold:
+                        prune_node(self.root, 'left_child')
+                    if self.root.right_child and self.root.right_child.weight < pruning_threshold:
+                        prune_node(self.root, 'right_child')
 
         prune_recursive(self.root)
-
+   
     def grow_tree(self, 
                   dataloader: torch.utils.data.DataLoader,
                   autoencoder: torch.nn.Module,

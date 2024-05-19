@@ -36,7 +36,7 @@ def sample_cluster_tree(get_deep_ect_module=False):
     """
     deep_ect = _DeepECT_Module(np.array([[0, 0], [1, 1]]), "cpu")
     tree = deep_ect.cluster_tree
-    tree.root.left_child.set_childs(None, np.array([-2, -2]), np.array([-0.5, -0.5]))
+    tree.root.left_child.set_childs(None, np.array([-2, -2]), np.array([-0.5, -0.5]), split=2)
     if get_deep_ect_module:
         return deep_ect
     return tree

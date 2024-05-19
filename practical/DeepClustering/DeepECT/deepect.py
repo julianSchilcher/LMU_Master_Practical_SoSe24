@@ -14,6 +14,7 @@ from sklearn.utils import check_random_state
 from clustpy.data.real_torchvision_data import load_mnist
 from clustpy.metrics.clustering_metrics import unsupervised_clustering_accuracy
 from tqdm import tqdm
+import math
 
 
 class Cluster_Node:
@@ -791,12 +792,16 @@ class _DeepECT_Module(torch.nn.Module):
         
         # get all nodes breadth first
         nodes = self.cluster_tree.get_all_nodes_breadth_first()
-        # calculate the number of nodes which needs to be considered by cutting <number_classes> edges in the tree
-        number_nodes_necessary = 2*number_classes - 1 
-        if number_nodes_necessary > len(nodes):
-            raise ValueError("The given number of classes exceeds the number of nodes in the cluster tree")
-        # retrieve the nodes of the cutted edges -> the resulting <number_classes> nodes represent the final clusters  
-        cluster_nodes = nodes[:number_nodes_necessary][-number_classes:]
+
+        cluster_nodes = []
+        split_level = number_classes - 1
+        for i, node in enumerate(nodes):
+            # check whether the current node is a leaf node in the cutted tree for <number_classes> clusters
+            if math.ceil(node.id / 2) <= split_level and (node.is_leaf_node() or math.ceil(node.left_child.id / 2) > split_level):
+                cluster_nodes.append(node)
+
+        assert len(cluster_nodes) == number_classes, "Number of cluster nodes doesn't correspond to number of classes"
+
         with torch.no_grad():
         # perform prediction batchwise
             predictions = []
@@ -804,6 +809,7 @@ class _DeepECT_Module(torch.nn.Module):
                 # calculate embeddings of the samples which should be predicted
                 batch_data = batch[1].to(self.device)
                 embeddings = autoencoder.encode(batch_data)
+                print("emb len", len(embeddings))
                 # assign the embeddings to the cluster tree
                 self.cluster_tree.assign_to_nodes(embeddings)
                 self.cluster_tree._assign_to_splitnodes(self.cluster_tree.root)
@@ -817,6 +823,11 @@ class _DeepECT_Module(torch.nn.Module):
                 sorted_assignment_indices = torch.argsort(assignments).cpu()
                 predictions.append(labels[sorted_assignment_indices])
                 self.cluster_tree.clear_node_assignments()
+                print("Number of assignments", assignments.shape)
+                print("Number of assignments list", sum([len(tensor) for tensor in assignments_list]))
+                print("number samples batch", len(batch_data))
+                print("labels", len(labels))
+    
         
             # transform the predictions for each batch to a single output array for the whole dataset
             predictions_numpy = torch.cat(predictions, dim=0).numpy()
@@ -946,7 +957,7 @@ class DeepECT:
         pretrain_epochs: int = 50,
         number_classes: int = 2,
         max_iterations: int = 10000,
-        grow_interval: int = 500,
+        grow_interval: int = 1000,
         pruning_threshold: float = 0.1,
         optimizer_class: torch.optim.Optimizer = torch.optim.Adam,
         rec_loss_fn: torch.nn.modules.loss._Loss = torch.nn.MSELoss(),
@@ -1074,7 +1085,10 @@ class DeepECT:
 
 if __name__ == "__main__": 
     dataset, labels = load_mnist("train", return_X_y=True)
-    deepect = DeepECT(number_classes=10)
+    autoencoder = FeedforwardAutoencoder([dataset.shape[1], 500, 500, 2000, 10])
+    autoencoder.load_state_dict(torch.load("./pretrained_AE.pth"))
+    autoencoder.fitted = True
+    deepect = DeepECT(number_classes=10, autoencoder=autoencoder)
     deepect.fit(dataset)
     print(unsupervised_clustering_accuracy(labels, deepect.DeepECT_labels_))
     print(deepect.DeepECT_cluster_centers_)

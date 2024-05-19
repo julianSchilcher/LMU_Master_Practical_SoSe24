@@ -321,7 +321,6 @@ class Cluster_Tree:
         with torch.no_grad():  # embedded space should not be optimized in this loss
             # get the assignments for each leaf node (from the current minibatch)
             leafnode_assignments = [node.assignments for node in leaf_nodes if node.assignments is not None]
-            # leafnode_assignments = list(map(lambda node: node.assignments if node.assignments is not None else node.center.data.detach().unsqueeze(0), leaf_nodes))
             leafnode_minibatch_centers = list(
                 map(
                     lambda assignments: torch.sum(assignments, axis=0)
@@ -513,7 +512,8 @@ class Cluster_Tree:
                 None
 
             """
-            child_node = getattr(parent, child_attr)
+            child_node: Cluster_Node = getattr(parent, child_attr)
+            child_node.from_leaf_to_inner()
             sibling_attr = 'left_child' if child_attr == 'right_child' else 'right_child'
             sibling_node = getattr(parent, sibling_attr)
 
@@ -799,9 +799,9 @@ class _DeepECT_Module(torch.nn.Module):
             # return corresponding centers as well
             centers = list(map(lambda node: node.center.data, cluster_nodes))
             # reformat list of tensors to one sinlge tensor of shape (#leafnodes,#emb_features)
-            centers = torch.stack(centers, dim=0).cpu()
+            centers = torch.stack(centers, dim=0).cpu().numpy()
         
-        return predictions_numpy, centers.detach().numpy()
+        return predictions_numpy, centers
 
 def _deep_ect(
     X: np.ndarray,

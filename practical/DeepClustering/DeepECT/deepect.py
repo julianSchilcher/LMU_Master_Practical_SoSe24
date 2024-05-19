@@ -11,6 +11,7 @@ from clustpy.deep._train_utils import \
 from clustpy.deep._utils import set_torch_seed
 from sklearn.cluster import KMeans
 from sklearn.utils import check_random_state
+from clustpy.deep.autoencoders import FeedforwardAutoencoder
 
 
 class Cluster_Node:
@@ -311,7 +312,7 @@ class Cluster_Tree:
         """
         leaf_nodes = self.get_all_leaf_nodes()
         # convert the list of leaf nodes to a list of the corresponding leaf node centers as tensors
-        leafnode_centers = list(map(lambda node: node.center, leaf_nodes))
+        leafnode_centers = [node.center for node in leaf_nodes if node.assignments is not None]
         # !!! Maybe here a problem of concatenating parameter tensors !!
         # reformat list of tensors to one sinlge tensor of shape (#leafnodes,#emb_features)
         leafnode_center_tensor = torch.stack(leafnode_centers, dim=0)
@@ -319,7 +320,8 @@ class Cluster_Tree:
         # calculate the center of the assignments from the current minibatch for each leaf node
         with torch.no_grad():  # embedded space should not be optimized in this loss
             # get the assignments for each leaf node (from the current minibatch)
-            leafnode_assignments = list(map(lambda node: node.assignments if node.assignments is not None else node.center.data.unsqueeze(0), leaf_nodes))
+            leafnode_assignments = [node.assignments for node in leaf_nodes if node.assignments is not None]
+            # leafnode_assignments = list(map(lambda node: node.assignments if node.assignments is not None else node.center.data.detach().unsqueeze(0), leaf_nodes))
             leafnode_minibatch_centers = list(
                 map(
                     lambda assignments: torch.sum(assignments, axis=0)
@@ -1046,7 +1048,8 @@ if __name__ == "__main__":
         [0, 0, 0], [1, 0.5, 0.1], [1, 1, 0.2], [0, 1, 0], 
         [1, 1.1, 3], [2, 0, 2.9]
         ], dtype=np.float32)
-    deepect = DeepECT(batch_size=2, pretrain_epochs=5, max_iterations=10, grow_interval=5, embedding_size=2)
+    autoencoder = FeedforwardAutoencoder(layers=[3,2])
+    deepect = DeepECT(batch_size=2, number_classes=3, pretrain_epochs=5, max_iterations=20, grow_interval=5, embedding_size=2)
     deepect.fit(dataset)
     print(deepect.DeepECT_labels_)
     print(deepect.DeepECT_cluster_centers_)

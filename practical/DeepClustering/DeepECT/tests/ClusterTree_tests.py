@@ -30,13 +30,15 @@ def test_Cluster_Node():
     assert isinstance(root.left_child.center, torch.Tensor)
 
 
-def sample_cluster_tree():
+def sample_cluster_tree(get_deep_ect_module=False):
     """
     Helper method for creating a sample cluster tree
     """
     deep_ect = _DeepECT_Module(np.array([[0, 0], [1, 1]]), "cpu")
     tree = deep_ect.cluster_tree
     tree.root.left_child.set_childs(None, np.array([-2, -2]), np.array([-0.5, -0.5]))
+    if get_deep_ect_module:
+        return deep_ect
     return tree
 
 def sample_cluster_tree_with_assignments():
@@ -76,6 +78,30 @@ def test_cluster_tree():
         ).item()
     )
 
+    # check if the returned nodes are really the nodes by checking the stored center
+    nodes = tree.get_all_nodes_breadth_first()
+    assert (
+        torch.all(
+            nodes[0].center
+            == torch.tensor([0, 0], dtype=torch.float16)
+        ).item()
+        and torch.all(
+            nodes[1].center
+            == torch.tensor([0, 0], dtype=torch.float16)
+        ).item()
+        and torch.all(
+            nodes[2].center
+            == torch.nn.Parameter(torch.tensor([1, 1], dtype=torch.float16))
+        ).item()
+        and torch.all(
+            nodes[3].center
+            == torch.nn.Parameter(torch.tensor([-2, -2], dtype=torch.float16))
+        ).item()
+        and torch.all(
+            nodes[4].center
+            == torch.nn.Parameter(torch.tensor([-0.5, -0.5], dtype=torch.float16))
+        ).item()
+    )
 
 def test_cluster_tree_growth():
     tree = sample_cluster_tree()
@@ -130,6 +156,53 @@ def test_cluster_tree_assignment():
         )
     )
 
+    # check if indexes are set correctly
+    assert torch.all(
+        torch.eq(tree.root.left_child.left_child.assignment_indices.sort()[0], torch.tensor([0]))
+    )
+    assert torch.all(
+        torch.eq(
+            tree.root.left_child.right_child.assignment_indices.sort()[0],
+            torch.tensor([2]),
+        )
+    )
+    assert torch.all(
+        torch.eq(
+            tree.root.right_child.assignment_indices.sort()[0], torch.tensor([1,3])
+        )
+    )
+    assert torch.all(
+        torch.eq(
+            tree.root.assignment_indices.sort()[0],
+            torch.tensor([0,1,2,3]),
+        )
+    )
+    assert torch.all(
+        torch.eq(
+            tree.root.left_child.assignment_indices.sort()[0], torch.tensor([0,2])
+        )
+    )
+
+def test_predict():
+    # get initial setting
+    tree = sample_cluster_tree(get_deep_ect_module=True)
+    # create mock data set
+    dataset = torch.tensor([[-3, -3], [10, 10], [-0.4, -0.4], [0.4, 0.3]], device="cpu")
+    dataloader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(torch.tensor([0,1,2,3]), dataset), batch_size=4)
+    # create mock-autoencoder, which represents just an identity function
+    encode = lambda x: x
+    autoencoder = type('Autoencoder', (), {'encode': encode})
+    # predict 3 classes
+    pred, center = tree.predict(3, dataloader, autoencoder)
+    assert np.all(pred == np.array([1,0,2,0]))
+    # predict 2 classes
+    pred, center = tree.predict(2, dataloader, autoencoder)
+    assert np.all(pred == np.array([0,1,0,1]))
+    # predict 2 classes with batches 
+    dataset = torch.tensor([[-3, -3], [10, 10], [-0.4, -0.4], [0.4, 0.3]], device="cpu")
+    dataloader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(torch.tensor([0,1,2,3]), dataset), batch_size=2)
+    pred, center = tree.predict(2, dataloader, autoencoder)
+    assert np.all(pred == np.array([0,1,0,1]))
 
 def test_nc_loss():
 

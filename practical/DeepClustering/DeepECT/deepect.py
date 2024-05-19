@@ -1,17 +1,16 @@
-from typing import List, Tuple, Union
 from queue import Queue
+from typing import List, Tuple, Union
 
 import numpy as np
 import torch
 import torch.utils
 import torch.utils.data
-from clustpy.deep import encode_batchwise, predict_batchwise
 from clustpy.deep._train_utils import \
     get_standard_initial_deep_clustering_setting
 from clustpy.deep._utils import set_torch_seed
+from clustpy.deep.autoencoders import FeedforwardAutoencoder
 from sklearn.cluster import KMeans
 from sklearn.utils import check_random_state
-from clustpy.deep.autoencoders import FeedforwardAutoencoder
 
 
 class Cluster_Node:
@@ -28,20 +27,26 @@ class Cluster_Node:
         center: np.ndarray,
         device: torch.device,
         id: int = 0,
+        parent: 'Cluster_Node' = None
     ) -> "Cluster_Node":
         """
         Constructor for class Cluster_Node
 
         Parameters
         ----------
-        center : np.array
-            the initial center for this node
+        center : np.ndarray
+            The initial center for this node.
         device : torch.device
-            device to be trained on
+            The device to be trained on.
+        id : int, optional
+            The ID of the node, by default 0.
+        parent : Cluster_Node, optional
+            The parent node, by default None.
 
         Returns
         -------
-        Cluster_Node object
+        Cluster_Node
+            The initialized Cluster_Node object.
         """
         self.device = device
         self.left_child = None
@@ -56,6 +61,8 @@ class Cluster_Node:
         self.assignment_indices: Union[torch.Tensor | None] = None
         self.sum_squared_dist: Union[torch.Tensor | None] = None
         self.id = id
+        self.parent = parent
+
 
     def clear_assignments(self):
         if self.left_child is not None:
@@ -108,8 +115,8 @@ class Cluster_Node:
             indicates the current split count (max count of clusters)
 
         """
-        self.left_child = Cluster_Node(left_child_centers, self.device, split + 1)
-        self.right_child = Cluster_Node(right_child_centers, self.device, split + 2)
+        self.left_child = Cluster_Node(left_child_centers, self.device, split + 1, self)
+        self.right_child = Cluster_Node(right_child_centers, self.device, split + 2, self)
         self.from_leaf_to_inner()
 
         if optimizer is not None:
@@ -486,76 +493,83 @@ class Cluster_Tree:
             root.assignments = torch.zeros(left_child_len_assignments+right_child_len_assignments, dtype=torch.int8, device=root.device)
 
     def prune_tree(self, pruning_threshold: float):
-        """
-        Prunes the tree by removing nodes with weights below the given pruning threshold.
-
-        Args:
-            pruning_threshold (float): The threshold value for pruning. Nodes with weights below this threshold will be removed.
-
-        Returns:
-            None
-
-        """
-        def prune_node(parent: Cluster_Node, child_attr: str):
             """
-            Prunes the child node of the given parent node.
+            Prunes the tree by removing nodes with weights below the pruning threshold.
 
             Args:
-                parent (Cluster_Node): The parent node.
-                child_attr (str): The attribute name of the child node to be pruned.
+                pruning_threshold (float): The threshold value for pruning. Nodes with weights below this threshold will be removed.
 
             Returns:
                 None
-
             """
-            child_node: Cluster_Node = getattr(parent, child_attr)
-            child_node.from_leaf_to_inner()
-            sibling_attr = 'left_child' if child_attr == 'right_child' else 'right_child'
-            sibling_node = getattr(parent, sibling_attr)
 
-            if sibling_node is None:
-                # Replace the parent with the child node itself
-                if parent == self.root:
-                    # Special case: If the root node itself
-                    self.root = child_node
+            def prune_node(parent: Cluster_Node, child_attr: str):
+                """
+                Prunes a node from the tree by replacing it with its child or sibling node.
+
+                Args:
+                    parent (Cluster_Node): The parent node from which the child or sibling node will be pruned.
+                    child_attr (str): The attribute name of the child node to be pruned.
+
+                Returns:
+                    None
+                """
+                child_node = getattr(parent, child_attr)
+                sibling_attr = 'left_child' if child_attr == 'right_child' else 'right_child'
+                sibling_node = getattr(parent, sibling_attr)
+
+                if sibling_node is None:
+                    if parent == self.root:
+                        self.root = child_node
+                        self.root.parent = None
+                    else:
+                        grandparent = parent.parent
+                        if grandparent.left_child == parent:
+                            grandparent.left_child = child_node
+                        else:
+                            grandparent.right_child = child_node
+                        if child_node is not None:
+                            child_node.parent = grandparent
                 else:
-                    setattr(parent, child_attr, child_node)
-            else:
-                # Replace the parent node with the sibling node
-                if parent == self.root:
-                    self.root = sibling_node
-                else:
-                    setattr(parent, child_attr, sibling_node)
+                    if parent == self.root:
+                        self.root = sibling_node
+                        self.root.parent = None
+                    else:
+                        grandparent = parent.parent
+                        if grandparent.left_child == parent:
+                            grandparent.left_child = sibling_node
+                        else:
+                            grandparent.right_child = sibling_node
+                        sibling_node.parent = grandparent
 
-        def prune_recursive(node: Cluster_Node, parent: Cluster_Node = None, child_attr: str = None):
-            """
-            Recursively prunes the tree starting from the given node.
+            def prune_recursive(node: Cluster_Node):
+                """
+                Recursively prunes the tree starting from the given node.
 
-            Args:
-                node (Cluster_Node): The starting node for pruning.
-                parent (Cluster_Node): The parent node of the current node.
-                child_attr (str): The attribute name of the current node in the parent node.
+                Parameters:
+                node (Cluster_Node): The node from which to start pruning.
 
-            Returns:
+                Returns:
                 None
+                """
+                if node.left_child:
+                    prune_recursive(node.left_child)
+                if node.right_child:
+                    prune_recursive(node.right_child)
 
-            """
-            if node.left_child:
-                prune_recursive(node.left_child, node, 'left_child')
-            if node.right_child:
-                prune_recursive(node.right_child, node, 'right_child')
+                if node.weight < pruning_threshold:
+                    if node.parent is not None:
+                        if node.parent.left_child == node:
+                            prune_node(node.parent, 'left_child')
+                        else:
+                            prune_node(node.parent, 'right_child')
+                    else:
+                        if self.root.left_child and self.root.left_child.weight < pruning_threshold:
+                            prune_node(self.root, 'left_child')
+                        if self.root.right_child and self.root.right_child.weight < pruning_threshold:
+                            prune_node(self.root, 'right_child')
 
-            if node.weight < pruning_threshold:
-                if parent is not None:
-                    prune_node(parent, child_attr)
-                else:
-                    # Special case for the root node
-                    if self.root.left_child and self.root.left_child.weight < pruning_threshold:
-                        prune_node(self.root, 'left_child')
-                    if self.root.right_child and self.root.right_child.weight < pruning_threshold:
-                        prune_node(self.root, 'right_child')
-
-        prune_recursive(self.root)
+            prune_recursive(self.root)
    
     def grow_tree(self, 
                   dataloader: torch.utils.data.DataLoader,

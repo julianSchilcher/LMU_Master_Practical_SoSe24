@@ -313,6 +313,8 @@ class Cluster_Tree:
         leaf_nodes = self.get_all_leaf_nodes()
         # convert the list of leaf nodes to a list of the corresponding leaf node centers as tensors
         leafnode_centers = [node.center for node in leaf_nodes if node.assignments is not None]
+        if len(leafnode_centers) == 0:
+            return torch.tensor(0., dtype=torch.float, device=leaf_nodes[0].device)
         # !!! Maybe here a problem of concatenating parameter tensors !!
         # reformat list of tensors to one sinlge tensor of shape (#leafnodes,#emb_features)
         leafnode_center_tensor = torch.stack(leafnode_centers, dim=0)
@@ -768,7 +770,6 @@ class _DeepECT_Module(torch.nn.Module):
         cluster_nodes = nodes[:number_nodes_necessary][-number_classes:]
         with torch.no_grad():
         # perform prediction batchwise
-<<<<<<< Updated upstream
             predictions = []
             for batch in dataloader:
                 # calculate embeddings of the samples which should be predicted

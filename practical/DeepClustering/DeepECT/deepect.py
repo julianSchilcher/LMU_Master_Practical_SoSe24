@@ -474,15 +474,9 @@ class Cluster_Tree:
             # adapt weight for left child
             left_child_len_assignments = len(root.left_child.assignments if root.left_child.assignments is not None else [])
             root.left_child.weight = 0.5*(root.left_child.weight + left_child_len_assignments)
-            # check whether this node should be pruned in next iteration
-            if root.left_child.weight < pruning_threshold:
-                self.pruning_nodes.append(root.left_child)
             # adapt weight for right child
             right_child_len_assignments = len(root.right_child.assignments if root.right_child.assignments is not None else [])
             root.right_child.weight = 0.5*(root.right_child.weight + right_child_len_assignments)
-            # check wether this node should be pruned in next iteration
-            if root.right_child.weight < pruning_threshold:
-                self.pruning_nodes.append(root.right_child)
             # adapt center of parent based on the new weights
             with torch.no_grad():
                 child_centers = torch.stack((root.left_child.weight * root.left_child.center, 
@@ -774,6 +768,7 @@ class _DeepECT_Module(torch.nn.Module):
         cluster_nodes = nodes[:number_nodes_necessary][-number_classes:]
         with torch.no_grad():
         # perform prediction batchwise
+<<<<<<< Updated upstream
             predictions = []
             for batch in dataloader:
                 # calculate embeddings of the samples which should be predicted
@@ -800,6 +795,34 @@ class _DeepECT_Module(torch.nn.Module):
             centers = list(map(lambda node: node.center.data, cluster_nodes))
             # reformat list of tensors to one sinlge tensor of shape (#leafnodes,#emb_features)
             centers = torch.stack(centers, dim=0).cpu()
+=======
+        predictions = []
+        for batch in dataloader:
+            # calculate embeddings of the samples which should be predicted
+            batch_data = batch[1].to(self.device)
+            with torch.no_grad():
+                embeddings = autoencoder.encode(batch_data).detach().cpu()
+            # assign the embeddings to the cluster tree
+            self.cluster_tree.assign_to_nodes(embeddings)
+            self.cluster_tree._assign_to_splitnodes(self.cluster_tree.root)
+            # retrieve a list which stores the assigned sample indices for each node in <cluster_nodes>
+            assignments_list = list(map(lambda node: node.assignment_indices, cluster_nodes))
+            # create a 1-dim. tensor which stores the labels for the samples
+            labels = torch.cat([torch.full((len(assignments),), i, dtype=torch.int)  for i, assignments in enumerate(assignments_list)])
+            # flatten the list of assignments for each node to a single 1-dim. tensor
+            assignments = torch.cat(assignments_list)
+            # sort the labels based on the ordering of the samples in the batch
+            sorted_assignment_indices = torch.argsort(assignments)
+            predictions.append(labels[sorted_assignment_indices])
+       
+        # transform the predictions for each batch to a single output array for the whole dataset
+        predictions_numpy = torch.cat(predictions, dim=0).numpy()
+       
+        # return corresponding centers as well
+        centers = list(map(lambda node: node.center, cluster_nodes))
+        # reformat list of tensors to one sinlge tensor of shape (#leafnodes,#emb_features)
+        centers = torch.stack(centers, dim=0)
+>>>>>>> Stashed changes
         
         return predictions_numpy, centers.detach().numpy()
 

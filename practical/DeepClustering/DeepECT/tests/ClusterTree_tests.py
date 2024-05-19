@@ -85,7 +85,7 @@ def test_cluster_tree_growth():
     encode = lambda x: x
     autoencoder = type("Autoencoder", (), {"encode": encode})
     dataset = torch.tensor([[-3, -3], [10, 10], [-0.4, -0.4], [0.4, 0.3]], device="cpu")
-    dataloader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(dataset), batch_size=2)
+    dataloader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(torch.tensor([0,1,2,3]), dataset), batch_size=2)
     tree.grow_tree(dataloader, autoencoder, optimizer, "cpu")
     assert torch.allclose(
         torch.tensor([10.0, 10.0]), tree.root.right_child.right_child.center

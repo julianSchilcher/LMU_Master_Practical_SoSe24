@@ -1,3 +1,10 @@
+
+import sys
+
+sys.path.append("/Users/apple/LMU_Master_Practical_SoSe24/practical/DeepClustering/DeepECT")
+sys.path.append("/Users/apple/LMU_Master_Practical_SoSe24/practical/DeepClustering/DeepECT/ect")
+sys.path.append("/Users/apple/LMU_Master_Practical_SoSe24/practical/DeepClustering/DeepECT/ect/utils")
+
 import torch
 import torch.nn.functional as F
 from ect.utils.functional import window
@@ -193,7 +200,7 @@ class stacked_ae(torch.nn.Module):
 
                     batch_data = batch_data[0]
 
-                    batch_data = batch_data.cuda()
+                    batch_data = batch_data
                     if corruption_fn is not None:
                         corrupted_batch = corruption_fn(batch_data)
                         _, reconstruced_data = self.forward_pretrain(corrupted_batch, layer, use_dropout=True,
@@ -228,7 +235,7 @@ class stacked_ae(torch.nn.Module):
                     break
                 batch_data = batch_data[0]
 
-                batch_data = batch_data.cuda()
+                batch_data = batch_data
 
                 # Forward pass
                 if corruption_fn is not None:

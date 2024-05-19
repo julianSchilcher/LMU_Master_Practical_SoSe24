@@ -1,9 +1,9 @@
 from pathlib import Path
 import os
 
-dataset_dir = None  # Path to a directory containing the datasets
-result_main_dir = None  # Path to a directory for results
-ae_dir = None  # Path to a directory in which we save the pre-trained autoencoders
+dataset_dir = "practical/DeepClustering/DeepECT/scripts/data"  # Path to a directory containing the datasets
+result_main_dir = "practical/DeepClustering/DeepECT/scripts/result"  # Path to a directory for results
+ae_dir = "practical/DeepClustering/DeepECT/scripts/ae"  # Path to a directory in which we save the pre-trained autoencoders
 
 
 

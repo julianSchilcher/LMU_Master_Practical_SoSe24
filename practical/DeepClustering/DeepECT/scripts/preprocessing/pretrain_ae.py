@@ -1,9 +1,16 @@
+import sys
+
+sys.path.append("/Users/apple/LMU_Master_Practical_SoSe24/practical/DeepClustering/DeepECT")
+sys.path.append("/Users/apple/LMU_Master_Practical_SoSe24/practical/DeepClustering/DeepECT/scripts")
+sys.path.append("/Users/apple/LMU_Master_Practical_SoSe24/practical/DeepClustering/DeepECT/ect")
+
 import torch.nn.functional as F
 import torch
 import torch.utils.data
+
 from ect.methods.stacked_ae import stacked_ae
-from scripts.Datasets import *
-from scripts.Config import *
+from Datasets import *
+from Config import *
 import logging
 from ect.utils.logging_helper import *
 import time
@@ -13,6 +20,7 @@ import os
 # Data
 # Import data configuration based on the parameters
 from scripts.experiments.dataset_configs import *
+
 
 
 result_dir = f"{result_main_dir}/{os.path.basename(__file__)[:-3]}/{dataset_name}"
@@ -45,7 +53,7 @@ refine_training_steps = 50000
 def get_total_loss():
     total_loss = 0.0
     for batch in train_loader:
-        batch = batch[0].cuda()
+        batch = batch[0]
         total_loss += loss_fn(batch, ae.forward(batch)[1]).item()
     return total_loss
 
@@ -61,7 +69,7 @@ for index in range(0, 10):
                     weight_initalizer=torch.nn.init.xavier_normal_,
                     activation_fn=lambda x: F.relu(x),
                     loss_fn=loss_fn,
-                    optimizer_fn=lambda parameters: torch.optim.Adam(parameters, lr=0.0001)).cuda()
+                    optimizer_fn=lambda parameters: torch.optim.Adam(parameters, lr=0.0001))
 
 
     def add_noise(batch):

@@ -1,0 +1,6 @@
+{
+    "workbench.editor.enablePreview": true,
+    "python.analysis.extraPaths": [
+        "./practical/DeepClustering/DeepECT/ect"
+    ]
+}

@@ -166,7 +166,7 @@ class Cluster_Tree:
             self._collect_leafnodes(node.left_child, leafnodes)
             self._collect_leafnodes(node.right_child, leafnodes)
             
-    def assign_to_nodes(self, minibatch_embedded: torch.tensor):
+    def assign_to_nodes(self, minibatch_embedded: torch.tensor, compute_sum_dist: bool = False):
         """
         This method assigns all samples in the minibatch to its nearest nodes in the cluster tree. It is performed bottom up, so each
         sample is first assigned to its nearest leaf node. Afterwards the samples are assigned recursivley to the inner nodes by merging
@@ -203,7 +203,8 @@ class Cluster_Tree:
                 if leafnode_data.ndim == 1:
                     leafnode_data = leafnode_data[None]
                 node.assignments = leafnode_data
-                node.sum_squared_dist = torch.sum(min_dists[indices.squeeze()].pow(2))
+                if compute_sum_dist:
+                    node.sum_squared_dist = torch.sum(min_dists[indices.squeeze()].pow(2))
                 
     def _assign_to_splitnodes(self, node: Cluster_Node):
         """
@@ -505,7 +506,7 @@ class Cluster_Tree:
             for batch in batched_seqential_loader:
                 idxs, x = batch
                 embed = autoencoder.encode(x.to(device))
-                self.assign_to_nodes(embed)
+                self.assign_to_nodes(embed, compute_sum_dist=True)
                 leaf_node_dist_sums += torch.stack([
                     leaf.sum_squared_dist.cpu() if leaf.sum_squared_dist is not None else torch.tensor(0, dtype=torch.float32, device="cpu")
                     for leaf in leaf_nodes

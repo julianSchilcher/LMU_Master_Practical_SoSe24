@@ -9,8 +9,11 @@ from clustpy.deep._train_utils import \
     get_standard_initial_deep_clustering_setting
 from clustpy.deep._utils import set_torch_seed
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
-from sklearn.cluster import KMeans
+from sklearn.cluster import MiniBatchKMeans, KMeans
 from sklearn.utils import check_random_state
+from clustpy.data.real_torchvision_data import load_mnist
+from clustpy.metrics.clustering_metrics import unsupervised_clustering_accuracy
+from tqdm import tqdm
 
 
 class Cluster_Node:
@@ -602,7 +605,7 @@ class Cluster_Tree:
         batched_seqential_loader = torch.utils.data.DataLoader(dataloader.dataset, dataloader.batch_size, shuffle=False)
         with torch.no_grad():
             leaf_node_dist_sums = torch.zeros(len(leaf_nodes), dtype=torch.float, device="cpu")
-            for batch in batched_seqential_loader:
+            for batch in tqdm(batched_seqential_loader, desc="Growing: Dist"):
                 idxs, x = batch
                 embed = autoencoder.encode(x.to(device))
                 self.assign_to_nodes(embed, compute_sum_dist=True)
@@ -615,7 +618,7 @@ class Cluster_Tree:
             highest_dist_leaf_node = leaf_nodes[idx]
             # get all assignments for highest dist leaf node
             assignments = []
-            for batch in batched_seqential_loader:
+            for batch in tqdm(batched_seqential_loader, desc="Growing: Assignment"):
                 idxs, x = batch
                 embed = autoencoder.encode(x.to(device))
                 self.assign_to_nodes(embed)
@@ -698,7 +701,9 @@ class _DeepECT_Module(torch.nn.Module):
 
     def fit(self, autoencoder: torch.nn.Module, trainloader: torch.utils.data.DataLoader, max_iterations: int,
             pruning_threshold: float,
-            grow_interval: int, optimizer: torch.optim.Optimizer, 
+            grow_interval: int, 
+            max_nodes: int,
+            optimizer: torch.optim.Optimizer, 
             rec_loss_fn: torch.nn.modules.loss._Loss, device: Union[torch.device|str]) -> '_DeepECT_Module':
         """
         Trains the _DeepECT_Module in place.
@@ -726,10 +731,12 @@ class _DeepECT_Module(torch.nn.Module):
 
         train_iterator = iter(trainloader)
 
-        for e in range(max_iterations):
+        for e in tqdm(range(max_iterations), desc="Fit", total=max_iterations):
             self.cluster_tree.prune_tree(pruning_threshold)                    
             if e > 0 and e % grow_interval == 0:
                 self.cluster_tree.grow_tree(trainloader, autoencoder, optimizer, device=device)
+                if len(self.cluster_tree.get_all_nodes_breadth_first()) > max_nodes:
+                    break
 
             # retrieve minibatch (endless)
             try:
@@ -793,7 +800,7 @@ class _DeepECT_Module(torch.nn.Module):
         with torch.no_grad():
         # perform prediction batchwise
             predictions = []
-            for batch in dataloader:
+            for batch in tqdm(dataloader, desc="Predict"):
                 # calculate embeddings of the samples which should be predicted
                 batch_data = batch[1].to(self.device)
                 embeddings = autoencoder.encode(batch_data)
@@ -803,12 +810,12 @@ class _DeepECT_Module(torch.nn.Module):
                 # retrieve a list which stores the assigned sample indices for each node in <cluster_nodes>
                 assignments_list = list(map(lambda node: node.assignment_indices if node.assignment_indices is not None else torch.tensor([], dtype=torch.int, device=self.device), cluster_nodes))
                 # create a 1-dim. tensor which stores the labels for the samples
-                labels = torch.cat([torch.full((len(assignments) if assignments is not None else 0,), i, dtype=torch.int) for i, assignments in enumerate(assignments_list)])
+                labels = torch.cat([torch.full((len(assignments) if assignments is not None else 0,), i, dtype=torch.int) for i, assignments in enumerate(assignments_list)]).cpu()
                 # flatten the list of assignments for each node to a single 1-dim. tensor
                 assignments = torch.cat(assignments_list)
                 # sort the labels based on the ordering of the samples in the batch
-                sorted_assignment_indices = torch.argsort(assignments)
-                predictions.append(labels[sorted_assignment_indices].cpu())
+                sorted_assignment_indices = torch.argsort(assignments).cpu()
+                predictions.append(labels[sorted_assignment_indices])
                 self.cluster_tree.clear_node_assignments()
         
             # transform the predictions for each batch to a single output array for the whole dataset
@@ -835,6 +842,7 @@ def _deep_ect(
     rec_loss_fn: torch.nn.modules.loss._Loss,
     autoencoder: torch.nn.Module,
     embedding_size: int,
+    max_nodes: int,
     custom_dataloaders: tuple,
     augmentation_invariance: bool,
     random_state: np.random.RandomState,
@@ -906,10 +914,11 @@ def _deep_ect(
         autoencoder,
         embedding_size,
         custom_dataloaders,
-        KMeans,
-        {},
+        MiniBatchKMeans,
+        {"batch_size": batch_size},
         random_state,
     )
+    print(device)
     # Setup DeepECT Module
     deepect_module = _DeepECT_Module(
         init_leafnode_centers, device, augmentation_invariance
@@ -920,7 +929,7 @@ def _deep_ect(
     )
     # DeepECT Training loop
     deepect_module.fit(
-        autoencoder, trainloader, max_iterations, pruning_threshold, grow_interval, optimizer, rec_loss_fn, device
+        autoencoder, trainloader, max_iterations, pruning_threshold, grow_interval, max_nodes, optimizer, rec_loss_fn, device
     )
     # Get labels
     DeepECT_labels, DeepECT_centers = deepect_module.predict(number_classes, testloader, autoencoder)
@@ -943,6 +952,7 @@ class DeepECT:
         rec_loss_fn: torch.nn.modules.loss._Loss = torch.nn.MSELoss(),
         autoencoder: torch.nn.Module = None,
         embedding_size: int = 10,
+        max_nodes: int = 20,
         custom_dataloaders: tuple = None,
         augmentation_invariance: bool = False,
         random_state: np.random.RandomState = np.random.RandomState(42),
@@ -1016,6 +1026,7 @@ class DeepECT:
         self.embedding_size = embedding_size
         self.custom_dataloaders = custom_dataloaders
         self.augmentation_invariance = augmentation_invariance
+        self.max_nodes = max_nodes
         self.random_state = check_random_state(random_state)
         set_torch_seed(self.random_state)
 
@@ -1050,6 +1061,7 @@ class DeepECT:
             self.rec_loss_fn,
             self.autoencoder,
             self.embedding_size,
+            self.max_nodes,
             self.custom_dataloaders,
             self.augmentation_invariance,
             self.random_state,
@@ -1061,14 +1073,9 @@ class DeepECT:
 
 
 if __name__ == "__main__": 
-    dataset = np.asarray([
-        [10, 10, 2], [10, 9.5, 2.1], [11, 10, 1.9], [11, 9.5, 2],
-        [0, 0, 0], [1, 0.5, 0.1], [1, 1, 0.2], [0, 1, 0], 
-        [1, 1.1, 3], [2, 0, 2.9]
-        ], dtype=np.float32)
-    autoencoder = FeedforwardAutoencoder(layers=[3,2])
-    deepect = DeepECT(batch_size=2, pruning_threshold=0.05, number_classes=3, pretrain_epochs=5, max_iterations=20, grow_interval=5, embedding_size=2)
+    dataset, labels = load_mnist("train", return_X_y=True)
+    deepect = DeepECT(number_classes=10)
     deepect.fit(dataset)
-    print(deepect.DeepECT_labels_)
+    print(unsupervised_clustering_accuracy(labels, deepect.DeepECT_labels_))
     print(deepect.DeepECT_cluster_centers_)
     

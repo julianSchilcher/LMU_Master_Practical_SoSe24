@@ -162,6 +162,8 @@ class Cluster_Tree:
         self.root = Cluster_Node(np.zeros(init_leafnode_centers.shape[1]), device)
         # assign the 2 initial leaf nodes with its initial centers
         self.root.set_childs(None, init_leafnode_centers[0], init_leafnode_centers[1])
+        # initialise the counter of nodes in the tree
+        self.number_nodes = 3
         
     def clear_node_assignments(self):
         self.root.clear_assignments()
@@ -375,8 +377,8 @@ class Cluster_Tree:
         """
         # batchsize = self.root.assignments.size(dim=0)
         sibling_losses = []  # storing losses for each node in tree
-        number_nodes = self._calculate_sibling_loss(self.root, sibling_losses)
-        number_nodes = number_nodes - 1  # exclude root node
+        self._calculate_sibling_loss(self.root, sibling_losses)
+        number_nodes = self.number_nodes - 1  # exclude root node
         # make sure that each node got a loss
         assert number_nodes == len(sibling_losses)
 
@@ -409,13 +411,13 @@ class Cluster_Tree:
             Returns the number of nodes in the cluster tree
         """
         if root is None:
-            return 0
-
+            return
+        
         # Traverse the left subtree
-        left_counter = self._calculate_sibling_loss(root.left_child, sibling_loss)
+        self._calculate_sibling_loss(root.left_child, sibling_loss)
 
         # Traverse the right subtree
-        right_counter = self._calculate_sibling_loss(root.right_child, sibling_loss)
+        self._calculate_sibling_loss(root.right_child, sibling_loss)
 
         # Calculate lc loss for siblings if they exist
         if root.left_child and root.right_child:
@@ -425,7 +427,6 @@ class Cluster_Tree:
             loss_right = self._single_sibling_loss(root.right_child, root.left_child)
             # store the losses
             sibling_loss.extend([loss_left, loss_right])
-        return left_counter + right_counter + 1
 
     def _single_sibling_loss(
         self, node: Cluster_Node, sibling: Cluster_Node
@@ -521,6 +522,7 @@ class Cluster_Tree:
                 Returns:
                     None
                 """
+                self.number_nodes = self.number_nodes - 1
                 child_node: Cluster_Node = getattr(parent, child_attr)
                 sibling_attr = 'left_child' if child_attr == 'right_child' else 'right_child'
                 sibling_node: Cluster_Node = getattr(parent, sibling_attr)
@@ -634,6 +636,7 @@ class Cluster_Tree:
                 child_assignments.cluster_centers_[1],
                 max([leaf.id for leaf in leaf_nodes]),
             )
+            self.number_nodes = self.number_nodes + 2
 
 
 class _DeepECT_Module(torch.nn.Module):
@@ -735,8 +738,9 @@ class _DeepECT_Module(torch.nn.Module):
         for e in tqdm(range(max_iterations), desc="Fit", total=max_iterations):
             self.cluster_tree.prune_tree(pruning_threshold)                    
             if e > 0 and e % grow_interval == 0:
+                print(self.cluster_tree.number_nodes)
                 self.cluster_tree.grow_tree(trainloader, autoencoder, optimizer, device=device)
-                if len(self.cluster_tree.get_all_nodes_breadth_first()) > max_nodes:
+                if self.cluster_tree.number_nodes > max_nodes:
                     break
 
             # retrieve minibatch (endless)
@@ -956,8 +960,8 @@ class DeepECT:
         clustering_optimizer_params: dict = None,
         pretrain_epochs: int = 50,
         number_classes: int = 2,
-        max_iterations: int = 10000,
-        grow_interval: int = 1000,
+        max_iterations: int = 1000,
+        grow_interval: int = 100,
         pruning_threshold: float = 0.1,
         optimizer_class: torch.optim.Optimizer = torch.optim.Adam,
         rec_loss_fn: torch.nn.modules.loss._Loss = torch.nn.MSELoss(),
@@ -1015,6 +1019,8 @@ class DeepECT:
         autoencoder : torch.nn.Module
             The final autoencoder
         """
+        if max_nodes < number_classes:
+            raise ValueError(f"Maximum number of nodes ({max_nodes}) in the tree must be higher than the number of clusters ({number_classes})")
         self.batch_size = batch_size
         self.pretrain_optimizer_params = (
             {"lr": 1e-3}

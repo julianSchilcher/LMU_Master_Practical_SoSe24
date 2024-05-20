@@ -5,6 +5,7 @@ from practical.DeepClustering.DeepECT.deepect import (
 import numpy as np
 import torch
 import torch.utils.data
+from clustpy.metrics.clustering_metrics import unsupervised_clustering_accuracy
 
 
 def test_Cluster_Node():
@@ -37,6 +38,7 @@ def sample_cluster_tree(get_deep_ect_module=False):
     deep_ect = _DeepECT_Module(np.array([[0, 0], [1, 1]]), "cpu")
     tree = deep_ect.cluster_tree
     tree.root.left_child.set_childs(None, np.array([-2, -2]), np.array([-0.5, -0.5]), split=2)
+    tree.number_nodes += 2
     if get_deep_ect_module:
         return deep_ect
     return tree
@@ -75,31 +77,6 @@ def test_cluster_tree():
         and torch.all(
             leaf_nodes[2].center
             == torch.nn.Parameter(torch.tensor([1, 1], dtype=torch.float16))
-        ).item()
-    )
-
-    # check if the returned nodes are really the nodes by checking the stored center
-    nodes = tree.get_all_nodes_breadth_first()
-    assert (
-        torch.all(
-            nodes[0].center
-            == torch.tensor([0, 0], dtype=torch.float16)
-        ).item()
-        and torch.all(
-            nodes[1].center
-            == torch.tensor([0, 0], dtype=torch.float16)
-        ).item()
-        and torch.all(
-            nodes[2].center
-            == torch.nn.Parameter(torch.tensor([1, 1], dtype=torch.float16))
-        ).item()
-        and torch.all(
-            nodes[3].center
-            == torch.nn.Parameter(torch.tensor([-2, -2], dtype=torch.float16))
-        ).item()
-        and torch.all(
-            nodes[4].center
-            == torch.nn.Parameter(torch.tensor([-0.5, -0.5], dtype=torch.float16))
         ).item()
     )
 
@@ -194,15 +171,16 @@ def test_predict():
     autoencoder = type('Autoencoder', (), {'encode': encode})
     # predict 3 classes
     pred, center = tree.predict(3, dataloader, autoencoder)
-    assert np.all(pred == np.array([1,0,2,0]))
+    assert unsupervised_clustering_accuracy(np.array([0,2,1,2]), pred) == 1
     # predict 2 classes
     pred, center = tree.predict(2, dataloader, autoencoder)
-    assert np.all(pred == np.array([0,1,0,1]))
+    assert unsupervised_clustering_accuracy(np.array([0,1,0,1]), pred) == 1
     # predict 2 classes with batches 
     dataset = torch.tensor([[-3, -3], [10, 10], [-0.4, -0.4], [0.4, 0.3]], device="cpu")
     dataloader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(torch.tensor([0,1,2,3]), dataset), batch_size=2)
     pred, center = tree.predict(2, dataloader, autoencoder)
-    assert np.all(pred == np.array([0,1,0,1]))
+    assert unsupervised_clustering_accuracy(np.array([0,1,0,1]), pred) == 1
+
 
 def test_nc_loss():
 

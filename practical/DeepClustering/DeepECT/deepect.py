@@ -162,6 +162,8 @@ class Cluster_Tree:
         self.root = Cluster_Node(np.zeros(init_leafnode_centers.shape[1]), device)
         # assign the 2 initial leaf nodes with its initial centers
         self.root.set_childs(None, init_leafnode_centers[0], init_leafnode_centers[1])
+        # initialise the node counter to 3
+        self.number_nodes = 3
         
     def clear_node_assignments(self):
         self.root.clear_assignments()
@@ -196,7 +198,7 @@ class Cluster_Tree:
             self._collect_leafnodes(node.left_child, leafnodes)
             self._collect_leafnodes(node.right_child, leafnodes)
 
-    def get_all_nodes_breadth_first(self) -> List[Cluster_Node]:
+    def get_all_result_nodes(self, number_classes: int) -> List[Cluster_Node]:
         """
         Returns a list of all node references of this tree
 
@@ -205,13 +207,12 @@ class Cluster_Tree:
         List[Cluster_Node]
             References of all nodes in the tree
         """
-        queue = Queue()
-        queue.put(self.root)
-        nodes = []
-        self._collect_all_nodes_breadth_first(queue, nodes)
-        return nodes
+        result_nodes = []
+        split_level = number_classes - 1
+        self._collect_all_result_nodes(self.root, split_level, result_nodes)
+        return result_nodes
 
-    def _collect_all_nodes_breadth_first(self, queue: Queue, nodes: list):
+    def _collect_all_result_nodes(self, node: Cluster_Node, split_level: int, result_nodes: list):
         """
         Helper function for recursively collecting all nodes breadth first
 
@@ -222,16 +223,15 @@ class Cluster_Tree:
         nodes : list
             This list stores the nodes founded by traversing the tree
         """
-        if queue.empty():
-            return
+        # if the node is at level below the split level for the specified number of classes, stop going in depth
+        # if math.ceil(node.id / 2) <= split_level: 
+        # a node is part of the result if it is a leaf node of the cluster tree cut at level <split_level>
+        if (node.is_leaf_node() or math.ceil(node.left_child.id / 2) > split_level):
+            result_nodes.append(node)
         else:
-            node = queue.get()
-            nodes.append(node)
-            if node.left_child is not None:
-                queue.put(node.left_child)
-            if node.right_child is not None:
-                queue.put(node.right_child)
-            self._collect_all_nodes_breadth_first(queue, nodes)
+            self._collect_all_result_nodes(node.left_child, split_level, result_nodes)
+            self._collect_all_result_nodes(node.right_child, split_level, result_nodes)
+            
 
 
     def assign_to_nodes(self, minibatch_embedded: torch.tensor, compute_sum_dist: bool = False):
@@ -375,8 +375,8 @@ class Cluster_Tree:
         """
         # batchsize = self.root.assignments.size(dim=0)
         sibling_losses = []  # storing losses for each node in tree
-        number_nodes = self._calculate_sibling_loss(self.root, sibling_losses)
-        number_nodes = number_nodes - 1  # exclude root node
+        self._calculate_sibling_loss(self.root, sibling_losses)
+        number_nodes = self.number_nodes - 1  # exclude root node
         # make sure that each node got a loss
         assert number_nodes == len(sibling_losses)
 
@@ -409,13 +409,13 @@ class Cluster_Tree:
             Returns the number of nodes in the cluster tree
         """
         if root is None:
-            return 0
+            return 
 
         # Traverse the left subtree
-        left_counter = self._calculate_sibling_loss(root.left_child, sibling_loss)
+        self._calculate_sibling_loss(root.left_child, sibling_loss)
 
         # Traverse the right subtree
-        right_counter = self._calculate_sibling_loss(root.right_child, sibling_loss)
+        self._calculate_sibling_loss(root.right_child, sibling_loss)
 
         # Calculate lc loss for siblings if they exist
         if root.left_child and root.right_child:
@@ -425,7 +425,6 @@ class Cluster_Tree:
             loss_right = self._single_sibling_loss(root.right_child, root.left_child)
             # store the losses
             sibling_loss.extend([loss_left, loss_right])
-        return left_counter + right_counter + 1
 
     def _single_sibling_loss(
         self, node: Cluster_Node, sibling: Cluster_Node
@@ -521,6 +520,7 @@ class Cluster_Tree:
                 Returns:
                     None
                 """
+                self.number_nodes -= 1
                 child_node: Cluster_Node = getattr(parent, child_attr)
                 sibling_attr = 'left_child' if child_attr == 'right_child' else 'right_child'
                 sibling_node: Cluster_Node = getattr(parent, sibling_attr)
@@ -552,7 +552,7 @@ class Cluster_Tree:
                     child_node.prune()
                     del child_node
                     del parent
-                    print(f"Tree size after pruning: {len(self.get_all_nodes_breadth_first())}, leaf nodes: {len(self.get_all_leaf_nodes())}")
+                    print(f"Tree size after pruning: {self.number_nodes}, leaf nodes: {len(self.get_all_leaf_nodes())}")
                 
 
             def prune_recursive(node: Cluster_Node):
@@ -636,7 +636,8 @@ class Cluster_Tree:
                 child_assignments.cluster_centers_[1],
                 max([leaf.id for leaf in leaf_nodes]),
             )
-            print(f"Tree size after growing: {len(self.get_all_nodes_breadth_first())}, leaf nodes: {len(self.get_all_leaf_nodes())}")
+            self.number_nodes += 2
+            print(f"Tree size after growing: {self.number_nodes}, leaf nodes: {len(self.get_all_leaf_nodes())}")
 
 
 class _DeepECT_Module(torch.nn.Module):
@@ -794,14 +795,14 @@ class _DeepECT_Module(torch.nn.Module):
         """
         
         # get all nodes breadth first
-        nodes = self.cluster_tree.get_all_nodes_breadth_first()
+        cluster_nodes = self.cluster_tree.get_all_result_nodes(number_classes)
 
-        cluster_nodes = []
-        split_level = number_classes - 1
-        for i, node in enumerate(nodes):
-            # check whether the current node is a leaf node in the cutted tree for <number_classes> clusters
-            if math.ceil(node.id / 2) <= split_level and (node.is_leaf_node() or math.ceil(node.left_child.id / 2) > split_level):
-                cluster_nodes.append(node)
+        # cluster_nodes = []
+        # split_level = number_classes - 1
+        # for i, node in enumerate(nodes):
+        #     # check whether the current node is a leaf node in the cutted tree for <number_classes> clusters
+        #     if math.ceil(node.id / 2) <= split_level and (node.is_leaf_node() or math.ceil(node.left_child.id / 2) > split_level):
+        #         cluster_nodes.append(node)
 
         assert len(cluster_nodes) == number_classes, "Number of cluster nodes doesn't correspond to number of classes"
 
@@ -1084,7 +1085,7 @@ class DeepECT:
 if __name__ == "__main__": 
     dataset, labels = load_mnist("train", return_X_y=True)
     autoencoder = FeedforwardAutoencoder([dataset.shape[1], 500, 500, 2000, 10])
-    autoencoder.load_state_dict(torch.load("practical\DeepClustering\DeepECT\pretrained_AE.pth"))
+    autoencoder.load_state_dict(torch.load("practical/DeepClustering/DeepECT/pretrained_AE.pth"))
     autoencoder.fitted = True
     deepect = DeepECT(number_classes=10, autoencoder=autoencoder, max_leaf_nodes=20)
     deepect.fit(dataset)

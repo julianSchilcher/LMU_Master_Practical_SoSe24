@@ -200,32 +200,43 @@ class Cluster_Tree:
 
     def get_all_result_nodes(self, number_classes: int) -> List[Cluster_Node]:
         """
-        Returns a list of all node references of this tree
+        Returns a list of all class node references for the given number of classes. This nodes 
+        are the leaf nodes in the tree cut for the given number of classes. The number of returned nodes
+        is equal to the given number of classes.
+
+        Parameters
+        ----------
+        number_classes : int
+            The number of clusters which should be obtained from the cluster tree.
 
         Returns
         -------
         List[Cluster_Node]
-            References of all nodes in the tree
+            References of all nodes representing the given number of clusters.
         """
         result_nodes = []
+        # the leaf nodes after the first <number_classes> - 1 growing steps (splits) are the nodes representing the <number_classes> clusters
         split_level = number_classes - 1
         self._collect_all_result_nodes(self.root, split_level, result_nodes)
+        # consistency check
+        assert len(result_nodes) == number_classes, "Number of cluster nodes doesn't correspond to number of classes"
         return result_nodes
 
     def _collect_all_result_nodes(self, node: Cluster_Node, split_level: int, result_nodes: list):
         """
-        Helper function for recursively collecting all nodes breadth first
+        Helper function for recursively collecting all leaf nodes of the cluster tree cut at split level <split_level>.
 
         Parameters
         ----------
-        queue : queue.Queue 
-            Queue used to implement breadth first traverse
-        nodes : list
-            This list stores the nodes founded by traversing the tree
+        node : Cluster_Node 
+            The node where the search for result nodes starts
+        split_level: int
+            The split level where the tree should be cuted. A split level i of a node n states that node n
+            was created in the i-th tree grow step (i-th split).
+        result_nodes : list
+            This list contains all leaf nodes of tree cut at level <split_level>.
         """
-        # if the node is at level below the split level for the specified number of classes, stop going in depth
-        # if math.ceil(node.id / 2) <= split_level: 
-        # a node is part of the result if it is a leaf node of the cluster tree cut at level <split_level>
+        # a node is part of the result if it is a leaf node of the cluster tree cut at split level <split_level>
         if (node.is_leaf_node() or math.ceil(node.left_child.id / 2) > split_level):
             result_nodes.append(node)
         else:
@@ -794,17 +805,8 @@ class _DeepECT_Module(torch.nn.Module):
             The centers of the <numb_classes> clusters
         """
         
-        # get all nodes breadth first
+        # get all resulting leaf nodes after cutting the tree for <number_classes> clusters
         cluster_nodes = self.cluster_tree.get_all_result_nodes(number_classes)
-
-        # cluster_nodes = []
-        # split_level = number_classes - 1
-        # for i, node in enumerate(nodes):
-        #     # check whether the current node is a leaf node in the cutted tree for <number_classes> clusters
-        #     if math.ceil(node.id / 2) <= split_level and (node.is_leaf_node() or math.ceil(node.left_child.id / 2) > split_level):
-        #         cluster_nodes.append(node)
-
-        assert len(cluster_nodes) == number_classes, "Number of cluster nodes doesn't correspond to number of classes"
 
         with torch.no_grad():
         # perform prediction batchwise
@@ -1014,6 +1016,8 @@ class DeepECT:
         autoencoder : torch.nn.Module
             The final autoencoder
         """
+        if max_leaf_nodes < number_classes:
+            raise ValueError(f"The given maximal number of leaf nodes ({max_leaf_nodes}) is smaller than the given number of classes ({number_classes})")
         self.batch_size = batch_size
         self.pretrain_optimizer_params = (
             {"lr": 1e-3}

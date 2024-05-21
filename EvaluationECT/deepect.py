@@ -1039,11 +1039,10 @@ class DeepECT:
 
 
 if __name__ == "__main__": 
-    dataset = np.asarray([
-        [10, 10, 2], [10, 9.5, 2.1], [11, 10, 1.9], [11, 9.5, 2],
-        [0, 0, 0], [1, 0.5, 0.1], [1, 1, 0.2], [0, 1, 0], 
-        [1, 1.1, 3], [2, 0, 2.9]
-        ], dtype=np.float32)
+    if cfg.data.name: 
+        # if True, then use load methods in load_datasets
+    else: 
+        # use the method from clustpy
     autoencoder = FeedforwardAutoencoder(layers=[3,2])
     deepect = DeepECT(batch_size=2, number_classes=3, pretrain_epochs=5, max_iterations=20, grow_interval=5, embedding_size=2)
     deepect.fit(dataset)

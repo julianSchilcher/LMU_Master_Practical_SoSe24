@@ -1,8 +1,8 @@
 import sys
 
-sys.path.append("/Users/apple/LMU_Master_Practical_SoSe24/practical/DeepClustering/DeepECT")
-sys.path.append("/Users/apple/LMU_Master_Practical_SoSe24/practical/DeepClustering/DeepECT/scripts")
-sys.path.append("/Users/apple/LMU_Master_Practical_SoSe24/practical/DeepClustering/DeepECT/ect")
+sys.path.append("/Users/zy/LMU_Master_Practical_SoSe24/practical/DeepClustering/DeepECT")
+sys.path.append("/Users/zy/LMU_Master_Practical_SoSe24/practical/DeepClustering/DeepECT/scripts")
+sys.path.append("/Users/zy/LMU_Master_Practical_SoSe24/practical/DeepClustering/DeepECT/ect")
 
 import torch.nn.functional as F
 import torch

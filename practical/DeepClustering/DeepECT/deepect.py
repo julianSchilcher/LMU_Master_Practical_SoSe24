@@ -1,20 +1,20 @@
-from queue import Queue
+import math
 from typing import List, Tuple, Union
 
 import numpy as np
 import torch
 import torch.utils
 import torch.utils.data
+from clustpy.data.real_torchvision_data import load_mnist
+from clustpy.deep._data_utils import augmentation_invariance_check
 from clustpy.deep._train_utils import \
     get_standard_initial_deep_clustering_setting
 from clustpy.deep._utils import set_torch_seed
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
-from sklearn.cluster import MiniBatchKMeans, KMeans
-from sklearn.utils import check_random_state
-from clustpy.data.real_torchvision_data import load_mnist
 from clustpy.metrics.clustering_metrics import unsupervised_clustering_accuracy
+from sklearn.cluster import KMeans, MiniBatchKMeans
+from sklearn.utils import check_random_state
 from tqdm import tqdm
-import math
 
 
 class Cluster_Node:
@@ -703,16 +703,20 @@ class _DeepECT_Module(torch.nn.Module):
         loss : torch.Tensor
             the final DeepECT loss
         """
-        # # Get loss of non-augmented data
-        # squared_diffs = squared_euclidean_distance(embedded, self.centers)
-        # probs = _DeepECT_get_probs(squared_diffs, alpha)
-        # clean_loss = (squared_diffs.sqrt() * probs).sum(1).mean()
-        # # Get loss of augmented data
-        # squared_diffs_augmented = squared_euclidean_distance(embedded_aug, self.centers)
-        # aug_loss = (squared_diffs_augmented.sqrt() * probs).sum(1).mean()
-        # # average losses
-        # loss = (clean_loss + aug_loss) / 2
-        loss = None
+        leaf_nodes = self.cluster_tree.get_all_leaf_nodes()
+        leaf_centers = torch.stack([node.center for node in leaf_nodes], dim=0)
+
+        # Get loss of non-augmented data
+        squared_diffs = torch.cdist(embedded, leaf_centers, p=2).pow(2)
+        probs = torch.softmax(-alpha * squared_diffs, dim=1)
+        clean_loss = (squared_diffs.sqrt() * probs).sum(1).mean()
+
+        # Get loss of augmented data
+        squared_diffs_augmented = torch.cdist(embedded_aug, leaf_centers, p=2).pow(2)
+        aug_loss = (squared_diffs_augmented.sqrt() * probs).sum(1).mean()
+
+        # Average losses
+        loss = (clean_loss + aug_loss) / 2
         return loss
 
     def fit(self, autoencoder: torch.nn.Module, trainloader: torch.utils.data.DataLoader, max_iterations: int,
@@ -721,30 +725,6 @@ class _DeepECT_Module(torch.nn.Module):
             max_leaf_nodes: int,
             optimizer: torch.optim.Optimizer, 
             rec_loss_fn: torch.nn.modules.loss._Loss, device: Union[torch.device|str]) -> '_DeepECT_Module':
-        """
-        Trains the _DeepECT_Module in place.
-
-        Parameters
-        ----------
-        autoencoder : torch.nn.Module
-            the autoencoder
-        trainloader : torch.utils.data.DataLoader
-            dataloader to be used for training
-        max_iteratins : int
-            number of iterations for the clustering procedure.
-        optimizer : torch.optim.Optimizer
-            the optimizer for training
-        rec_loss_fn : torch.nn.modules.loss._Loss
-            loss function for the reconstruction
-        cluster_loss_weight : float
-            weight of the clustering loss compared to the reconstruction loss
-
-        Returns
-        -------
-        self : _DeepECT_Module
-            this instance of the _DeepECT_Module
-        """
-
         train_iterator = iter(trainloader)
 
         for e in tqdm(range(max_iterations), desc="Fit", total=max_iterations):
@@ -754,33 +734,40 @@ class _DeepECT_Module(torch.nn.Module):
                     break
                 self.cluster_tree.grow_tree(trainloader, autoencoder, optimizer, device=device)
 
-            # retrieve minibatch (endless)
             try:
-                # get next minibatch
                 batch = next(train_iterator)
             except StopIteration:
-                # after full epoch shuffle again
                 train_iterator = iter(trainloader)
                 batch = next(train_iterator)
-            idxs, M = batch
-            # assign data points to leafnodes and splitnodes
-            rec_loss, embedded, reconstructed = autoencoder.loss(batch, rec_loss_fn, self.device)
 
+            if self.augmentation_invariance:
+                idxs = batch[0]
+                M_aug = batch[1]
+                M = batch[2]
+            else:
+                idxs = batch[0]
+                M = batch[1]
+
+            rec_loss, embedded, reconstructed = autoencoder.loss([idxs, M], rec_loss_fn, self.device)
             self.cluster_tree.assign_to_nodes(embedded)
 
-            # calculate cluster loss
             nc_loss = self.cluster_tree.nc_loss()
-            dc_loss = self.cluster_tree.dc_loss(len(M))            
-            
-            loss = nc_loss + dc_loss + rec_loss
+            dc_loss = self.cluster_tree.dc_loss(len(M))
+
+            if self.augmentation_invariance:
+                rec_loss_aug, embedded_aug, _ = autoencoder.loss([idxs, M_aug], rec_loss_fn, self.device)
+                aug_loss = self.deepect_augmentation_invariance_loss(embedded, embedded_aug, alpha=1.0)
+                loss = nc_loss + dc_loss + rec_loss + rec_loss_aug + aug_loss
+            else:
+                loss = nc_loss + dc_loss + rec_loss
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-            # adapt centers of split nodes analytically
             self.cluster_tree.adapt_inner_nodes(self.cluster_tree.root, pruning_threshold)
             self.cluster_tree.clear_node_assignments()
+
         return self
         
         
@@ -1059,7 +1046,7 @@ class DeepECT:
         self : DeepECT
             this instance of the DeepECT algorithm
         """
-        # augmentation_invariance_check(self.augmentation_invariance, self.custom_dataloaders)
+        augmentation_invariance_check(self.augmentation_invariance, self.custom_dataloaders)
 
         DeepECT_labels, DeepECT_centers, autoencoder = _deep_ect(
             X,
@@ -1091,7 +1078,12 @@ if __name__ == "__main__":
     autoencoder = FeedforwardAutoencoder([dataset.shape[1], 500, 500, 2000, 10])
     autoencoder.load_state_dict(torch.load("practical/DeepClustering/DeepECT/pretrained_AE.pth"))
     autoencoder.fitted = True
-    deepect = DeepECT(number_classes=10, autoencoder=autoencoder, max_leaf_nodes=20)
+
+    # When using Augmentation: (does not work with current Feedforward Autoencoder -> needs to be fixed)
+    # augmented_dataloader, original_dataloader = get_augmentation_dataloaders_for_mnist(dataset, batch_size=256)
+    # deepect = DeepECT(number_classes=10, max_leaf_nodes=20, augmentation_invariance=True, custom_dataloaders=(augmented_dataloader, original_dataloader))
+    
+    deepect = DeepECT(number_classes=10, max_leaf_nodes=20, autoencoder=autoencoder)
     deepect.fit(dataset)
     print(unsupervised_clustering_accuracy(labels, deepect.DeepECT_labels_))
     

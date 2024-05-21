@@ -1,13 +1,14 @@
+from pathlib import Path
+
+import nltk
+import numpy as np
 import torch
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
-from pathlib import Path
-import nltk
+from clustpy.deep import get_dataloader
 from nltk.corpus import reuters
-from nltk.tokenize import word_tokenize
-import numpy as np
 from scipy.io import loadmat
-from sklearn.model_selection import train_test_split
+
 transform = transforms.ToTensor()
 def minist_dataset():
     minist_train = datasets.MNIST(root="./data", train=True, download=True, transform=transform)
@@ -51,3 +52,30 @@ def fashion_minist():
     fashion_minist_test = datasets.FashionMNIST("./data", train=False, download=True, transform=transform)
     
     return fashion_minist_train,fashion_minist_test    
+
+
+def get_augmentation_dataloaders_for_mnist(dataset: np.ndarray, batch_size: int = 256) -> Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
+    dataset /= 255.0
+    mean = dataset.mean()
+    std = dataset.std()
+    dataset = dataset.reshape(-1, 1, 28, 28)
+    dataset = np.tile(dataset, (1, 3, 1, 1))
+    # preprocessing functions
+    normalize_fn = transforms.Normalize([mean], [std])
+    flatten_fn = transforms.Lambda(torch.flatten)
+    # augmentation transforms
+    transform_list = [
+        transforms.ToPILImage(),
+        transforms.RandomAffine(degrees=(-16, +16), translate=(0.1, 0.1), shear=(-8, 8), fill=0),
+        transforms.ToTensor(),
+        normalize_fn,
+        flatten_fn
+    ]
+    aug_transforms = transforms.Compose(transform_list)
+    orig_transforms = transforms.Compose([normalize_fn, flatten_fn])
+    # pass transforms to dataloader
+    augmented_dataloader = get_dataloader(dataset, batch_size=batch_size, shuffle=True,
+                            ds_kwargs={"aug_transforms_list":[aug_transforms], "orig_transforms_list":[orig_transforms]})
+    original_dataloader = get_dataloader(dataset, batch_size=batch_size, shuffle=False,
+                        ds_kwargs={"orig_transforms_list":[orig_transforms]})
+    return augmented_dataloader, original_dataloader

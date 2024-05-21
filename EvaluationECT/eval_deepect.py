@@ -71,8 +71,8 @@ def main():
         # test the model
         testloader = get_dataloader(data, 256, False, False)
         encoded_init = encode_batchwise(testloader, ae, device)
-        pred = deepect.predict(encoded_init)
-        evaluate(_, pred)
+        deepect.fit(encoded_init)
+        evaluate(_, deepect.DeepECT_labels_)
        
         
         

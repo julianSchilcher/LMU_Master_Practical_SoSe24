@@ -18,7 +18,7 @@ def get_config():
     # training and test
     config.training = training = ml_collections.ConfigDict()
     # the training.pre is to choose pretraining model.
-    training.pre = True
+    training.pre = False
     training.lr = 0.0001
     training.iter = 5000
     training.loss = {

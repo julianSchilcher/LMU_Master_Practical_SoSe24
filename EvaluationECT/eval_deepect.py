@@ -31,7 +31,7 @@ def main():
         }
         
         if cfg.data.dataset in datasets:
-            data, _ = datasets[cfg.data.dataset]()
+            data, labels = datasets[cfg.data.dataset]()
         else : raise ValueError
         assert data is not None
         feature_dim = data.shape[1]
@@ -44,13 +44,13 @@ def main():
                     optimizer_fn=lambda parameters: torch.optim.Adam(parameters, lr=0.0001))
         ae.load_state_dict(torch.load(cfg.data.model["layer_wise"][cfg.data.dataset]))
         encoded = ae.encode(train_loader)
-        X_train, X_test = train_test_split(encoded, test_size=0.2, random_state=42)
+        X_train, X_test, _, y_test = train_test_split(encoded, labels, test_size=0.2, random_state=42, stratify=labels)
 
         deepect = DeepECT(number_classes=10, autoencoder=ae, rec_loss_fn=cfg.training.loss[cfg.training.loss_fn], max_leaf_nodes=20)
         deepect.fit(X_train)
         # test
         pre = deepect.predict(X_test)
-        evaluate(pre)
+        evaluate(y_test,pre)
          
     else: 
         # use the method from clustpy

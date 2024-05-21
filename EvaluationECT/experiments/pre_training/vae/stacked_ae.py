@@ -1,7 +1,8 @@
 import torch
 import torch.nn.functional as F
-from vae.functional import window
+from ..vae.functional import window
 import logging
+
 
 logger = logging.getLogger(__name__)
 

@@ -1,10 +1,9 @@
 import torch
 import eva_config
 from deepect import DeepECT
-import argparse
 from experiments.pre_training.load_datasets import mnist_dataset, fashion_minist, usps_dataset, reuters_dataset
 from clustpy.data import load_usps, load_mnist, load_reuters,load_fmnist
-from clustpy.deep import  get_trained_autoencoder, get_dataloader
+from clustpy.deep import  get_trained_autoencoder, get_dataloader, encode_batchwise
 from experiments.pre_training.vae.stacked_ae import stacked_ae
 import torch.nn.functional as F
 from sklearn.model_selection import train_test_split
@@ -61,26 +60,18 @@ def main():
         "Fashion_MNIST": load_fmnist
         }
         
-        model_path = cfg.data.model["pure"][cfg.data.dataset]
-        dataset, labels = datasets[cfg.data.dataset]("train", return_X_y=True)
-        trainloader = get_dataloader(data, 256, True, False)  
-        autoencoder = get_trained_autoencoder(trainloader, optimizer_params={"lr":1e-3}, n_epochs=50, device=device, optimizer_class=torch.optim.Adam, embedding_size=10)
-        autoencoder.load_state_dict(torch.load(model_path))
-       
-        autoencoder.fitted = True
-        deepect = DeepECT(number_classes=10, autoencoder=autoencoder, max_leaf_nodes=20)
-        deepect.fit(dataset)
+        data, labels = datasets[cfg.data.dataset](return_X_y=True)
+        trainloader = get_dataloader(data, 256, True, False)     
+        ae = get_trained_autoencoder(trainloader, optimizer_params={"lr":1e-3}, n_epochs=50, device=device, optimizer_class=torch.optim.Adam, loss_fn=torch.nn.MSELoss(), embedding_size=10)
+        deepect = DeepECT(number_classes=10, autoencoder=ae, max_leaf_nodes=20)
+        deepect.fit(data)
         print(deepect.DeepECT_labels_)
         print(deepect.DeepECT_cluster_centers_)
         
         # test the model
-        test_data, _ = datasets[cfg.data.dataset]("test", return_X_y=True)
-        testloader = get_dataloader(test_data, 256, False, False)
-        autoencoder = get_trained_autoencoder(testloader, optimizer_params={"lr":1e-3}, n_epochs=50, device=device, optimizer_class=torch.optim.Adam, embedding_size=10)
-        autoencoder.load_state_dict(torch.load(model_path))
-       
-        autoencoder.fitted = True
-        pred = deepect.predict(testloader)
+        testloader = get_dataloader(data, 256, False, False)
+        encoded_init = encode_batchwise(testloader, ae, device)
+        pred = deepect.predict(encoded_init)
         evaluate(_, pred)
        
         

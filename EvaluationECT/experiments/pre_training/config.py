@@ -8,13 +8,6 @@ def get_config():
     config.training = training = ml_collections.ConfigDict()
     training.path = '/home/stud/xuechun/pratical/evaluation/pre_training/model'
     training.layer_wise = False
-    training.loss_fn = {
-        "MSE": torch.nn.MSELoss(),
-        "L1L": torch.nn.L1Loss(),
-        "Smooth": torch.nn.SmoothL1Loss(),
-        "HuberLoss": torch.nn.HuberLoss()
-    }
-    training.loss = "MSE"
     training.lr = 0.0001
     training.iter = 10
     training.pure_epochs = 50

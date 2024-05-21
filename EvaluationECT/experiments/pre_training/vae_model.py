@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import torch.utils.data
 import os
 from vae.stacked_ae import stacked_ae
-from clustpy.deep import get_dataloader, get_trained_autoencoder, get_dataloader
+from clustpy.deep import  get_trained_autoencoder, get_dataloader
 import config
 
 cfg = config.get_config()
@@ -16,7 +16,7 @@ class PureVae:
         super(PureVae, self).__init__()
         self.lr = cfg.training.lr
         self.epochs = cfg.training.pure_epochs
-        self.loss = cfg.training.loss_fn[cfg.training.loss]
+        self.loss = torch.nn.MSELoss()
         self.vae_pretraining = f"{dataset_name}_pre"
         os.makedirs(f"{cfg.training.path}/pure_vae/{self.vae_pretraining}", exist_ok=True)
     def forward(self, data):
@@ -47,7 +47,7 @@ class LayerwiseVae:
     def layerwise(self, data):
         feature_dim = data.shape[1]
         layer_dims = [500, 500, 2000, 10]
-        loss_fn = cfg.training.loss_fn[cfg.training.loss]
+        loss_fn = torch.nn.MSELoss()
         steps_per_layer = 20000
         refine_training_steps = 50000
         iterations = cfg.training.iter

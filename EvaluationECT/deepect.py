@@ -11,7 +11,7 @@ from clustpy.deep._train_utils import \
 from clustpy.deep._utils import set_torch_seed
 from sklearn.cluster import KMeans
 from sklearn.utils import check_random_state
-from clustpy.deep.autoencoders import FeedforwardAutoencoder
+# from clustpy.deep import FeedforwardAutoencoder
 
 
 class Cluster_Node:
@@ -1038,14 +1038,4 @@ class DeepECT:
         return self
 
 
-if __name__ == "__main__": 
-    if cfg.data.name: 
-        # if True, then use load methods in load_datasets
-    else: 
-        # use the method from clustpy
-    autoencoder = FeedforwardAutoencoder(layers=[3,2])
-    deepect = DeepECT(batch_size=2, number_classes=3, pretrain_epochs=5, max_iterations=20, grow_interval=5, embedding_size=2)
-    deepect.fit(dataset)
-    print(deepect.DeepECT_labels_)
-    print(deepect.DeepECT_cluster_centers_)
     

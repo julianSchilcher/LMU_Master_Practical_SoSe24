@@ -10,14 +10,14 @@ from nltk.tokenize import word_tokenize
 import numpy as np
 from scipy.io import loadmat
 from sklearn.model_selection import train_test_split
-import config 
+from experiments.pre_training.config import get_config
 from nltk.tokenize import word_tokenize
 from collections import defaultdict
 from torch.nn.utils.rnn import pad_sequence
 import os
 
 transform = transforms.ToTensor()
-cfg = config.get_config()
+cfg = get_config()
 
 def mnist_dataset():
     if not os.path.exists(cfg.data.paths["MNIST"]):

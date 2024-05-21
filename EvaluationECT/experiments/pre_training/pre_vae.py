@@ -1,5 +1,4 @@
 from load_datasets import usps_dataset, reuters_dataset, mnist_dataset, fashion_minist
-import os 
 import config
 from vae_model import LayerwiseVae,  PureVae
 from clustpy.data import load_usps, load_mnist, load_reuters,load_fmnist

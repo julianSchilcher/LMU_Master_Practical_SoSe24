@@ -85,13 +85,6 @@ def main():
        
         
         
-        
-        if __name__ == "__main__":
-            parser = argparse.ArgumentParser()
-            parser.add_argument("--dataset", type=str, default="MNST", help="choose the training dataset")
-            parser.add_argument("--lr", type=float, default=0.0001, help="learning rate")
-
-            args = parser.parse_args()
- 
-            main()
+if __name__ == "__main__":
+        main()
     

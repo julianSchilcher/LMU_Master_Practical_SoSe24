@@ -61,7 +61,7 @@ def main():
         "Fashion_MNIST": load_fmnist
         }
         
-        data, labels = datasets[cfg.data.dataset](return_X_y=True)
+        data, labels = datasets[cfg.data.dataset]("train",return_X_y=True)
         ae = FeedforwardAutoencoder(layers=[data.shape[1], 500, 500, 2000, 10])
         ae.load_state_dict(torch.load(cfg.data.model["pure"][cfg.data.dataset], map_location=torch.device(device)))
         ae.fitted = True
@@ -71,9 +71,13 @@ def main():
         print(deepect.DeepECT_cluster_centers_)
         
         # test the model
-        testloader = get_dataloader(data, 256, False, False)
-        deepect.predict(10, testloader,ae)
-        evaluate(_, deepect.DeepECT_labels_)
+        evaluate(labels, deepect.DeepECT_labels_)
+    """
+    MNIST:  acc: 0.6679666666666667
+            nmi: 0.7659182888225026
+            ari: 0.6504957548026452
+    
+    """
        
         
         

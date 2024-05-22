@@ -6,7 +6,7 @@ def get_config():
     
     # data
     config.data = data = ml_collections.ConfigDict()
-    data.dataset = "Fashion_MNIST"
+    data.dataset = "USP"
     data.model = {
                 "layer_wise":{ "Fashion_MNIST": "EvaluationECT/experiments/pre_training/model/layer_wise/Fashion_MNIST_pre/vae_Fashion_MNIST_4/model.path",
                             "MNIST": "C:/Users/Li/Desktop/deepect/LMU_Master_Practical_SoSe24/EvaluationECT/experiments/pre_training/model/layer_wise/MNIST_pre/vae_MNIST_0/model.path",

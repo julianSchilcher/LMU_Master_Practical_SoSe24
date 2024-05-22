@@ -51,10 +51,21 @@ def usps_dataset():
     return torch.tensor(data, dtype=torch.float32), torch.tensor(labels, dtype= torch.float32)
 
 def reuters_dataset():
-    if not os.path.exists(cfg.data.paths["Reuters"]):
-        os.makedirs(cfg.data.paths["Reuters"])
-    nltk.download('reuters', download_dir=cfg.data.paths["Reuters"])
-    nltk.download('punkt', download_dir=cfg.data.paths["Reuters"])
+    nltk_data_path = os.path.expanduser('~/nltk_data')
+
+    if 'paths' in cfg.data and 'Reuters' in cfg.data.paths:
+        nltk_data_path = cfg.data.paths["Reuters"]
+
+    # Ensure the directory exists
+    if not os.path.exists(nltk_data_path):
+        os.makedirs(nltk_data_path)
+    
+    # Download the Reuters dataset to the specified directory
+    nltk.download('reuters', download_dir=nltk_data_path)
+    nltk.download('punkt', download_dir=nltk_data_path)
+
+    # Add the specified path to NLTK data paths
+    nltk.data.path.append(nltk_data_path)
     
     docs = reuters.fileids()
     docs_list = [word_tokenize(reuters.raw(doc_id)) for doc_id in docs]

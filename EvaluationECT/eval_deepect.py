@@ -65,18 +65,25 @@ def main():
         ae = FeedforwardAutoencoder(layers=[data.shape[1], 500, 500, 2000, 10])
         ae.load_state_dict(torch.load(cfg.data.model["pure"][cfg.data.dataset], map_location=torch.device(device)))
         ae.fitted = True
-        deepect = DeepECT(number_classes=10, autoencoder=ae)
+        deepect = DeepECT(number_classes=10, autoencoder=ae, max_leaf_nodes=20)
         deepect.fit(data)
-        print(deepect.DeepECT_labels_)
+        print(len(deepect.DeepECT_labels_))
         print(deepect.DeepECT_cluster_centers_)
         
         # test the model
         evaluate(labels, deepect.DeepECT_labels_)
     """
-    MNIST:  acc: 0.6679666666666667
-            nmi: 0.7659182888225026
-            ari: 0.6504957548026452
+    MNIST:  acc: 0.865
+            nmi: 0.7861745965567448
+            ari: 0.7417387078097011
+    USP :   acc: 0.6893430256480593
+            nmi: 0.7344101253005622
+            ari: 0.6027551533369153
+    Reuters:
     
+    fMNIST: acc: 0.50545
+            nmi: 0.558446373356682
+            ari: 0.3901464714980103
     """
        
         

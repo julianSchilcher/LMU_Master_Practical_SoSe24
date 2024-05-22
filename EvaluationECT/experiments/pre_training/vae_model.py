@@ -4,7 +4,9 @@ import torch.nn.functional as F
 import torch.utils.data
 import os
 from vae.stacked_ae import stacked_ae
-from clustpy.deep import  get_trained_autoencoder, get_dataloader
+from clustpy.deep import get_dataloader
+from clustpy.deep.autoencoders import FeedforwardAutoencoder
+from clustpy.data import create_subspace_data
 import config
 
 cfg = config.get_config()
@@ -20,8 +22,8 @@ class PureVae:
         self.vae_pretraining = f"{dataset_name}_pre"
         os.makedirs(f"{cfg.training.path}/pure_vae/{self.vae_pretraining}", exist_ok=True)
     def forward(self, data):
-        trainloader = get_dataloader(data, 256, True, False)  
-        ae = get_trained_autoencoder(trainloader, optimizer_params={"lr":1e-3}, n_epochs=self.epochs, device=device, optimizer_class=torch.optim.Adam, loss_fn=self.loss, embedding_size=10)
+        ae = FeedforwardAutoencoder(layers=[data.shape[1], 128, 64, 10])
+        ae.fit(self.epochs, optimizer_params={"lr":self.lr}, data=data)
         model_path = f"{cfg.training.path}/pure_vae/{self.vae_pretraining}"
         os.makedirs(model_path, exist_ok=True)
         torch.save(ae.state_dict(),model_path+"/model.path")

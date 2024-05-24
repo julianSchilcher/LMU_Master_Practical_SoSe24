@@ -15,20 +15,8 @@ from clustpy.data.real_torchvision_data import load_mnist
 from clustpy.metrics.clustering_metrics import unsupervised_clustering_accuracy
 from tqdm import tqdm
 import math
-from collections import Counter
 
-# dendrogram purity and leaf purity
 
-class Cluster_Measure:
-    """
-    Compute the dendrogram purity and leaf purity   
-    """
-    def __init__(self):
-        super(Cluster_Measure, self).__init__()
-        
-
-    
-    
 class Cluster_Node:
     """
     This class represents a cluster node within a binary cluster tree. Each node in a cluster tree represents a cluster. The cluster is
@@ -851,39 +839,9 @@ class _DeepECT_Module(torch.nn.Module):
             centers = torch.stack(centers, dim=0).cpu().numpy()
         
         return predictions_numpy, centers
-    
-    def dendrogram_purity(self, num_classes:int, true_labels:np.ndarray)->float:
-        nodes = self.cluster_tree.get_all_result_nodes(num_classes)
-        total_elements = sum(len(node.assignment_indices) for node in nodes if node.assignment_indices is not None)
-        purity_sum = 0
-        for node in nodes:
-            if node.assignment_indices is None or len(node.assignment_indices)==0:
-                continue
-            labels_node = true_labels[node.assignment_indices.cpu().numpy]
-            labels_counts = Counter(labels_node)
-            max_count = max(labels_counts.values())
-            purity = max_count/len(labels_node)
-            purity_sum += purity*len(labels_node)
-        return purity_sum/total_elements
-    
-    def leaf_purity(self, true_labels:np.ndarray)-> float:
-        
-        nodes = self.cluster_tree.get_all_leaf_nodes()
-        total_elements = sum(len(node.assignment_indices) for node in nodes if node.assignment_indices is not None)
-        purity_sum = 0
-        for node in nodes:
-            if node.assignment_indices is None or len(node.assignment_indices) == 0:
-                continue
-            labels_node = true_labels[node.assignment_indices.cpu().numpy()]
-            labels = Counter(labels_node)
-            max_count = max(labels.values())
-            purity = max_count/len(labels_node)
-            purity_sum += purity*len(labels_node)
-        
-        return purity_sum/total_elements
+
 def _deep_ect(
     X: np.ndarray,
-    labels,
     batch_size: int,
     pretrain_optimizer_params: dict,
     clustering_optimizer_params: dict,
@@ -895,6 +853,7 @@ def _deep_ect(
     optimizer_class: torch.optim.Optimizer,
     rec_loss_fn: torch.nn.modules.loss._Loss,
     autoencoder: torch.nn.Module,
+    layerwise: bool,
     embedding_size: int,
     max_leaf_nodes: int,
     custom_dataloaders: tuple,
@@ -987,16 +946,13 @@ def _deep_ect(
     )
     # Get labels
     DeepECT_labels, DeepECT_centers = deepect_module.predict(number_classes, testloader, autoencoder)
-    dendragrom = deepect_module.dendrogram_purity(number_classes, labels)
-    leaf = deepect_module.leaf_purity(number_classes,labels)
-    return DeepECT_labels, DeepECT_centers, autoencoder, dendragrom, leaf
+    return DeepECT_labels, DeepECT_centers, autoencoder
 
 
 class DeepECT:
 
     def __init__(
         self,
-        labels,
         batch_size: int = 256,
         pretrain_optimizer_params: dict = None,
         clustering_optimizer_params: dict = None,
@@ -1008,6 +964,7 @@ class DeepECT:
         optimizer_class: torch.optim.Optimizer = torch.optim.Adam,
         rec_loss_fn: torch.nn.modules.loss._Loss = torch.nn.MSELoss(),
         autoencoder: torch.nn.Module = None,
+        layerwise: bool = False,
         embedding_size: int = 10,
         max_leaf_nodes: int = 20,
         custom_dataloaders: tuple = None,
@@ -1074,7 +1031,6 @@ class DeepECT:
             if clustering_optimizer_params is None
             else clustering_optimizer_params
         )
-        self.labels = labels
         self.pretrain_epochs = pretrain_epochs
         self.number_classes = number_classes
         self.max_iterations = max_iterations
@@ -1083,6 +1039,7 @@ class DeepECT:
         self.optimizer_class = optimizer_class
         self.rec_loss_fn = rec_loss_fn
         self.autoencoder = autoencoder
+        self.layerwise = layerwise
         self.embedding_size = embedding_size
         self.custom_dataloaders = custom_dataloaders
         self.augmentation_invariance = augmentation_invariance
@@ -1107,9 +1064,8 @@ class DeepECT:
         """
         # augmentation_invariance_check(self.augmentation_invariance, self.custom_dataloaders)
 
-        DeepECT_labels, DeepECT_centers, autoencoder, dendrogram, leaf = _deep_ect(
+        DeepECT_labels, DeepECT_centers, autoencoder = _deep_ect(
             X,
-            self.labels,
             self.batch_size,
             self.pretrain_optimizer_params,
             self.clustering_optimizer_params,
@@ -1121,6 +1077,7 @@ class DeepECT:
             self.optimizer_class,
             self.rec_loss_fn,
             self.autoencoder,
+            self.layerwise,
             self.embedding_size,
             self.max_leaf_nodes,
             self.custom_dataloaders,
@@ -1130,8 +1087,6 @@ class DeepECT:
         self.DeepECT_labels_ = DeepECT_labels
         self.DeepECT_cluster_centers_ = DeepECT_centers
         self.autoencoder = autoencoder
-        self.dendrogram = dendrogram
-        self.leaf = leaf
         return self
 
 

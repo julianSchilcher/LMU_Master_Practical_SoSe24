@@ -63,9 +63,9 @@ def leaf_purity(tree_root: PurityNode, ground_truth):
         nonlocal values
         nonlocal weights
         if node.is_leaf:
-            node_total_dp_count = len(node.dp_ids)
+            node_total_dp_count = len(node.assignments)
             node_per_label_counts = count_values_in_sequence(
-                [ground_truth[id] for id in node.dp_ids]
+                [ground_truth[id] for id in node.assignments]
             )
             if node_total_dp_count > 0:
                 purity_rate = max(node_per_label_counts.values()) / node_total_dp_count

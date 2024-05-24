@@ -14,7 +14,7 @@ from tqdm import tqdm
 import math
 import attr
 from ect.utils.statistics import weighted_avg_and_std
-from ect.utils.functional import count_values_in_sequence
+from vae.functional import count_values_in_sequence
 from scipy.special import comb
 
 # Cluster_Node class definition as provided earlier

@@ -1,6 +1,5 @@
-
-
 from itertools import islice
+
 
 def window(seq, n):
     "Returns a sliding window (of width n) over data from the iterable"
@@ -13,9 +12,11 @@ def window(seq, n):
         result = result[1:] + (elem,)
         yield result
 
+
 def count_values_in_sequence(seq):
     from collections import defaultdict
-    res = defaultdict(lambda : 0)
+
+    res = defaultdict(int)
     for key in seq:
         res[key] += 1
     return dict(res)

@@ -12,6 +12,7 @@ from clustpy.deep.autoencoders import FeedforwardAutoencoder
 from sklearn.cluster import MiniBatchKMeans, KMeans
 from sklearn.utils import check_random_state
 from clustpy.data.real_torchvision_data import load_mnist
+from clustpy.data import load_reuters
 from clustpy.metrics.clustering_metrics import unsupervised_clustering_accuracy
 from tqdm import tqdm
 import math
@@ -476,7 +477,7 @@ class Cluster_Tree:
         )
         return loss
 
-    def adapt_inner_nodes(self, root: Cluster_Node, pruning_threshold: float):
+    def adapt_inner_nodes(self, root: Cluster_Node):
         """
         Function for recursively assigning samples to inner nodes by merging the assignments of its two childs
 
@@ -489,10 +490,10 @@ class Cluster_Tree:
             return
 
         # Traverse the left subtree
-        self.adapt_inner_nodes(root.left_child, pruning_threshold)
+        self.adapt_inner_nodes(root.left_child)
 
         # Traverse the right subtree
-        self.adapt_inner_nodes(root.right_child, pruning_threshold)
+        self.adapt_inner_nodes(root.right_child)
 
         # adapt node based on this 2 childs
         if root.left_child and root.right_child:
@@ -531,7 +532,7 @@ class Cluster_Tree:
                 Returns:
                     None
                 """
-                self.number_nodes -= 1
+                self.number_nodes -= 2
                 child_node: Cluster_Node = getattr(parent, child_attr)
                 sibling_attr = 'left_child' if child_attr == 'right_child' else 'right_child'
                 sibling_node: Cluster_Node = getattr(parent, sibling_attr)
@@ -779,7 +780,7 @@ class _DeepECT_Module(torch.nn.Module):
             optimizer.step()
 
             # adapt centers of split nodes analytically
-            self.cluster_tree.adapt_inner_nodes(self.cluster_tree.root, pruning_threshold)
+            self.cluster_tree.adapt_inner_nodes(self.cluster_tree.root)
             self.cluster_tree.clear_node_assignments()
         return self
         
@@ -1052,7 +1053,7 @@ class DeepECT:
         Parameters
         ----------
         X : np.ndarray
-            the given data set
+            the given data set as a 2d-array of shape (#samples, #features)
 
         Returns
         -------
@@ -1060,7 +1061,7 @@ class DeepECT:
             this instance of the DeepECT algorithm
         """
         # augmentation_invariance_check(self.augmentation_invariance, self.custom_dataloaders)
-
+    
         DeepECT_labels, DeepECT_centers, autoencoder = _deep_ect(
             X,
             self.batch_size,
@@ -1087,11 +1088,18 @@ class DeepECT:
 
 
 if __name__ == "__main__": 
-    dataset, labels = load_mnist("train", return_X_y=True)
+    # dataset, labels = load_mnist("train", return_X_y=True)
+    # autoencoder = FeedforwardAutoencoder([dataset.shape[1], 500, 500, 2000, 10])
+    # autoencoder.load_state_dict(torch.load("practical/DeepClustering/DeepECT/pretrained_AE.pth"))
+    # autoencoder.fitted = True
+    # deepect = DeepECT(number_classes=10, autoencoder=autoencoder, max_leaf_nodes=20)
+    # deepect.fit(dataset)
+    # print(unsupervised_clustering_accuracy(labels, deepect.DeepECT_labels_))
+
+    dataset, labels = load_reuters("train", return_X_y=True)
     autoencoder = FeedforwardAutoencoder([dataset.shape[1], 500, 500, 2000, 10])
-    autoencoder.load_state_dict(torch.load("practical/DeepClustering/DeepECT/pretrained_AE.pth"))
+    autoencoder.load_state_dict(torch.load("practical/DeepClustering/DeepECT/pretrained_AE_reuters.pth"))
+    deepect = DeepECT(number_classes=4, max_leaf_nodes=12, autoencoder=autoencoder)
     autoencoder.fitted = True
-    deepect = DeepECT(number_classes=10, autoencoder=autoencoder, max_leaf_nodes=20)
     deepect.fit(dataset)
     print(unsupervised_clustering_accuracy(labels, deepect.DeepECT_labels_))
-    

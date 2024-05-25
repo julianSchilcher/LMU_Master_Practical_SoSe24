@@ -1,3 +1,4 @@
+import math
 from queue import Queue
 from typing import List, Tuple, Union
 
@@ -14,8 +15,8 @@ from sklearn.utils import check_random_state
 from clustpy.data.real_torchvision_data import load_mnist
 from clustpy.metrics.clustering_metrics import unsupervised_clustering_accuracy
 from tqdm import tqdm
-import math
-from collections import Counter
+from scipy.special import comb
+from collections import Counter, defaultdict
 
 # dendrogram purity and leaf purity
 
@@ -27,8 +28,6 @@ class Cluster_Measure:
         super(Cluster_Measure, self).__init__()
         
 
-    
-    
 class Cluster_Node:
     """
     This class represents a cluster node within a binary cluster tree. Each node in a cluster tree represents a cluster. The cluster is
@@ -332,7 +331,7 @@ class Cluster_Tree:
                     (left_assignment_indices, right_assignment_indices), dim=0
                 )
             return node.assignment_indices, node.assignments
-
+        
     def nc_loss(self) -> torch.Tensor:
         """
         Function for calculating the nc loss used for adopting the leaf node centers.
@@ -839,9 +838,12 @@ class _DeepECT_Module(torch.nn.Module):
                 # sort the labels based on the ordering of the samples in the batch
                 sorted_assignment_indices = torch.argsort(assignments).cpu()
                 predictions.append(labels[sorted_assignment_indices])
-                self.cluster_tree.clear_node_assignments()
-    
-        
+                self.cluster_tree.clear_node_assignments()  
+                # new_pred_tree = self.predictTree(embeddings, batch[0], labels)
+                # if pred_tree ==None:
+                #     pred_tree = new_pred_tree
+                # else: pred_tree = self.combine(new_pred_tree, pred_tree)
+
             # transform the predictions for each batch to a single output array for the whole dataset
             predictions_numpy = torch.cat(predictions, dim=0).numpy()
         
@@ -852,35 +854,145 @@ class _DeepECT_Module(torch.nn.Module):
         
         return predictions_numpy, centers
     
-    def dendrogram_purity(self, num_classes:int, true_labels:np.ndarray)->float:
+    def predictTree(self, batch_data, batch_ids, labels):
+        leaf_nodes = self.cluster_tree.get_all_leaf_nodes()
+        
+        # Extract the centers of the leaf nodes
+        leaf_centers = torch.stack([node.center.data for node in leaf_nodes]).to(batch_data.device)
+
+        # Compute the distances between each embedding and each leaf node center
+        with torch.no_grad():
+            distances = torch.cdist(batch_data, leaf_centers, p=2)
+
+        # Find the closest leaf node for each embedding
+        labels = torch.argmin(distances, dim=1).cpu().numpy()
+
+        # Create a mapping from node IDs to labels
+        node_label_map = {leaf_nodes[i].id: i for i in range(len(leaf_nodes))}
+
+        def recursive(node: Cluster_Node):
+            if node.is_leaf_node():
+                dp_ids = batch_ids[np.where(labels == node_label_map[node.id])[0]]
+                node.assignment_indices = torch.tensor(dp_ids, device=node.device)
+            else:
+                if node.left_child:
+                    recursive(node.left_child)
+                if node.right_child:
+                    recursive(node.right_child)
+                # Merge assignments from children nodes
+                if node.left_child and node.right_child:
+                    node.assignment_indices = torch.cat(
+                        [node.left_child.assignment_indices, node.right_child.assignment_indices], dim=0
+                    )
+            return node
+
+        return recursive(self.cluster_tree.root)
+
+    
+    def combine(self, new_pre: Cluster_Node, pre: Cluster_Node):
+        def recursive(node_a, node_b):
+            if node_a.is_leaf_node() != node_b.is_leaf_node() or node_a.id != node_b.id:
+                raise RuntimeError("Trees are not equivalent!")
+
+            if node_a.is_leaf_node():
+                combined_node = Cluster_Node(node_a.center.data.cpu().numpy(), node_a.device, node_a.id)
+                combined_node.assignments = torch.cat([node_a.assignments, node_b.assignments], dim=0) if node_a.assignments is not None and node_b.assignments is not None else node_a.assignments if node_a.assignments is not None else node_b.assignments
+                combined_node.assignment_indices = torch.cat([node_a.assignment_indices, node_b.assignment_indices], dim=0) if node_a.assignment_indices is not None and node_b.assignment_indices is not None else node_a.assignment_indices if node_a.assignment_indices is not None else node_b.assignment_indices
+                return combined_node
+            else:
+                left_child = recursive(node_a.left_child, node_b.left_child)
+                right_child = recursive(node_a.right_child, node_b.right_child)
+                combined_node = Cluster_Node(node_a.center.data.cpu().numpy(), node_a.device, node_a.id)
+                combined_node.left_child = left_child
+                combined_node.right_child = right_child
+                return combined_node
+
+        return recursive(new_pre, pre)
+
+
+            
+    def dendrogram_purity(self, dataloader, autoencoder, device, num_classes: int, true_labels: np.ndarray) -> float:
+        all_embeddings = []
+        all_batch_ids = []
+        with torch.no_grad():
+            for batch in tqdm(dataloader, desc="Predict"):
+                batch_ids, batch_data = batch
+                batch_data = batch_data.to(device)
+                embeddings = autoencoder.encode(batch_data)
+                all_embeddings.append(embeddings)
+                all_batch_ids.append(batch_ids)
+        
+        all_embeddings = torch.cat(all_embeddings)
+        all_batch_ids = torch.cat(all_batch_ids)
+
+        self.predictTree(all_embeddings, all_batch_ids, true_labels)
+        # if pred_tree is None:
+        #     pred_tree = new_pred_tree
+        # else:
+        #     pred_tree = self.combine(new_pred_tree, pred_tree)
+
         nodes = self.cluster_tree.get_all_result_nodes(num_classes)
         total_elements = sum(len(node.assignment_indices) for node in nodes if node.assignment_indices is not None)
-        purity_sum = 0
-        for node in nodes:
-            if node.assignment_indices is None or len(node.assignment_indices)==0:
-                continue
-            labels_node = true_labels[node.assignment_indices.cpu().numpy]
-            labels_counts = Counter(labels_node)
-            max_count = max(labels_counts.values())
-            purity = max_count/len(labels_node)
-            purity_sum += purity*len(labels_node)
-        return purity_sum/total_elements
+        print(f"Total elements: {total_elements}")
+
+        if total_elements == 0:
+            return 0.0
+
+        def count_values_in_sequence(seq):
+            res = defaultdict(int)
+            for key in seq:
+                res[key] += 1
+            return dict(res)
+
+        total_per_label_frequencies = count_values_in_sequence(true_labels)
+        total_per_label_pairs_count = {k: comb(v, 2, True) for k, v in total_per_label_frequencies.items()}
+        total_n_of_pairs = sum(total_per_label_pairs_count.values())
+        one_div_total_n_of_pairs = 1.0 / total_n_of_pairs
+        purity = 0.0
+
+        def calculate_purity(node, level):
+            nonlocal purity
+            if node.is_leaf_node():
+                node_total_dp_count = len(node.assignment_indices)
+                node_per_label_frequencies = count_values_in_sequence(true_labels[node.assignment_indices.cpu().numpy()])
+                node_per_label_pairs_count = {k: comb(v, 2) for k, v in node_per_label_frequencies.items()}
+            else:
+                left_child_per_label_freq, left_child_total_dp_count = calculate_purity(node.left_child, level + 1)
+                right_child_per_label_freq, right_child_total_dp_count = calculate_purity(node.right_child, level + 1)
+                node_total_dp_count = left_child_total_dp_count + right_child_total_dp_count
+                node_per_label_frequencies = {k: left_child_per_label_freq.get(k, 0) + right_child_per_label_freq.get(k, 0) 
+                                            for k in set(left_child_per_label_freq) | set(right_child_per_label_freq)}
+                node_per_label_pairs_count = {k: left_child_per_label_freq.get(k, 0) * right_child_per_label_freq.get(k, 0) 
+                                            for k in set(left_child_per_label_freq) & set(right_child_per_label_freq)}
+
+            for label, pair_count in node_per_label_pairs_count.items():
+                label_freq = node_per_label_frequencies[label]
+                if node_total_dp_count > 0:  # Avoid division by zero
+                    purity += one_div_total_n_of_pairs * label_freq / node_total_dp_count * pair_count
+            print(f"Node {node.id} level {level} purity: {purity}")
+            print(f"pair_count:{pair_count} label_freq:{label_freq}  node_total_dp_count:{node_total_dp_count} ")
+            return node_per_label_frequencies, node_total_dp_count
+
+        calculate_purity(self.cluster_tree.root, 0)
+        return purity
+
+
     
-    def leaf_purity(self, true_labels:np.ndarray)-> float:
+    def leaf_purity(self)-> float:
         
-        nodes = self.cluster_tree.get_all_leaf_nodes()
-        total_elements = sum(len(node.assignment_indices) for node in nodes if node.assignment_indices is not None)
-        purity_sum = 0
-        for node in nodes:
-            if node.assignment_indices is None or len(node.assignment_indices) == 0:
-                continue
-            labels_node = true_labels[node.assignment_indices.cpu().numpy()]
-            labels = Counter(labels_node)
-            max_count = max(labels.values())
-            purity = max_count/len(labels_node)
-            purity_sum += purity*len(labels_node)
+        # nodes = self.cluster_tree.get_all_leaf_nodes()
+        # total_elements = sum(len(node.assignment_indices) for node in nodes )
+        # purity_sum = 0
+        # for node in nodes:
+        #     if node.assignment_indices is None or len(node.assignment_indices) == 0:
+        #         continue
+        #     labels_node = true_labels[node.assignment_indices.cpu().numpy()]
+        #     labels = Counter(labels_node)
+        #     max_count = max(labels.values())
+        #     purity = max_count/len(labels_node)
+        #     purity_sum += purity*len(labels_node)
         
-        return purity_sum/total_elements
+        return None
 def _deep_ect(
     X: np.ndarray,
     labels,
@@ -987,8 +1099,8 @@ def _deep_ect(
     )
     # Get labels
     DeepECT_labels, DeepECT_centers = deepect_module.predict(number_classes, testloader, autoencoder)
-    dendragrom = deepect_module.dendrogram_purity(number_classes, labels)
-    leaf = deepect_module.leaf_purity(number_classes,labels)
+    dendragrom = deepect_module.dendrogram_purity(trainloader,autoencoder,device,number_classes, labels)
+    leaf = deepect_module.leaf_purity()
     return DeepECT_labels, DeepECT_centers, autoencoder, dendragrom, leaf
 
 

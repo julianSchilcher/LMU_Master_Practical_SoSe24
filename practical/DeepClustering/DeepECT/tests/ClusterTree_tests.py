@@ -37,22 +37,25 @@ def sample_cluster_tree(get_deep_ect_module=False):
     """
     deep_ect = _DeepECT_Module(np.array([[0, 0], [1, 1]]), "cpu")
     tree = deep_ect.cluster_tree
-    tree.root.left_child.set_childs(None, np.array([-2, -2]), np.array([-0.5, -0.5]), split=2)
+    tree.root.left_child.set_childs(
+        None, np.array([-2, -2]), np.array([-0.5, -0.5]), max_id=2
+    )
     tree.number_nodes += 2
     if get_deep_ect_module:
         return deep_ect
     return tree
 
+
 def sample_cluster_tree_with_assignments():
-    """ 
+    """
     Helper method for creating a sample cluster tree with assignments
     """
     # create mock-autoencoder, which represents just an identity function
     encode = lambda x: x
-    autoencoder = type('Autoencoder', (), {'encode': encode})
+    autoencoder = type("Autoencoder", (), {"encode": encode})
 
     tree = sample_cluster_tree()
-    minibatch = torch.tensor([[-3,-3], [10,10], [-0.4,-0.4],[0.4,0.3]])
+    minibatch = torch.tensor([[-3, -3], [10, 10], [-0.4, -0.4], [0.4, 0.3]])
     tree.assign_to_nodes(autoencoder.encode(minibatch))
     tree._assign_to_splitnodes(tree.root)
     return tree
@@ -80,6 +83,7 @@ def test_cluster_tree():
         ).item()
     )
 
+
 def test_cluster_tree_growth():
     tree = sample_cluster_tree()
     optimizer = torch.optim.Adam(
@@ -88,7 +92,10 @@ def test_cluster_tree_growth():
     encode = lambda x: x
     autoencoder = type("Autoencoder", (), {"encode": encode})
     dataset = torch.tensor([[-3, -3], [10, 10], [-0.4, -0.4], [0.4, 0.3]], device="cpu")
-    dataloader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(torch.tensor([0,1,2,3]), dataset), batch_size=2)
+    dataloader = torch.utils.data.DataLoader(
+        torch.utils.data.TensorDataset(torch.tensor([0, 1, 2, 3]), dataset),
+        batch_size=2,
+    )
     tree.grow_tree(dataloader, autoencoder, optimizer, "cpu")
     assert torch.allclose(
         torch.tensor([10.0, 10.0]), tree.root.right_child.right_child.center
@@ -135,7 +142,10 @@ def test_cluster_tree_assignment():
 
     # check if indexes are set correctly
     assert torch.all(
-        torch.eq(tree.root.left_child.left_child.assignment_indices.sort()[0], torch.tensor([0]))
+        torch.eq(
+            tree.root.left_child.left_child.assignment_indices.sort()[0],
+            torch.tensor([0]),
+        )
     )
     assert torch.all(
         torch.eq(
@@ -145,41 +155,48 @@ def test_cluster_tree_assignment():
     )
     assert torch.all(
         torch.eq(
-            tree.root.right_child.assignment_indices.sort()[0], torch.tensor([1,3])
+            tree.root.right_child.assignment_indices.sort()[0], torch.tensor([1, 3])
         )
     )
     assert torch.all(
         torch.eq(
             tree.root.assignment_indices.sort()[0],
-            torch.tensor([0,1,2,3]),
+            torch.tensor([0, 1, 2, 3]),
         )
     )
     assert torch.all(
         torch.eq(
-            tree.root.left_child.assignment_indices.sort()[0], torch.tensor([0,2])
+            tree.root.left_child.assignment_indices.sort()[0], torch.tensor([0, 2])
         )
     )
+
 
 def test_predict():
     # get initial setting
     tree = sample_cluster_tree(get_deep_ect_module=True)
     # create mock data set
     dataset = torch.tensor([[-3, -3], [10, 10], [-0.4, -0.4], [0.4, 0.3]], device="cpu")
-    dataloader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(torch.tensor([0,1,2,3]), dataset), batch_size=4)
+    dataloader = torch.utils.data.DataLoader(
+        torch.utils.data.TensorDataset(torch.tensor([0, 1, 2, 3]), dataset),
+        batch_size=4,
+    )
     # create mock-autoencoder, which represents just an identity function
     encode = lambda x: x
-    autoencoder = type('Autoencoder', (), {'encode': encode})
+    autoencoder = type("Autoencoder", (), {"encode": encode})
     # predict 3 classes
     pred, center = tree.predict(3, dataloader, autoencoder)
-    assert unsupervised_clustering_accuracy(np.array([0,2,1,2]), pred) == 1
+    assert unsupervised_clustering_accuracy(np.array([0, 2, 1, 2]), pred) == 1
     # predict 2 classes
     pred, center = tree.predict(2, dataloader, autoencoder)
-    assert unsupervised_clustering_accuracy(np.array([0,1,0,1]), pred) == 1
-    # predict 2 classes with batches 
+    assert unsupervised_clustering_accuracy(np.array([0, 1, 0, 1]), pred) == 1
+    # predict 2 classes with batches
     dataset = torch.tensor([[-3, -3], [10, 10], [-0.4, -0.4], [0.4, 0.3]], device="cpu")
-    dataloader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(torch.tensor([0,1,2,3]), dataset), batch_size=2)
+    dataloader = torch.utils.data.DataLoader(
+        torch.utils.data.TensorDataset(torch.tensor([0, 1, 2, 3]), dataset),
+        batch_size=2,
+    )
     pred, center = tree.predict(2, dataloader, autoencoder)
-    assert unsupervised_clustering_accuracy(np.array([0,1,0,1]), pred) == 1
+    assert unsupervised_clustering_accuracy(np.array([0, 1, 0, 1]), pred) == 1
 
 
 def test_nc_loss():
@@ -213,7 +230,7 @@ def test_nc_loss():
 def test_dc_loss():
 
     tree = sample_cluster_tree_with_assignments()
-    
+
     # calculate direction between left child of root and right child of root
     projection_l_r = (
         torch.tensor([0, 0], dtype=torch.float32)
@@ -293,17 +310,23 @@ def test_dc_loss():
 
     assert torch.all(torch.eq(loss, loss_manually))
 
+
 def test_adaption_inner_nodes():
     tree = sample_cluster_tree_with_assignments()
 
     tree.adapt_inner_nodes(tree.root, 0.1)
 
     # calculate adaption manually
-    root_weigth = torch.tensor([0.5*(1 + 2), 0.5*(1 + 2)])
-    root_left_weight = torch.tensor([0.5*(1 + 1), 0.5*(1 + 1)])
-    new_root_left = (root_left_weight[0] * torch.tensor([-2, -2]) + root_left_weight[1] * torch.tensor([-0.5, -0.5]))/(torch.sum(root_left_weight))
-    new_root = (root_weigth[0] * new_root_left + root_weigth[1] * torch.tensor([1,1]))/(torch.sum(root_weigth))
-    
+    root_weigth = torch.tensor([0.5 * (1 + 2), 0.5 * (1 + 2)])
+    root_left_weight = torch.tensor([0.5 * (1 + 1), 0.5 * (1 + 1)])
+    new_root_left = (
+        root_left_weight[0] * torch.tensor([-2, -2])
+        + root_left_weight[1] * torch.tensor([-0.5, -0.5])
+    ) / (torch.sum(root_left_weight))
+    new_root = (
+        root_weigth[0] * new_root_left + root_weigth[1] * torch.tensor([1, 1])
+    ) / (torch.sum(root_weigth))
+
     # compare results
     assert torch.all(torch.eq(tree.root.center, new_root))
     assert torch.all(torch.eq(tree.root.left_child.center, new_root_left))

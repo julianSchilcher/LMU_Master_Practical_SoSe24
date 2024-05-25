@@ -3,10 +3,7 @@ from typing import Any, Dict, List, Tuple
 import numpy as np
 import torch
 from scipy.special import comb
-
-from practical.DeepClustering.DeepECT.pre_training.vae.functional import (
-    count_values_in_sequence,
-)
+from collections import defaultdict
 
 
 class PurityNode:
@@ -38,8 +35,15 @@ class PurityNode:
 
 
 class PurityTree:
-    def __init__(self) -> None:
-        pass
+    def __init__(self, root_node: "PurityNode") -> None:
+        self.root = root_node
+
+
+def count_values_in_sequence(seq):
+    res = defaultdict(int)
+    for key in seq:
+        res[key] += 1
+    return dict(res)
 
 
 def weighted_avg_and_std(values, weights):

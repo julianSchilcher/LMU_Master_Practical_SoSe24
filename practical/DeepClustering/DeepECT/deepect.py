@@ -203,7 +203,7 @@ class Cluster_Tree:
         return count_recursive(self.root)
 
     @property
-    def nodes(self):
+    def nodes(self) -> List[Cluster_Node]:
         def get_nodes_recursive(node: Cluster_Node):
             result = [node]
             if node.is_leaf_node():
@@ -215,7 +215,7 @@ class Cluster_Tree:
         return get_nodes_recursive(self.root)
 
     @property
-    def leaf_nodes(self):
+    def leaf_nodes(self) -> List[Cluster_Node]:
         def get_nodes_recursive(node: Cluster_Node):
             result = []
             if node.is_leaf_node():

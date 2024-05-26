@@ -9,9 +9,10 @@ from enum import Enum
 
 import numpy as np
 import torch
-from clustpy.data import load_mnist, load_fmnist, load_reuters, load_usps
+from clustpy.data import load_fmnist, load_mnist, load_reuters, load_usps
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
-from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
+from clustpy.deep.autoencoders._abstract_autoencoder import \
+    _AbstractAutoencoder
 from scipy.optimize import linear_sum_assignment
 from sklearn.cluster import KMeans
 from sklearn.metrics import normalized_mutual_info_score
@@ -137,12 +138,7 @@ def pretraining(
     return autoencoder
 
 
-def flat(
-    autoencoder: _AbstractAutoencoder,
-    autoencoder_params_path: str,
-    dataset: Bunch,
-    seed: int,
-):
+def flat(autoencoder: _AbstractAutoencoder, autoencoder_params_path: str, dataset_type: DatasetType, dataset: Bunch, seed: int):
     # Set the seed for reproducibility
     torch.manual_seed(seed)
 
@@ -167,7 +163,14 @@ def flat(
             # Calculate evaluation metrics
             nmi = calculate_nmi(labels, predicted_labels)
             acc = calculate_acc(labels, predicted_labels)
-            results.append({"method": method.value, "nmi": nmi, "acc": acc})
+            results.append({
+                'dataset': dataset_type.value,
+                'method': method.value,
+                'nmi': nmi,
+                'acc': acc,
+                'seed': seed
+
+            })
 
         elif method == FlatClusteringMethod.DEEPECT_AUGMENTED:
             # Perform flat clustering with DeepECT and augmentation
@@ -176,13 +179,13 @@ def flat(
             # Perform flat clustering with IDEC
             pass
     df_results = pd.DataFrame(results)
-    print("\nFlat Clustering Results:")
-    print(df_results)
+    return df_results
+
+    
+    
 
 
-def hierarchical(
-    autoencoder: _AbstractAutoencoder, autoencoder_params_path: str, dataset, seed: int
-):
+def hierarchical(autoencoder: _AbstractAutoencoder, autoencoder_params_path: str, dataset_type: DatasetType, dataset: Bunch, seed: int):
     # Set the seed for reproducibility
     torch.manual_seed(seed)
 
@@ -196,7 +199,13 @@ def hierarchical(
             # Perform hierarchical clustering with DeepECT
             dp = 0
             lp = 0
-            results.append({"method": method.value, "dp": dp, "lp": lp})
+            results.append({
+                'dataset': dataset_type.value,
+                'method': method.value,
+                'dp': dp,
+                'lp': lp,
+                'seed': seed
+            })
             pass
         elif method == HierarchicalClusteringMethod.DEEPECT_AUGMENTED:
             # Perform hierarchical clustering with DeepECT and augmentation
@@ -218,8 +227,7 @@ def hierarchical(
             pass
 
     df_results = pd.DataFrame(results)
-    print("\nHierarchical Clustering Results:")
-    print(df_results)
+    return df_results
 
 
 # Example usage
@@ -248,21 +256,11 @@ def evaluation(
         seed=seed,
     )
 
-    flat(
-        autoencoder=autoencoder,
-        autoencoder_params_path=autoencoder_params_path,
-        dataset=dataset,
-        seed=seed,
-    )
-    hierarchical(
-        autoencoder=autoencoder,
-        autoencoder_params_path=autoencoder_params_path,
-        dataset=dataset,
-        seed=seed,
-    )
-
+    flat_results = flat(autoencoder=autoencoder, autoencoder_params_path=autoencoder_params_path, dataset_type=dataset_type, dataset=dataset, seed=seed)
+    hierarchical_results = hierarchical(autoencoder=autoencoder, autoencoder_params_path=autoencoder_params_path, dataset_type=dataset_type, dataset=dataset, seed=seed)
 
 # Load the MNIST dataset and evaluate flat and hierarchical clustering
-evaluation(
-    init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.MNIST, seed=42
-)
+evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.MNIST, seed=42)
+# evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.USPS, seed=42)
+# evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.REUTERS, seed=42)
+# evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.FASHION_MNIST, seed=42)

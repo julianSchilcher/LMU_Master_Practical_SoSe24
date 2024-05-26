@@ -12,9 +12,10 @@ import torch
 from clustpy.data import load_fmnist, load_mnist, load_reuters, load_usps
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
 from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
+from clustpy.metrics import unsupervised_clustering_accuracy
 from scipy.optimize import linear_sum_assignment
 from sklearn.cluster import AgglomerativeClustering, KMeans
-from sklearn.metrics import normalized_mutual_info_score
+from sklearn.metrics import normalized_mutual_info_score, adjusted_rand_score
 from sklearn.utils import Bunch
 
 from practical.DeepClustering.DeepECT.deepect import DeepECT
@@ -80,25 +81,11 @@ def calculate_acc(true_labels, predicted_labels):
     acc : float
         The accuracy score.
     """
+    return unsupervised_clustering_accuracy(true_labels, predicted_labels)
 
-    # Ensure true and predicted labels are numpy arrays
-    true_labels = np.array(true_labels)
-    predicted_labels = np.array(predicted_labels)
 
-    # Create the cost matrix
-    max_label = max(predicted_labels.max(), true_labels.max()) + 1
-    cost_matrix = np.zeros((max_label, max_label), dtype=int)
-    for i in range(predicted_labels.size):
-        cost_matrix[predicted_labels[i], true_labels[i]] += 1
-
-    # Solve the linear assignment problem
-    row_ind, col_ind = linear_sum_assignment(cost_matrix, maximize=True)
-
-    # Calculate accuracy
-    total_correct = cost_matrix[row_ind, col_ind].sum()
-    acc = total_correct / predicted_labels.size
-
-    return acc
+def calculate_ari(true_labels, predicted_labels):
+    return adjusted_rand_score(true_labels, predicted_labels)
 
 
 def pretraining(
@@ -172,16 +159,17 @@ def flat(
             # Calculate evaluation metrics
             nmi = calculate_nmi(labels, predicted_labels)
             acc = calculate_acc(labels, predicted_labels)
+            ari = calculate_ari(labels, predicted_labels)
             results.append(
                 {
                     "dataset": dataset_type.value,
                     "method": method.value,
                     "nmi": nmi,
                     "acc": acc,
+                    "ari": ari,
                     "seed": seed,
                 }
             )
-
         elif method == FlatClusteringMethod.DEEPECT_AUGMENTED:
             # Perform flat clustering with DeepECT and augmentation
             pass
@@ -225,7 +213,7 @@ def hierarchical(
                     "dataset": dataset_type.value,
                     "method": method.value,
                     "dp": deepect.tree_.dendrogram_purity(labels),
-                    "lp": deepect.tree_.leaf_purity(labels),
+                    "lp": deepect.tree_.leaf_purity(labels)[0],
                     "seed": seed,
                 }
             )
@@ -234,7 +222,6 @@ def hierarchical(
             pass
         elif method == HierarchicalClusteringMethod.IDEC_SINGLE:
             # Perform hierarchical clustering with IDEC and single
-
             pass
         elif method == HierarchicalClusteringMethod.IDEC_COMPLETE:
             # Perform hierarchical clustering with IDEC and complete

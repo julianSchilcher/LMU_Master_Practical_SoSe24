@@ -336,8 +336,7 @@ def test_adaption_inner_nodes():
     assert torch.all(torch.eq(tree.root.center, new_root))
     assert torch.all(torch.eq(tree.root.left_child.center, new_root_left))
 
-
-transform = transforms.Compose([transforms.ToTensor()])
+transform = transforms.Compose([transforms.ToTensor(), transforms.Lambda(lambda x:x*255)])
 mnist_dataset = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
 
 # augmentation_transform = transforms.Compose([
@@ -348,7 +347,8 @@ mnist_dataset = datasets.MNIST(root='./data', train=True, download=True, transfo
 # ])
 augmentation_transform = transforms.Compose([
     transforms.RandomAffine(degrees=15),
-    transforms.ToTensor()
+    transforms.ToTensor(),
+    transforms.Lambda(lambda x:x*255)
 ])
 
 class MNISTWithAugmentation(Dataset):
@@ -408,7 +408,6 @@ autoencoder.load_state_dict(
     torch.load("practical/DeepClustering/DeepECT/pretrained_AE.pth")
 )
 autoencoder.fitted = True
-deepect = DeepECT(number_classes=10, autoencoder=autoencoder, max_leaf_nodes=20, max_iterations=50000, custom_dataloaders=(trainloader, testloader), augmentation_invariance=True)
+deepect = DeepECT(number_classes=10, autoencoder=autoencoder, max_leaf_nodes=20, grow_interval=500, max_iterations=5000, custom_dataloaders=(trainloader, testloader), augmentation_invariance=True)
 deepect.fit(mnist_dataset.data.reshape(len(mnist_dataset), 784).numpy())
 print(unsupervised_clustering_accuracy(mnist_dataset.targets.numpy(), deepect.DeepECT_labels_))
-

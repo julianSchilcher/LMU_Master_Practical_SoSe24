@@ -859,7 +859,7 @@ class _DeepECT_Module(torch.nn.Module):
         self : _DeepECT_Module
             this instance of the _DeepECT_Module
         """
-        
+
         train_iterator = iter(trainloader)
 
         for e in tqdm(range(max_iterations), desc="Fit", total=max_iterations):
@@ -1265,14 +1265,15 @@ class DeepECT:
 
 if __name__ == "__main__":
     dataset, labels = load_mnist(return_X_y=True)
-    autoencoder = FeedforwardAutoencoder([dataset.shape[1], 500, 500, 2000, 10])
-    autoencoder.load_state_dict(
-        torch.load("practical/DeepClustering/DeepECT/pretrained_AE.pth")
-    )
-    autoencoder.fitted = True
-    deepect = DeepECT(number_classes=10, autoencoder=autoencoder, max_leaf_nodes=20)
-    deepect.fit(dataset)
-    print(unsupervised_clustering_accuracy(labels, deepect.DeepECT_labels_))
+    # autoencoder = FeedforwardAutoencoder([dataset.shape[1], 500, 500, 2000, 10])
+    # autoencoder.load_state_dict(
+    #     torch.load("practical/DeepClustering/DeepECT/pretrained_AE.pth")
+    # )
+    # autoencoder.fitted = True
+    # deepect = DeepECT(number_classes=10, autoencoder=autoencoder, max_leaf_nodes=20)
+    # deepect.fit(dataset)
+    # print(unsupervised_clustering_accuracy(labels, deepect.DeepECT_labels_))
+    print(np.min(dataset))
 
     # dataset, labels = load_reuters(return_X_y=True)
     # print(dataset.shape[0])

@@ -176,7 +176,6 @@ def flat(
                 init="random",
                 n_init=20,
                 random_state=seed,
-                max_iter=max_iterations,
             )
             print("fitting KMeans...")
             predicted_labels = kmeans.fit_predict(embeddings)
@@ -238,6 +237,7 @@ def flat(
                 n_clusters=n_clusters,
                 batch_size=batch_size,
                 autoencoder=autoencoder,
+                clustering_optimizer_params={"lr": 1e-4, "betas": (0.9, 0.999)},
                 clustering_epochs=max_clustering_epochs,
                 random_state=seed,
                 initial_clustering_class=KMeans,
@@ -353,13 +353,15 @@ def evaluate(
     return flat_results, hierarchical_results
 
 
-# Load the MNIST dataset and evaluate flat and hierarchical clustering
-flat_results, _ = evaluate(
-    init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.MNIST, seed=42
-)
-print(flat_results)
-# evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.USPS, seed=42)
-# evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.REUTERS, seed=42)
-# evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.FASHION_MNIST, seed=42)
+if __name__ == "__main__":
 
-# combine all results and per experiment, do pivot to aggregate the metrics over the seeds
+    # Load the MNIST dataset and evaluate flat and hierarchical clustering
+    flat_results, _ = evaluate(
+        init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.MNIST, seed=42
+    )
+    print(flat_results)
+    # evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.USPS, seed=42)
+    # evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.REUTERS, seed=42)
+    # evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.FASHION_MNIST, seed=42)
+
+    # combine all results and per experiment, do pivot to aggregate the metrics over the seeds

@@ -141,6 +141,7 @@ def flat(
     data = dataset["data"]
     labels = dataset["target"]
     results = []
+    max_leaf_nodes = 12 if dataset_type == DatasetType.REUTERS else 20
     n_clusters = 4 if dataset_type == DatasetType.REUTERS else 10
 
     for method in FlatClusteringMethod:
@@ -158,16 +159,32 @@ def flat(
             kmeans = KMeans(n_clusters=n_clusters, random_state=seed)
             predicted_labels = kmeans.fit_predict(embeddings)
             # Calculate evaluation metrics
-            nmi = calculate_nmi(labels, predicted_labels)
-            acc = calculate_acc(labels, predicted_labels)
-            ari = calculate_ari(labels, predicted_labels)
             results.append(
                 {
                     "dataset": dataset_type.value,
                     "method": method.value,
-                    "nmi": nmi,
-                    "acc": acc,
-                    "ari": ari,
+                    "nmi": calculate_nmi(labels, predicted_labels),
+                    "acc": calculate_acc(labels, predicted_labels),
+                    "ari": calculate_ari(labels, predicted_labels),
+                    "seed": seed,
+                }
+            )
+        elif method == FlatClusteringMethod.DEEPECT:
+            deepect = DeepECT(
+                autoencoder=autoencoder,
+                clustering_optimizer_params={"lr": 1e-4, "betas": (0.9, 0.999)},
+                max_leaf_nodes=max_leaf_nodes,
+                seed=seed,
+            )
+            deepect.fit(data)
+            # Calculate evaluation metrics
+            results.append(
+                {
+                    "dataset": dataset_type.value,
+                    "method": method.value,
+                    "nmi": deepect.tree_.flat_nmi(labels, n_clusters),
+                    "acc": deepect.tree_.flat_accuracy(labels, n_clusters),
+                    "ari": deepect.tree_.flat_ari(labels, n_clusters),
                     "seed": seed,
                 }
             )

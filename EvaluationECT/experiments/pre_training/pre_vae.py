@@ -41,7 +41,7 @@ def main(dataset_name):
             raise ValueError(f"Dataset {dataset_name} not found.")
         
         assert data is not None
-        model = PureVae(dataset_name).to(device)
+        model = PureVae(dataset_name)
         model.forward(data)
 
 if __name__ == "__main__":

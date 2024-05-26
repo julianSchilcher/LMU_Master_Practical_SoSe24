@@ -1,21 +1,38 @@
-from collections import Counter
 from queue import Queue
 from typing import List, Tuple, Union
+import os
+import sys
+
+sys.path.append(os.getcwd())
+import sys
+
+sys.path.append("/Users/yy/LMU_Master_Practical_SoSe24/EvaluationECT/experiments/pre_training/")
+from vae.stacked_ae import stacked_ae
 
 import numpy as np
 import torch
 import torch.utils
 import torch.utils.data
+from clustpy.deep._data_utils import augmentation_invariance_check
 from clustpy.deep._train_utils import get_standard_initial_deep_clustering_setting
 from clustpy.deep._utils import set_torch_seed
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
-from sklearn.cluster import MiniBatchKMeans, KMeans
+from sklearn.cluster import KMeans
 from sklearn.utils import check_random_state
 from clustpy.data.real_torchvision_data import load_mnist
-from clustpy.data import load_reuters
+from clustpy.data import load_reuters, load_fmnist, load_usps
 from clustpy.metrics.clustering_metrics import unsupervised_clustering_accuracy
 from tqdm import tqdm
-from scipy.special import comb
+from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
+
+
+
+
+sys.path.append("/Users/yy/LMU_Master_Practical_SoSe24/EvaluationECT")
+
+from EvaluationECT.metrics import PredictionClusterNode, PredictionClusterTree
+
+
 
 class Cluster_Node:
     """
@@ -92,7 +109,8 @@ class Cluster_Node:
 
     def from_leaf_to_inner(self):
         """
-        Converts a leaf node to an inner node. Weights for its child are initialised and the centers are not trainable anymore.
+        Converts a leaf node to an inner node. Weights for
+        its child are initialised and the centers are not trainable anymore.
 
         """
         # inner node on cpu
@@ -118,7 +136,8 @@ class Cluster_Node:
         max_split_id: int = 0,
     ):
         """
-        Set new childs to this cluster node and therefore changes this node to an inner node.
+        Set new childs to this cluster node and therefore changes
+        this node to an inner node.
 
         Parameters
         ----------
@@ -155,9 +174,12 @@ class Cluster_Node:
 
 class Cluster_Tree:
     """
-    This class represents a binary cluster tree. It provides multiple functionalities used for improving the cluster tree, like calculating
-    the DC and NC losses for the tree and assigning samples of a minibatch to the appropriate nodes. Furthermore it provides methods for
-    growing and pruning the tree as well as the analytical adaption of the inner nodes.
+    This class represents a binary cluster tree. It provides multiple
+    functionalities used for improving the cluster tree, like calculating
+    the DC and NC losses for the tree and assigning samples of a minibatch
+    to the appropriate nodes. Furthermore it provides methods for
+    growing and pruning the tree as well as the analytical adaption
+    of the inner nodes.
     """
 
     def __init__(
@@ -172,7 +194,8 @@ class Cluster_Tree:
         Parameters
         ----------
         init_leafnode_ceners : np.array
-            the centers of the two initial leaf nodes of the tree given as a array of shape(2,#embedd_features)
+            the centers of the two initial leaf nodes of the tree
+            given as a array of shape(2,#embedd_features)
         device : torch.device
             device to be trained on
 
@@ -232,8 +255,9 @@ class Cluster_Tree:
 
     def get_all_result_nodes(self, number_classes: int) -> List[Cluster_Node]:
         """
-        Returns a list of all class node references for the given number of classes. This nodes
-        are the leaf nodes in the tree cut for the given number of classes. The number of returned nodes
+        Returns a list of all class node references for the given
+        number of classes. This nodes are the leaf nodes in the tree
+        cut for the given number of classes. The number of returned nodes
         is equal to the given number of classes.
 
         Parameters
@@ -269,12 +293,14 @@ class Cluster_Tree:
         return result_nodes
 
     def assign_to_nodes(
-        self, minibatch_embedded: torch.tensor, compute_sum_dist: bool = False
+        self, minibatch_embedded: torch.Tensor, compute_sum_dist: bool = False
     ):
         """
-        This method assigns all samples in the minibatch to its nearest nodes in the cluster tree. It is performed bottom up, so each
-        sample is first assigned to its nearest leaf node. Afterwards the samples are assigned recursivley to the inner nodes by merging
-        the assignments of the child node.
+        This method assigns all samples in the minibatch
+        to its nearest nodes in the cluster tree. It is performed
+        bottom up, so each sample is first assigned to its nearest
+        leaf node. Afterwards the samples are assigned recursivley to
+        the inner nodes by merging the assignments of the child node.
 
         Parameters
         ----------
@@ -319,7 +345,8 @@ class Cluster_Tree:
 
     def _assign_to_splitnodes(self, node: Cluster_Node):
         """
-        Function for recursively assigning samples to inner nodes by merging the assignments of its two childs
+        Function for recursively assigning samples to inner
+        nodes by merging the assignments of its two childs
 
         Parameters
         ----------
@@ -357,9 +384,11 @@ class Cluster_Tree:
                 )
             return node.assignment_indices, node.assignments
 
-    def nc_loss(self) -> torch.Tensor:
+
+    def nc_loss(self, augmented_batch: torch.Tensor = None) -> torch.Tensor:
         """
-        Function for calculating the nc loss used for adopting the leaf node centers.
+        Function for calculating the nc loss used for
+        adopting the leaf node centers.
 
         Parameters
         ----------
@@ -387,17 +416,23 @@ class Cluster_Tree:
         with torch.no_grad():  # embedded space should not be optimized in this loss
             # get the assignments for each leaf node (from the current minibatch)
             leafnode_assignments = [
-                node.assignments
+                (node.assignments, node.assignment_indices)
                 for node in self.leaf_nodes
                 if node.assignments is not None
             ]
-            leafnode_minibatch_centers = list(
-                map(
-                    lambda assignments: torch.sum(assignments, axis=0)
-                    / len(assignments),
-                    leafnode_assignments,
-                )
-            )
+
+            def calc_assignment_center(assignment):
+                assignments, indices = assignment
+                sum_assignments = torch.sum(assignments, dim=0)
+                if augmented_batch is not None:
+                    sum_assignments_aug = torch.sum(augmented_batch[indices], dim=0)
+                    sum_assignments = torch.add(sum_assignments, sum_assignments_aug)
+                    return sum_assignments/(2*len(assignments))
+                else:
+                    return sum_assignments/len(assignments)
+            
+            leafnode_minibatch_centers = list(map(calc_assignment_center,leafnode_assignments))
+
         # reformat list of tensors to one sinlge tensor of shape (#leafnodes,#emb_features)
         leafnode_minibatch_centers_tensor = torch.stack(
             leafnode_minibatch_centers, dim=0
@@ -405,15 +440,16 @@ class Cluster_Tree:
 
         # calculate the distance between the current leaf node centers and the center of its assigned embeddings averaged over all leaf nodes
         distance = torch.sum(
-            (leafnode_center_tensor - leafnode_minibatch_centers_tensor) ** 2, axis=1
+            (leafnode_center_tensor - leafnode_minibatch_centers_tensor) ** 2, dim=1
         )
         distance = torch.sqrt(distance)
         loss = torch.sum(distance) / len(leafnode_center_tensor)
         return loss
 
-    def dc_loss(self, batchsize: int) -> torch.Tensor:
+    def dc_loss(self, batchsize: int, augmented_batch: torch.Tensor = None) -> torch.Tensor:
         """
-        Function for calculating the overall dc loss used for improving the embedded space for a better clustering result.
+        Function for calculating the overall dc loss used for
+        improving the embedded space for a better clustering result.
 
         Parameters
         ----------
@@ -429,7 +465,7 @@ class Cluster_Tree:
         """
         # batchsize = self.root.assignments.size(dim=0)
         sibling_losses = []  # storing losses for each node in tree
-        self._calculate_sibling_loss(self.root, sibling_losses)
+        self._calculate_sibling_loss(self.root, sibling_losses, augmented_batch)
         number_nodes = self.number_nodes - 1  # exclude root node
         # make sure that each node got a loss
         assert number_nodes == len(sibling_losses)
@@ -444,9 +480,12 @@ class Cluster_Tree:
         self,
         root: Cluster_Node,
         sibling_loss: List[torch.Tensor],
+        augmented_batch: torch.Tensor
     ) -> int:
         """
-        Helper function for recursively calculating the dc loss for each node. The losses are stored in the given list <sibling_loss>
+        Helper function for recursively calculating the
+        dc loss for each node. The losses are stored in the
+        given list <sibling_loss>
 
         Parameters
         ----------
@@ -466,25 +505,26 @@ class Cluster_Tree:
             return
 
         # Traverse the left subtree
-        self._calculate_sibling_loss(root.left_child, sibling_loss)
+        self._calculate_sibling_loss(root.left_child, sibling_loss, augmented_batch)
 
         # Traverse the right subtree
-        self._calculate_sibling_loss(root.right_child, sibling_loss)
+        self._calculate_sibling_loss(root.right_child, sibling_loss, augmented_batch)
 
         # Calculate lc loss for siblings if they exist
         if root.left_child and root.right_child:
             # calculate dc loss for left child with respect to the right child
-            loss_left = self._single_sibling_loss(root.left_child, root.right_child)
+            loss_left = self._single_sibling_loss(root.left_child, root.right_child, augmented_batch)
             # calculate dc loss for right child with respect to the left child
-            loss_right = self._single_sibling_loss(root.right_child, root.left_child)
+            loss_right = self._single_sibling_loss(root.right_child, root.left_child, augmented_batch)
             # store the losses
             sibling_loss.extend([loss_left, loss_right])
 
     def _single_sibling_loss(
-        self, node: Cluster_Node, sibling: Cluster_Node
+        self, node: Cluster_Node, sibling: Cluster_Node, augmented_batch: torch.Tensor
     ) -> torch.Tensor:
         """
-        Calculates a single dc loss for the node <node> with respect to its sibling <sibling>.
+        Calculates a single dc loss for the node <node> with
+        respect to its sibling <sibling>.
 
         Parameters
         ----------
@@ -509,19 +549,18 @@ class Cluster_Tree:
         # transform tensor from 1d to 2d
         sibling_direction = sibling_direction[None]
         # project each sample assigned to <node> in the direction of its sibling and sum up the absolute projection values for each sample
-        loss = torch.sum(
-            torch.abs(
-                torch.matmul(
-                    sibling_direction,
-                    -(node.assignments - node.center.detach()).T,
-                )
-            )
-        )
+        absolute_projections = torch.abs(torch.matmul(sibling_direction, -(node.assignments - node.center.detach()).T))
+        # add projections of augmented samples if they exist
+        if augmented_batch is not None:
+            absolute_projections_aug = torch.abs(torch.matmul(sibling_direction, -(augmented_batch[node.assignment_indices] - node.center.detach()).T))
+            absolute_projections = torch.add(absolute_projections, absolute_projections_aug)
+        loss = torch.sum(absolute_projections)
         return loss
 
     def adapt_inner_nodes(self, root: Cluster_Node):
         """
-        Function for recursively assigning samples to inner nodes by merging the assignments of its two childs
+        Function for recursively assigning samples to inner nodes
+        by merging the assignments of its two childs
 
         Parameters
         ----------
@@ -580,7 +619,8 @@ class Cluster_Tree:
         Prunes the tree by removing nodes with weights below the pruning threshold.
 
         Args:
-            pruning_threshold (float): The threshold value for pruning. Nodes with weights below this threshold will be removed.
+            pruning_threshold (float): The threshold value for pruning.
+            Nodes with weights below this threshold will be removed.
 
         Returns:
             None
@@ -664,10 +704,12 @@ class Cluster_Tree:
         dataloader: torch.utils.data.DataLoader,
         autoencoder: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
+        augmentation_invariance: bool,
         seed: int,
         device: Union[torch.device | str],
     ) -> None:
-        """Grows the tree at the leaf node with the highest squared distance between its assignments and center.
+        """Grows the tree at the leaf node with the highest squared distance
+        between its assignments and center.
         The distance is not normalized, so larger clusters will be chosen.
 
         We transform the dataset (or a representative sub-sample of it)
@@ -689,7 +731,7 @@ class Cluster_Tree:
                 len(self.leaf_nodes), dtype=torch.float, device="cpu"
             )
             for batch in batched_seqential_loader:
-                idxs, x = batch
+                x = batch[1]
                 embed = autoencoder.encode(x.to(device))
                 self.assign_to_nodes(embed, compute_sum_dist=True)
                 leaf_node_dist_sums += torch.stack(
@@ -709,13 +751,13 @@ class Cluster_Tree:
             # get all assignments for highest dist leaf node
             assignments = []
             for batch in batched_seqential_loader:
-                idxs, x = batch
+                x = batch[1]
                 embed = autoencoder.encode(x.to(device))
                 self.assign_to_nodes(embed)
                 if highest_dist_leaf_node.assignments is not None:
                     assignments.append(highest_dist_leaf_node.assignments.cpu())
             child_assignments = KMeans(
-                n_clusters=2, n_init="auto", random_state=seed
+                n_clusters=2, init="random", tol=0.0, n_init=20, random_state=seed
             ).fit(torch.cat(assignments, dim=0).numpy())
             print(f"Leaf assignments: {len(child_assignments.labels_)}")
             child_weights = np.array(
@@ -737,6 +779,22 @@ class Cluster_Tree:
             print(
                 f"Tree size after growing: {self.number_nodes}, leaf nodes: {len(self.leaf_nodes)}"
             )
+
+
+def transform_cluster_tree_to_pred_tree(tree: Cluster_Tree) -> PredictionClusterTree:
+    def transform_nodes(node: Cluster_Node):
+        pred_node = PredictionClusterNode(
+            node.id, node.split_id, node.center.detach().cpu().numpy()
+        )
+        if node.is_leaf_node():
+            return pred_node
+        pred_node.left_child = transform_nodes(node.left_child)
+        pred_node.left_child.parent = pred_node
+        pred_node.right_child = transform_nodes(node.right_child)
+        pred_node.right_child.parent = pred_node
+        return pred_node
+
+    return PredictionClusterTree(transform_nodes(tree.root))
 
 
 class _DeepECT_Module(torch.nn.Module):
@@ -765,7 +823,7 @@ class _DeepECT_Module(torch.nn.Module):
         init_labels: np.ndarray,
         device: torch.device,
         seed: int,
-        augmentation_invariance: bool = False,
+        augmentation_invariance: bool = False
     ):
         super().__init__()
         self.augmentation_invariance = augmentation_invariance
@@ -784,38 +842,6 @@ class _DeepECT_Module(torch.nn.Module):
         self.device = device
         self.random_state = seed
 
-    def deepect_augmentation_invariance_loss(
-        self, embedded: torch.Tensor, embedded_aug: torch.Tensor, alpha: float
-    ) -> torch.Tensor:
-        """
-        Calculate the DeepECT loss of given embedded samples with augmentation invariance.
-
-        Parameters
-        ----------
-        embedded : torch.Tensor
-            the embedded samples
-        embedded_aug : torch.Tensor
-            the embedded augmented samples
-        alpha : float
-            the alpha value
-
-        Returns
-        -------
-        loss : torch.Tensor
-            the final DeepECT loss
-        """
-        # # Get loss of non-augmented data
-        # squared_diffs = squared_euclidean_distance(embedded, self.centers)
-        # probs = _DeepECT_get_probs(squared_diffs, alpha)
-        # clean_loss = (squared_diffs.sqrt() * probs).sum(1).mean()
-        # # Get loss of augmented data
-        # squared_diffs_augmented = squared_euclidean_distance(embedded_aug, self.centers)
-        # aug_loss = (squared_diffs_augmented.sqrt() * probs).sum(1).mean()
-        # # average losses
-        # loss = (clean_loss + aug_loss) / 2
-        loss = None
-        return loss
-
     def fit(
         self,
         autoencoder: torch.nn.Module,
@@ -829,27 +855,21 @@ class _DeepECT_Module(torch.nn.Module):
         device: Union[torch.device | str],
     ) -> "_DeepECT_Module":
         """
-        Trains the _DeepECT_Module in place.
+            Trains the _DeepECT_Module in place.
 
-        Parameters
-        ----------
-        autoencoder : torch.nn.Module
-            the autoencoder
-        trainloader : torch.utils.data.DataLoader
-            dataloader to be used for training
-        max_iteratins : int
-            number of iterations for the clustering procedure.
-        optimizer : torch.optim.Optimizer
-            the optimizer for training
-        rec_loss_fn : torch.nn.modules.loss._Loss
-            loss function for the reconstruction
-        cluster_loss_weight : float
-            weight of the clustering loss compared to the reconstruction loss
+            Parameters
+            ----------
+        os.
+                the optimizer for training
+            rec_loss_fn : torch.nn.modules.loss._Loss
+                loss function for the reconstruction
+            cluster_loss_weight : float
+                weight of the clustering loss compared to the reconstruction loss
 
-        Returns
-        -------
-        self : _DeepECT_Module
-            this instance of the _DeepECT_Module
+            Returns
+            -------
+            self : _DeepECT_Module
+                this instance of the _DeepECT_Module
         """
 
         train_iterator = iter(trainloader)
@@ -863,6 +883,7 @@ class _DeepECT_Module(torch.nn.Module):
                     trainloader,
                     autoencoder,
                     optimizer,
+                    self.augmentation_invariance,
                     seed=self.random_state,
                     device=device,
                 )
@@ -875,19 +896,30 @@ class _DeepECT_Module(torch.nn.Module):
                 # after full epoch shuffle again
                 train_iterator = iter(trainloader)
                 batch = next(train_iterator)
-            idxs, M = batch
-            # assign data points to leafnodes and splitnodes
+            
+            if self.augmentation_invariance:
+                idxs, M, M_aug = batch
+            else:
+                idxs, M = batch
+
+            # calculate autoencoder loss
             rec_loss, embedded, reconstructed = autoencoder.loss(
-                batch, rec_loss_fn, self.device
+                [idxs, M], rec_loss_fn, self.device
             )
+            if self.augmentation_invariance:
+               rec_loss_aug, embedded_aug, reconstructed_aug = autoencoder.loss([idxs, M_aug], rec_loss_fn, self.device) 
+
 
             self.cluster_tree.assign_to_nodes(embedded)
 
             # calculate cluster loss
-            nc_loss = self.cluster_tree.nc_loss()
-            dc_loss = self.cluster_tree.dc_loss(len(M))
+            nc_loss = self.cluster_tree.nc_loss(augmented_batch = embedded_aug if self.augmentation_invariance else None)
+            dc_loss = self.cluster_tree.dc_loss(len(M), augmented_batch = embedded_aug if self.augmentation_invariance else None)
 
-            loss = nc_loss + dc_loss + rec_loss
+            if self.augmentation_invariance:
+                loss = nc_loss + dc_loss + (rec_loss + rec_loss_aug)/2
+            else:
+                loss = nc_loss + dc_loss + rec_loss
 
             optimizer.zero_grad()
             loss.backward()
@@ -900,12 +932,12 @@ class _DeepECT_Module(torch.nn.Module):
 
     def predict(
         self,
-        number_classes: int,
         dataloader: torch.utils.data.DataLoader,
         autoencoder: torch.nn.Module,
-    ) -> Tuple[np.array, np.array]:
+    ) -> PredictionClusterTree:
         """
-        Batchwise prediction of the given samples in the dataloader for a given number of classes.
+        Batchwise prediction of the given samples in the dataloader for a
+        given number of classes.
 
         Parameters
         ----------
@@ -924,192 +956,43 @@ class _DeepECT_Module(torch.nn.Module):
             The centers of the <numb_classes> clusters
         """
 
-        # get all resulting leaf nodes after cutting the tree for <number_classes> clusters
-        cluster_nodes = self.cluster_tree.get_all_result_nodes(number_classes)
+        # get prediction tree
+        pred_tree = transform_cluster_tree_to_pred_tree(self.cluster_tree)
 
         with torch.no_grad():
-            # perform prediction batchwise
-            predictions = []
             for batch in tqdm(dataloader, desc="Predict"):
                 # calculate embeddings of the samples which should be predicted
                 batch_data = batch[1].to(self.device)
+                indices = batch[0].to(self.device)
                 embeddings = autoencoder.encode(batch_data)
                 # assign the embeddings to the cluster tree
                 self.cluster_tree.assign_to_nodes(embeddings)
-                self.cluster_tree._assign_to_splitnodes(self.cluster_tree.root)
-                # retrieve a list which stores the assigned sample indices for each node in <cluster_nodes>
-                assignments_list = list(
-                    map(
-                        lambda node: (
-                            node.assignment_indices
-                            if node.assignment_indices is not None
-                            else torch.tensor([], dtype=torch.int, device=self.device)
-                        ),
-                        cluster_nodes,
-                    )
-                )
-                # create a 1-dim. tensor which stores the labels for the samples
-                labels = torch.cat(
-                    [
-                        torch.full(
-                            (len(assignments) if assignments is not None else 0,),
-                            i,
-                            dtype=torch.int,
-                        )
-                        for i, assignments in enumerate(assignments_list)
-                    ]
-                ).cpu()
-                # flatten the list of assignments for each node to a single 1-dim. tensor
-                assignments = torch.cat(assignments_list)
-                # sort the labels based on the ordering of the samples in the batch
-                sorted_assignment_indices = torch.argsort(assignments).cpu()
-                predictions.append(labels[sorted_assignment_indices])
+                # use assignment indices for prediction tree
+                for node in self.cluster_tree.leaf_nodes:
+                    pred_tree[node.id].assign_batch(indices, node.assignment_indices)
                 self.cluster_tree.clear_node_assignments()
 
-            # transform the predictions for each batch to a single output array for the whole dataset
-            predictions_numpy = torch.cat(predictions, dim=0).numpy()
+        return pred_tree
 
-            # return corresponding centers as well
-            centers = list(map(lambda node: node.center.data, cluster_nodes))
-            # reformat list of tensors to one sinlge tensor of shape (#leafnodes,#emb_features)
-            centers = torch.stack(centers, dim=0).cpu().numpy()
-
-        return predictions_numpy, centers
-    def predictTree(self, batch_data, batch_ids, labels):
-        leaf_nodes = self.cluster_tree.leaf_nodes
-        
-        # Extract the centers of the leaf nodes
-        leaf_centers = torch.stack([node.center.data for node in leaf_nodes]).to(batch_data.device)
-
-        # Compute the distances between each embedding and each leaf node center
-        with torch.no_grad():
-            distances = torch.cdist(batch_data, leaf_centers, p=2)
-
-        # Find the closest leaf node for each embedding
-        labels = torch.argmin(distances, dim=1).cpu().numpy()
-
-        # Create a mapping from node IDs to labels
-        node_label_map = {leaf_nodes[i].id: i for i in range(len(leaf_nodes))}
-
-        def recursive(node: Cluster_Node):
-            if node.is_leaf_node():
-                dp_ids = batch_ids[np.where(labels == node_label_map[node.id])[0]]
-                node.assignment_indices = torch.tensor(dp_ids, device=node.device)
-            else:
-                if node.left_child:
-                    recursive(node.left_child)
-                if node.right_child:
-                    recursive(node.right_child)
-                # Merge assignments from children nodes
-                if node.left_child and node.right_child:
-                    node.assignment_indices = torch.cat(
-                        [node.left_child.assignment_indices, node.right_child.assignment_indices], dim=0
-                    )
-            return node
-
-        return recursive(self.cluster_tree.root)
-
-    def dendrogram_purity(self, dataloader, autoencoder, device, num_classes: int, true_labels: np.ndarray) -> float:
-        all_embeddings = []
-        all_batch_ids = []
-        with torch.no_grad():
-            for batch in dataloader:
-                batch_ids, batch_data = batch
-                batch_data = batch_data.to(device)
-                embeddings = autoencoder.encode(batch_data)
-                all_embeddings.append(embeddings)
-                all_batch_ids.append(batch_ids)
-        
-        all_embeddings = torch.cat(all_embeddings)
-        all_batch_ids = torch.cat(all_batch_ids)
-
-        self.predictTree(all_embeddings, all_batch_ids, true_labels)
-    
-        nodes = self.cluster_tree.get_all_result_nodes(num_classes)
-        total_elements = sum(len(node.assignment_indices) for node in nodes if node.assignment_indices is not None)
-        print(f"Total elements: {total_elements}")
-
-        if total_elements == 0:
-            return 0.0
-
-        total_per_label_frequencies = dict(Counter((true_labels)))
-        total_per_label_pairs_count = {k: comb(v, 2, True) for k, v in total_per_label_frequencies.items()}
-        total_n_of_pairs = sum(total_per_label_pairs_count.values())
-        one_div_total_n_of_pairs = 1.0 / total_n_of_pairs
-        purity = 0.0
-
-        def calculate_purity(node, level):
-            nonlocal purity
-            if node.is_leaf_node():
-                node_total_dp_count = len(node.assignment_indices)
-                node_per_label_frequencies = dict(Counter((true_labels[node.assignment_indices.cpu().numpy()])))
-                node_per_label_pairs_count = {k: comb(v, 2) for k, v in node_per_label_frequencies.items()}
-            else:
-                left_child_per_label_freq, left_child_total_dp_count = calculate_purity(node.left_child, level + 1)
-                right_child_per_label_freq, right_child_total_dp_count = calculate_purity(node.right_child, level + 1)
-                node_total_dp_count = left_child_total_dp_count + right_child_total_dp_count
-                node_per_label_frequencies = {k: left_child_per_label_freq.get(k, 0) + right_child_per_label_freq.get(k, 0) 
-                                            for k in set(left_child_per_label_freq) | set(right_child_per_label_freq)}
-                node_per_label_pairs_count = {k: left_child_per_label_freq.get(k, 0) * right_child_per_label_freq.get(k, 0) 
-                                            for k in set(left_child_per_label_freq) & set(right_child_per_label_freq)}
-
-            for label, pair_count in node_per_label_pairs_count.items():
-                label_freq = node_per_label_frequencies[label]
-                if node_total_dp_count > 0:  # Avoid division by zero
-                    purity += one_div_total_n_of_pairs * label_freq / node_total_dp_count * pair_count
-            return node_per_label_frequencies, node_total_dp_count
-
-        calculate_purity(self.cluster_tree.root, 0)
-        return purity
-    def leaf_purity(self, ground_truth):
-        leaf_nodes = []
-        
-        def collect_leaf_nodes(node):
-            if node.is_leaf_node():
-                leaf_nodes.append(node)
-            else:
-                if node.left_child:
-                    collect_leaf_nodes(node.left_child)
-                if node.right_child:
-                    collect_leaf_nodes(node.right_child)
-
-        # Collect all leaf nodes
-        collect_leaf_nodes(self.cluster_tree.root)
-        
-        total_points = sum(len(node.assignment_indices) for node in leaf_nodes if node.assignment_indices is not None)
-        weighted_purity_sum = 0.0
-
-        for node in leaf_nodes:
-            if node.assignment_indices is not None and len(node.assignment_indices) > 0:
-                node_total_dp_count = len(node.assignment_indices)
-                node_label_count = dict(Counter([ground_truth[id] for id in node.assignment_indices.cpu().numpy()]))
-                max_purity = max(node_label_count.values())
-                purity = max_purity / node_total_dp_count
-                weighted_purity_sum += purity * node_total_dp_count
-
-        leaf_purity_value = weighted_purity_sum / total_points if total_points > 0 else 0
-        return leaf_purity_value
 
 def _deep_ect(
     X: np.ndarray,
-    labels:np.ndarray,
     batch_size: int,
     pretrain_optimizer_params: dict,
     clustering_optimizer_params: dict,
     pretrain_epochs: int,
-    number_classes: int,
     max_iterations: int,
     pruning_threshold: float,
     grow_interval: int,
     optimizer_class: torch.optim.Optimizer,
     rec_loss_fn: torch.nn.modules.loss._Loss,
-    autoencoder: torch.nn.Module,
+    autoencoder: _AbstractAutoencoder,
     embedding_size: int,
     max_leaf_nodes: int,
     custom_dataloaders: tuple,
     augmentation_invariance: bool,
     seed: int,
-    autoencoder_save_param_path: str = "pretrained_ae.pth",
+    autoencoder_save_param_path: str = "autoencoder.pth",
 ):
     """
     Start the actual DeepECT clustering procedure on the input data set.
@@ -1121,9 +1004,11 @@ def _deep_ect(
     batch_size : int
         size of the data batches
     pretrain_optimizer_params : dict
-        parameters of the optimizer for the pretraining of the autoencoder, includes the learning rate
+        parameters of the optimizer for the pretraining of the autoencoder,
+        includes the learning rate
     clustering_optimizer_params : dict
-        parameters of the optimizer for the actual clustering procedure, includes the learning rate
+        parameters of the optimizer for the actual clustering procedure,
+        includes the learning rate
     pretrain_epochs : int
         number of epochs for the pretraining of the autoencoder
     max_iterations : int
@@ -1135,15 +1020,18 @@ def _deep_ect(
     rec_loss_fn : torch.nn.modules.loss._Loss
         loss function for the reconstruction
     autoencoder : torch.nn.Module
-        the input autoencoder. If None a new FeedforwardAutoencoder will be created
+        the input autoencoder. If None a new FeedforwardAutoencoder will be
+        created
     embedding_size : int
         size of the embedding within the autoencoder
     custom_dataloaders : tuple
-        tuple consisting of a trainloader (random order) at the first and a test loader (non-random order) at the second position.
+        tuple consisting of a trainloader (random order) at the first and a
+        test loader (non-random order) at the second position.
         If None, the default dataloaders will be used
     augmentation_invariance : bool
-        If True, augmented samples provided in custom_dataloaders[0] will be used to learn
-        cluster assignments that are invariant to the augmentation transformations
+        If True, augmented samples provided in custom_dataloaders[0] will be
+        used to learn cluster assignments that are invariant to the
+        augmentation transformations
     random_state : np.random.RandomState
         use a fixed random state to get a repeatable solution
 
@@ -1158,13 +1046,20 @@ def _deep_ect(
     """
     # Get initial setting (device, dataloaders, pretrained AE and initial clustering result)
     save_ae_state_dict = not hasattr(autoencoder, "fitted") or not autoencoder.fitted
+    random_state = np.random.RandomState(seed)
+    seed = random_state.randint(np.iinfo(np.int32).max)
+
+    set_torch_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
     (
         device,
         trainloader,
         testloader,
         autoencoder,
         _,
-        n_clusters,
+        _,
         init_labels,
         init_leafnode_centers,
         _,
@@ -1180,7 +1075,7 @@ def _deep_ect(
         embedding_size,
         custom_dataloaders,
         KMeans,
-        {"random_state": seed},
+        {"random_state": seed, "n_init": 20, "init": "random", "tol": 0.0},
         seed,
     )
     print(device)
@@ -1207,70 +1102,73 @@ def _deep_ect(
         device,
     )
     # Get labels
-    DeepECT_labels, DeepECT_centers = deepect_module.predict(
-        number_classes, testloader, autoencoder
+    deepect_tree: PredictionClusterTree = deepect_module.predict(
+        testloader, autoencoder
     )
-    dendragrom = deepect_module.dendrogram_purity(trainloader,autoencoder,device,number_classes, labels)
-    leaf = deepect_module.leaf_purity(labels)
-    return deepect_module.cluster_tree, DeepECT_labels, DeepECT_centers, autoencoder,dendragrom, leaf
+    return deepect_tree, autoencoder
 
 
 class DeepECT:
 
     def __init__(
         self,
-        labels,
         batch_size: int = 256,
         pretrain_optimizer_params: dict = None,
         clustering_optimizer_params: dict = None,
         pretrain_epochs: int = 50,
-        number_classes: int = 2,
-        max_iterations: int = 10000,
+        max_iterations: int = 50000,
         grow_interval: int = 500,
         pruning_threshold: float = 0.1,
         optimizer_class: torch.optim.Optimizer = torch.optim.Adam,
         rec_loss_fn: torch.nn.modules.loss._Loss = torch.nn.MSELoss(),
-        autoencoder: torch.nn.Module = None,
+        autoencoder: _AbstractAutoencoder = None,
         embedding_size: int = 10,
         max_leaf_nodes: int = 20,
         custom_dataloaders: tuple = None,
         augmentation_invariance: bool = False,
-        seed: int = 42,
+        seed: np.random.RandomState = np.random.RandomState(42),
         autoencoder_param_path: str = None,
     ):
         """
         The Deep Embedded Cluster Tree (DeepECT) algorithm.
-        First, an autoencoder (AE) will be trained (will be skipped if input autoencoder is given).
-        Afterward, a cluter tree will be grown and the AE will be optimized using the DeepECT loss function.
+        First, an autoencoder (AE) will be trained (will be skipped if
+        input autoencoder is given). Afterward, a cluter tree will be grown
+        and the AE will be optimized using the DeepECT loss function.
 
         Parameters
         ----------
         batch_size : int
             size of the data batches (default: 256)
         pretrain_optimizer_params : dict
-            parameters of the optimizer for the pretraining of the autoencoder, includes the learning rate (default: {"lr": 1e-3})
+            parameters of the optimizer for the pretraining of the autoencoder,
+            includes the learning rate (default: {"lr": 1e-3})
         clustering_optimizer_params : dict
-            parameters of the optimizer for the actual clustering procedure, includes the learning rate (default: {"lr": 1e-4})
+            parameters of the optimizer for the actual clustering procedure,
+            includes the learning rate (default: {"lr": 1e-4})
         pretrain_epochs : int
             number of epochs for the pretraining of the autoencoder (default: 50)
         max_iterations : int
-            number of iteratins for the actual clustering procedure (default: 1000)
+            number of iteratins for the actual clustering procedure (default: 50000)
         optimizer_class : torch.optim.Optimizer
             the optimizer class (default: torch.optim.Adam)
         rec_loss_fn : torch.nn.modules.loss._Loss
             loss function for the reconstruction (default: torch.nn.MSELoss())
         autoencoder : torch.nn.Module
-            the input autoencoder. If None a new FeedforwardAutoencoder will be created (default: None)
+            the input autoencoder. If None a new FeedforwardAutoencoder will be
+            created (default: None)
         embedding_size : int
             size of the embedding within the autoencoder (default: 10)
         custom_dataloaders : tuple
-            tuple consisting of a trainloader (random order) at the first and a test loader (non-random order) at the second position.
+            tuple consisting of a trainloader (random order) at the first and
+            a test loader (non-random order) at the second position.
             If None, the default dataloaders will be used (default: None)
         augmentation_invariance : bool
-            If True, augmented samples provided in custom_dataloaders[0] will be used to learn
-            cluster assignments that are invariant to the augmentation transformations (default: False)
+            If True, augmented samples provided in custom_dataloaders[0] will be
+            used to learn cluster assignments that are invariant to the
+            augmentation transformations (default: False)
         random_state : np.random.RandomState
-            use a fixed random state to get a repeatable solution. Can also be of type int (default: None)
+            use a fixed random state to get a repeatable solution. Can also
+            be of type int (default: None)
 
         Attributes
         ----------
@@ -1285,10 +1183,6 @@ class DeepECT:
         autoencoder : torch.nn.Module
             The final autoencoder
         """
-        if max_leaf_nodes < number_classes:
-            raise ValueError(
-                f"The given maximal number of leaf nodes ({max_leaf_nodes}) is smaller than the given number of classes ({number_classes})"
-            )
         self.batch_size = batch_size
         self.pretrain_optimizer_params = (
             {"lr": 1e-3}
@@ -1300,9 +1194,7 @@ class DeepECT:
             if clustering_optimizer_params is None
             else clustering_optimizer_params
         )
-        self.labels = labels
         self.pretrain_epochs = pretrain_epochs
-        self.number_classes = number_classes
         self.max_iterations = max_iterations
         self.grow_interval = grow_interval
         self.pruning_threshold = pruning_threshold
@@ -1315,7 +1207,6 @@ class DeepECT:
         self.max_leaf_nodes = max_leaf_nodes
         self.seed = seed
         self.autoencoder_param_path = autoencoder_param_path
-        set_torch_seed(self.seed)
 
     def fit(self, X: np.ndarray) -> "DeepECT":
         """
@@ -1332,16 +1223,13 @@ class DeepECT:
         self : DeepECT
             this instance of the DeepECT algorithm
         """
-        # augmentation_invariance_check(self.augmentation_invariance, self.custom_dataloaders)
-
-        DeepECT_tree, DeepECT_labels, DeepECT_centers, autoencoder, dendrogram, leaf = _deep_ect(
+        augmentation_invariance_check(self.augmentation_invariance, self.custom_dataloaders)
+        tree, autoencoder = _deep_ect(
             X,
-            self.labels,
             self.batch_size,
             self.pretrain_optimizer_params,
             self.clustering_optimizer_params,
             self.pretrain_epochs,
-            self.number_classes,
             self.max_iterations,
             self.pruning_threshold,
             self.grow_interval,
@@ -1352,15 +1240,79 @@ class DeepECT:
             self.max_leaf_nodes,
             self.custom_dataloaders,
             self.augmentation_invariance,
-            self.seed,
+            self.seed.get_state()[1][0],# pass just an integer as seed
             self.autoencoder_param_path,
         )
-        self.DeepECT_labels_ = DeepECT_labels
-        self.DeepECT_cluster_centers_ = DeepECT_centers
-        self.DeepECT_tree_ = DeepECT_tree
+        self.tree_ = tree
         self.autoencoder = autoencoder
-        self.dendrogram = dendrogram
-        self.leaf = leaf
         return self
 
+
+if __name__ == "__main__":
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    def add_noise(batch):
+        mask = torch.empty(batch.shape, device=batch.device).bernoulli_(0.8)
+        return batch * mask
+    dataset, labels = load_reuters(return_X_y=True)
+    feature_dim = dataset.shape[1]
+    layer_dims = [500, 500, 2000, 10]
+    weight_initalizer=torch.nn.init.xavier_normal_
+    
+    loss_fn = torch.nn.MSELoss()
+    steps_per_layer = 20000
+    refine_training_steps = 50000
+
+    train_loader = torch.utils.data.DataLoader(dataset, batch_size=256, shuffle=True, pin_memory=True)
+    model = stacked_ae(feature_dim, layer_dims,
+            weight_initalizer,
+            activation_fn=lambda x: torch.nn.functional.relu(x),
+            loss_fn=loss_fn,
+            optimizer_fn=lambda parameters: torch.optim.Adam(parameters, lr=0.0001)).to(device)
+    model.pretrain(train_loader, steps_per_layer, corruption_fn=add_noise)
+    model.refine_training(train_loader, refine_training_steps, corruption_fn=add_noise)
+    path = f"layerWise_Reuters.pth"
+
+
+    model_path = path
+    os.makedirs(model_path,exist_ok=True)
+
+    torch.save(model.state_dict(), model_path+"/model.path")
+    print(f"Model saved to {model_path}")
+
+
+    model.fitted=True
+    deepect = DeepECT(autoencoder=model, max_leaf_nodes=20)
+    deepect.fit(dataset)
+    print(deepect.tree_.flat_accuracy(labels, n_clusters=10))
+    print(deepect.tree_.flat_nmi(labels, n_clusters=10))
+    print(deepect.tree_.flat_ari(labels, n_clusters=10))
+    print(deepect.tree_.dendrogram_purity(labels))
+    print(deepect.tree_.leaf_purity(labels))
+
+
+
+
+
+    # dataset, labels = load_reuters(return_X_y=True)
+    # print(dataset.shape[0])
+    # autoencoder = FeedforwardAutoencoder(
+    #     [dataset.shape[1], 500, 500, 2000, 10],
+    # )
+    # autoencoder.load_parameters(
+    #     "practical/DeepClustering/DeepECT/pretrained_AE_reuters.pth"
+    # )
+    # autoencoder.fitted = True
+    # deepect = DeepECT(
+    #     max_iterations=50000,
+    #     number_classes=4,
+    #     embedding_size=10,
+    #     pretrain_epochs=19,
+    #     max_leaf_nodes=12,
+    #     autoencoder=autoencoder,
+    #     autoencoder_param_path="practical/DeepClustering/DeepECT/pretrained_AE_reuters.pth",
+    # )
+    # deepect.fit(dataset)
+    # print(unsupervised_clustering_accuracy(labels, deepect.DeepECT_labels_))
+    # torch.save(deepect, "practical/DeepClustering/DeepECT/reuters_deepect.pth")
 

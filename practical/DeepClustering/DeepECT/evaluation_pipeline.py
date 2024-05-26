@@ -12,6 +12,8 @@ sys.path.append(os.getcwd())
 from enum import Enum
 
 import torch
+from torch.utils.data import Dataset, DataLoader
+from torchvision import datasets, transforms
 from clustpy.data import load_fmnist, load_mnist, load_reuters, load_usps
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
 from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
@@ -159,7 +161,7 @@ def flat(
 
     max_clustering_epochs = get_max_epoch_size(data, max_iterations, batch_size)
 
-    for method in FlatClusteringMethod:
+    for method in [FlatClusteringMethod.DEEPECT_AUGMENTED]:
         # Load the autoencoder parameters
         autoencoder.load_parameters(autoencoder_params_path)
         autoencoder.fitted = True
@@ -223,15 +225,37 @@ def flat(
         elif method == FlatClusteringMethod.DEEPECT_AUGMENTED:
             # Perform flat clustering with DeepECT and augmentation
             if dataset_type == DatasetType.REUTERS:
-                pass
+                results.append(
+                    {
+                        "dataset": dataset_type.value,
+                        "method": method.value,
+                        "nmi": "-",
+                        "acc": "-",
+                        "ari": "-",
+                        "seed": "-",
+                    }
+                )
+                continue
+            
+            custom_dataloaders = get_custom_dataloader_augmentations(data, dataset_type)
 
+            deepect = DeepECT(
+                autoencoder=autoencoder,
+                clustering_optimizer_params={"lr": 1e-4, "betas": (0.9, 0.999)},
+                max_leaf_nodes=max_leaf_nodes,
+                custom_dataloaders=custom_dataloaders,
+                augmentation_invariance=True,
+                random_state=np.random.RandomState(seed),
+            )
+            deepect.fit(data)
+            # Calculate evaluation metrics
             results.append(
                 {
                     "dataset": dataset_type.value,
                     "method": method.value,
-                    "nmi": 0,
-                    "acc": 0,
-                    "ari": 0,
+                    "nmi": deepect.tree_.flat_nmi(labels, n_clusters),
+                    "acc": deepect.tree_.flat_accuracy(labels, n_clusters),
+                    "ari": deepect.tree_.flat_ari(labels, n_clusters),
                     "seed": seed,
                 }
             )
@@ -293,9 +317,43 @@ def hierarchical(
         # Load the autoencoder parameters
         autoencoder.load_parameters(autoencoder_params_path)
         autoencoder.fitted = True
-        if method == HierarchicalClusteringMethod.IDEC_SINGLE:
-            # Perform hierarchical clustering with IDEC and single
-            pass
+        if method == FlatClusteringMethod.DEEPECT_AUGMENTED:
+            # Perform flat clustering with DeepECT and augmentation
+            if dataset_type == DatasetType.REUTERS:
+                results.append(
+                    {
+                        "dataset": dataset_type.value,
+                        "method": method.value,
+                        "nmi": "-",
+                        "acc": "-",
+                        "ari": "-",
+                        "seed": "-",
+                    }
+                )
+                continue
+            
+            custom_dataloaders = get_custom_dataloader_augmentations(data, dataset_type)
+
+            deepect = DeepECT(
+                autoencoder=autoencoder,
+                clustering_optimizer_params={"lr": 1e-4, "betas": (0.9, 0.999)},
+                max_leaf_nodes=max_leaf_nodes,
+                custom_dataloaders=custom_dataloaders,
+                augmentation_invariance=True,
+                random_state=np.random.RandomState(seed),
+            )
+            deepect.fit(data)
+            # Calculate evaluation metrics
+            results.append(
+                {
+                    "dataset": dataset_type.value,
+                    "method": method.value,
+                    "nmi": deepect.tree_.flat_nmi(labels, n_clusters),
+                    "acc": deepect.tree_.flat_accuracy(labels, n_clusters),
+                    "ari": deepect.tree_.flat_ari(labels, n_clusters),
+                    "seed": seed,
+                }
+            )
         elif method == HierarchicalClusteringMethod.IDEC_COMPLETE:
             # Perform hierarchical clustering with IDEC and complete
             pass
@@ -337,6 +395,57 @@ def hierarchical(
     df_results = pd.DataFrame(results)
     return df_results
 
+def get_custom_dataloader_augmentations(data: np.ndarray, dataset_type: DatasetType):
+    
+    augmentation_transform = transforms.Compose([
+        transforms.RandomAffine(degrees=15),
+        transforms.ToTensor(),
+        transforms.Lambda(lambda x:x*255)
+    ])
+
+    class Augmented_Dataset(Dataset):
+        def __init__(self, original_dataset, augmentation_transform, dataset_name):
+            if(dataset_name == DatasetType.USPS):
+                self.image_size = 16
+            else:
+                self.image_size = 28
+            
+            self.original_dataset = original_dataset
+            self.augmentation_transform = augmentation_transform
+
+        def __len__(self):
+            return len(self.original_dataset)
+
+        def __getitem__(self, idx):
+            original_image = self.original_dataset[idx]
+            augmented_image = self.augmentation_transform(transforms.ToPILImage()(original_image.reshape(self.image_size,self.image_size)/255))
+            return idx, original_image, augmented_image.reshape(self.image_size**2)
+
+    class Original_Dataset(Dataset):
+        def __init__(self, original_dataset, dataset_name):
+            if(dataset_name == DatasetType.USPS):
+                self.image_size = 16
+            else:
+                self.image_size = 28
+            self.original_dataset = original_dataset
+
+        def __len__(self):
+            return len(self.original_dataset)
+
+        def __getitem__(self, idx):
+            original_image = self.original_dataset[idx]
+            return idx, original_image.reshape(self.image_size**2)
+    
+    # Create an instance of the datasets
+    augmented_dataset = Augmented_Dataset(data, augmentation_transform, dataset_type)
+    original_dataset = Original_Dataset(data, dataset_type)
+
+    # Create the dataloaders
+    trainloader = DataLoader(augmented_dataset, batch_size=256, shuffle=True)
+    testloader = DataLoader(original_dataset, batch_size=256, shuffle=False)
+
+    return trainloader, testloader
+
 
 # Example usage
 def evaluate(
@@ -371,22 +480,22 @@ def evaluate(
         dataset=dataset,
         seed=seed,
     )
-    hierarchical_results = hierarchical(
-        autoencoder=autoencoder,
-        autoencoder_params_path=autoencoder_params_path,
-        dataset_type=dataset_type,
-        dataset=dataset,
-        seed=seed,
-    )
+    # hierarchical_results = hierarchical(
+    #     autoencoder=autoencoder,
+    #     autoencoder_params_path=autoencoder_params_path,
+    #     dataset_type=dataset_type,
+    #     dataset=dataset,
+    #     seed=seed,
+    # )
 
-    return flat_results, hierarchical_results
+    return flat_results
 
 
 if __name__ == "__main__":
 
     # Load the MNIST dataset and evaluate flat and hierarchical clustering
     flat_results, _ = evaluate(
-        init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.MNIST, seed=42
+        init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.MNIST, seed=42, autoencoder_params_path="practical/DeepClustering/DeepECT/pretrained_AE.pth"
     )
     print(_)
     # evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.USPS, seed=42)

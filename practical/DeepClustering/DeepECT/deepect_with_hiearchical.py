@@ -14,6 +14,7 @@ from sklearn.utils import check_random_state
 from clustpy.data.real_torchvision_data import load_mnist
 from clustpy.data import load_reuters
 from clustpy.metrics.clustering_metrics import unsupervised_clustering_accuracy
+from sklearn.metrics import normalized_mutual_info_score, adjusted_rand_score
 from tqdm import tqdm
 from scipy.special import comb
 
@@ -1362,5 +1363,35 @@ class DeepECT:
         self.dendrogram = dendrogram
         self.leaf = leaf
         return self
+if __name__ == "__main__":
+    dataset, labels = load_reuters(return_X_y=True)
+    print(dataset.shape[0])
+    autoencoder = FeedforwardAutoencoder(
+        [dataset.shape[1], 500, 500, 2000, 10],
+    )
+    # 手动加载参数并设置它
+    state_dict = torch.load("/Users/yy/LMU_Master_Practical_SoSe24/practical/DeepClustering/DeepECT/pretrained_AE_reuters.pth", map_location=torch.device('cpu'))
+    autoencoder.load_state_dict(state_dict)
+    autoencoder.fitted = True
+
+    deepect = DeepECT(
+        labels,
+        max_iterations=50000,
+        number_classes=4,
+        embedding_size=10,
+        pretrain_epochs=19,
+        max_leaf_nodes=12,
+        autoencoder=autoencoder,
+    )
+    deepect.autoencoder.load_state_dict(torch.load("/Users/yy/LMU_Master_Practical_SoSe24/practical/DeepClustering/DeepECT/pretrained_AE_reuters.pth", map_location=torch.device('cpu')))
+    deepect.fit(dataset)
+    
+    print("den:", deepect.dendrogram)
+    print("leaf:", deepect.leaf)
+    print("acc:", unsupervised_clustering_accuracy(labels, deepect.DeepECT_labels_))
+    print("nmi:", normalized_mutual_info_score(labels, deepect.DeepECT_labels_))
+    print("ari:", adjusted_rand_score(labels, deepect.DeepECT_labels_))
+
+    torch.save(deepect, "/Users/yy/LMU_Master_Practical_SoSe24/practical/DeepClustering/DeepECT/reuters_deepect.pth")
 
 

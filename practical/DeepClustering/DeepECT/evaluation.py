@@ -174,11 +174,9 @@ def flat(
                 {
                     "dataset": dataset_type.value,
                     "method": method.value,
-                    "nmi": deepect.tree_.flat_nmi(labels, n_clusters),
-                    "acc": deepect.tree_.flat_accuracy(labels, n_clusters),
-                    "ari": deepect.tree_.flat_ari(labels, n_clusters),
-                    "dp": deepect.tree_.dendrogram_purity(labels),
-                    "lp": deepect.tree_.leaf_purity(labels)[0],
+                    "nmi": calculate_nmi(labels, predicted_labels),
+                    "acc": calculate_acc(labels, predicted_labels),
+                    "ari": calculate_ari(labels, predicted_labels),
                     "seed": seed,
                 }
             )

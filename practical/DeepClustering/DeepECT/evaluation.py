@@ -3,6 +3,8 @@ import sys
 
 sys.path.append(os.getcwd())
 
+from enum import Enum
+
 import numpy as np
 import torch
 from clustpy.data import load_mnist
@@ -14,8 +16,22 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import normalized_mutual_info_score
 from sklearn.utils import Bunch
 
-from practical.DeepClustering import DeepECT
 
+class FlatClusteringMethod(Enum):
+    DEEPECT = 'DeepECT'
+    DEEPECT_AUGMENTED = 'DeepECT + Augmentation'
+    IDEC = 'IDEC'
+    KMEANS = 'KMeans'
+
+
+class HierarchicalClusteringMethod(Enum):
+    DEEPECT = 'DeepECT'
+    DEEPECT_AUGMENTED = 'DeepECT + Augmentation'
+    IDEC_SINGLE = 'IDEC + Single'
+    IDEC_COMPLETE = 'IDEC + Complete'
+    AE_BISECTING = 'Autoencoder + Bisection'
+    AE_SINGLE = 'Autoencoder + Single'
+    AE_COMPLETE = 'Autoencoder + Complete'
 
 def calculate_nmi(true_labels, predicted_labels):
     """
@@ -105,20 +121,30 @@ def flat(autoencoder: _AbstractAutoencoder, autoencoder_params_path: str, datase
     data = dataset['data']
     labels = dataset['target']
 
-    # TODO: Check for augmentation here
+
+    for method in FlatClusteringMethod:
+        if method == FlatClusteringMethod.KMEANS:
+            # Load the autoencoder parameters
+            autoencoder.load_parameters(autoencoder_params_path)
+            # Encode the data
+            embeddings = autoencoder.encode(torch.tensor(data, dtype=torch.float32)).detach().numpy()
+            # Perform flat clustering with KMeans
+            kmeans = KMeans(n_clusters=10, random_state=seed)
+            predicted_labels = kmeans.fit_predict(embeddings)
+            # Calculate evaluation metrics
+            nmi = calculate_nmi(labels, predicted_labels)
+            acc = calculate_acc(labels, predicted_labels)
+
+        elif method == FlatClusteringMethod.DEEPECT_AUGMENTED:
+            # Perform flat clustering with DeepECT and augmentation
+            pass
+        elif method == FlatClusteringMethod.IDEC:
+            # Perform flat clustering with IDEC
+            pass
     
-    # Encode the data
-    embeddings = autoencoder.encode(torch.tensor(data, dtype=torch.float32)).detach().numpy()
+
     
-    # Perform flat clustering with KMeans
-    kmeans = KMeans(n_clusters=10, random_state=seed)
-    predicted_labels = kmeans.fit_predict(embeddings)
     
-    # Calculate evaluation metrics
-    nmi = calculate_nmi(labels, predicted_labels)
-    acc = calculate_acc(labels, predicted_labels)
-    
-    return nmi, acc
 
 
 def hierarchical(autoencoder: _AbstractAutoencoder, autoencoder_params_path: str, dataset, seed: int):
@@ -129,30 +155,36 @@ def hierarchical(autoencoder: _AbstractAutoencoder, autoencoder_params_path: str
     data = dataset['data']
     labels = dataset['target']
 
-    # TODO: Check for augmentation here
-
-    
-    deepect = DeepECT(number_classes=10, autoencoder=autoencoder, max_leaf_nodes=20)
-    deepect.fit(data)
-    
-    # Evaluate the hierarchical clustering
-    embeddings = autoencoder.encode(torch.tensor(data, dtype=torch.float32)).detach().numpy()
-    embeddings = torch.tensor(embeddings)  # Convert to torch tensor if needed by the metrics functions
-    labels = torch.tensor(labels)
-    
-    dp = 0 #calculate_dendrogram_purity(deepect_model.tree, labels)
-    lp = 0 #calculate_leaf_purity(deepect_model.tree, labels)
-    
-    return dp, lp
+    for method in HierarchicalClusteringMethod:
+        if method == HierarchicalClusteringMethod.DEEPECT:
+            # Perform hierarchical clustering with DeepECT
+            pass
+        elif method == HierarchicalClusteringMethod.DEEPECT_AUGMENTED:
+            # Perform hierarchical clustering with DeepECT and augmentation
+            pass
+        elif method == HierarchicalClusteringMethod.IDEC_SINGLE:
+            # Perform hierarchical clustering with IDEC and single
+            pass
+        elif method == HierarchicalClusteringMethod.IDEC_COMPLETE:
+            # Perform hierarchical clustering with IDEC and complete
+            pass
+        elif method == HierarchicalClusteringMethod.AE_BISECTING:
+            # Perform hierarchical clustering with Autoencoder and bisection
+            pass
+        elif method == HierarchicalClusteringMethod.AE_SINGLE:
+            # Perform hierarchical clustering with Autoencoder and single
+            pass
+        elif method == HierarchicalClusteringMethod.AE_COMPLETE:
+            # Perform hierarchical clustering with Autoencoder and complete
+            pass
 
 # Example usage
 def evaluation(init_autoencoder: _AbstractAutoencoder, autoencoder_params_path: str, data_loading_fn, seed: int):
     dataset = data_loading_fn()
     autoencoder = pretraining(init_autoencoder=init_autoencoder, autoencoder_params_path=autoencoder_params_path, dataset=dataset, seed=seed)
-    nmi, acc = flat(autoencoder=autoencoder, autoencoder_params_path=autoencoder_params_path, dataset=dataset, seed=seed)
-    print(f"Flat Clustering - NMI: {nmi}, ACC: {acc}")
-    dp, lp = hierarchical(autoencoder=autoencoder, autoencoder_params_path=autoencoder_params_path, dataset=dataset, seed=seed)
-    print(f"Hierarchical Clustering - DP: {dp}, LP: {lp}")
+
+    flat(autoencoder=autoencoder, autoencoder_params_path=autoencoder_params_path, dataset=dataset, seed=seed)
+    hierarchical(autoencoder=autoencoder, autoencoder_params_path=autoencoder_params_path, dataset=dataset, seed=seed)
 
 # Load the MNIST dataset and evaluate flat and hierarchical clustering
 dataset = load_mnist()

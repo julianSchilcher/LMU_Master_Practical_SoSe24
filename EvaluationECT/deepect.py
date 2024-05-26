@@ -976,7 +976,7 @@ class _DeepECT_Module(torch.nn.Module):
 
         return predictions_numpy, centers
     def predictTree(self, batch_data, batch_ids, labels):
-        leaf_nodes = self.cluster_tree.get_all_leaf_nodes()
+        leaf_nodes = self.cluster_tree.leaf_nodes
         
         # Extract the centers of the leaf nodes
         leaf_centers = torch.stack([node.center.data for node in leaf_nodes]).to(batch_data.device)

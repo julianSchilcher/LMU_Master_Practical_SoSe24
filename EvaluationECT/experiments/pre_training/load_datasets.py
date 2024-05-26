@@ -10,7 +10,9 @@ from nltk.tokenize import word_tokenize
 import numpy as np
 from scipy.io import loadmat
 from sklearn.model_selection import train_test_split
-from experiments.pre_training.config import get_config
+import sys
+sys.path.append("/Users/yy/LMU_Master_Practical_SoSe24/EvaluationECT/experiments/pre_training/")
+from config import get_config
 from nltk.tokenize import word_tokenize
 from collections import defaultdict
 from torch.nn.utils.rnn import pad_sequence

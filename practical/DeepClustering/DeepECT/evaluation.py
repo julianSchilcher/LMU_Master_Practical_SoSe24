@@ -7,19 +7,18 @@ sys.path.append(os.getcwd())
 
 from enum import Enum
 
-import numpy as np
 import torch
 from clustpy.data import load_fmnist, load_mnist, load_reuters, load_usps
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
-from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
+from clustpy.deep.autoencoders._abstract_autoencoder import \
+    _AbstractAutoencoder
+from clustpy.deep.dec import IDEC
 from clustpy.metrics import unsupervised_clustering_accuracy
-from scipy.optimize import linear_sum_assignment
-from sklearn.cluster import AgglomerativeClustering, KMeans
-from sklearn.metrics import normalized_mutual_info_score, adjusted_rand_score
+from sklearn.cluster import KMeans
+from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
 from sklearn.utils import Bunch
 
 from practical.DeepClustering.DeepECT.deepect import DeepECT
-from clustpy.deep.dec import IDEC
 
 
 class DatasetType(Enum):
@@ -157,18 +156,22 @@ def flat(
             )
             # Perform flat clustering with KMeans
             kmeans = KMeans(n_clusters=n_clusters, random_state=seed)
+            print('fitting KMeans...')
             predicted_labels = kmeans.fit_predict(embeddings)
+            print('finished fitting Kmeans')
+
             # Calculate evaluation metrics
             results.append(
                 {
                     "dataset": dataset_type.value,
                     "method": method.value,
-                    "nmi": calculate_nmi(labels, predicted_labels),
-                    "acc": calculate_acc(labels, predicted_labels),
-                    "ari": calculate_ari(labels, predicted_labels),
+                    "nmi": deepect.tree_.flat_nmi(labels, n_clusters),
+                    "acc": deepect.tree_.flat_accuracy(labels, n_clusters),
+                    "ari": deepect.tree_.flat_ari(labels, n_clusters),
                     "seed": seed,
                 }
             )
+
         elif method == FlatClusteringMethod.DEEPECT:
             deepect = DeepECT(
                 autoencoder=autoencoder,
@@ -188,13 +191,43 @@ def flat(
                     "seed": seed,
                 }
             )
+
         elif method == FlatClusteringMethod.DEEPECT_AUGMENTED:
             # Perform flat clustering with DeepECT and augmentation
             if dataset_type == DatasetType.REUTERS:
                 pass
+
+            results.append(
+            {
+                "dataset": dataset_type.value,
+                "method": method.value,
+                "nmi": 0,
+                "acc": 0,
+                "ari": 0,
+                "seed": seed,
+            }
+            )
+
         elif method == FlatClusteringMethod.IDEC:
             # Perform flat clustering with IDEC
-            pass
+            idec = IDEC(n_clusters=n_clusters, autoencoder=autoencoder, clustering_epochs=5, random_state=seed)
+            print('fitting IDEC...')
+            idec.fit(data)
+            print('finished fitting IDEC')
+
+            predicted_labels = idec.predict(data)
+            # Calculate evaluation metrics
+            results.append(
+                {
+                    "dataset": dataset_type.value,
+                    "method": method.value,
+                    "nmi": calculate_nmi(labels, predicted_labels),
+                    "acc": calculate_acc(labels, predicted_labels),
+                    "ari": calculate_ari(labels, predicted_labels),
+                    "seed": seed,
+                }
+            )
+        
     df_results = pd.DataFrame(results)
     return df_results
 
@@ -264,7 +297,7 @@ def hierarchical(
 
 
 # Example usage
-def evaluation(
+def evaluate(
     init_autoencoder: _AbstractAutoencoder,
     dataset_type: DatasetType,
     seed: int,
@@ -305,10 +338,8 @@ def evaluation(
     )
 
     return flat_results, hierarchical_results
-
-
 # Load the MNIST dataset and evaluate flat and hierarchical clustering
-evaluation(
+evaluate(
     init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.MNIST, seed=42
 )
 # evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.USPS, seed=42)

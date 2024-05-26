@@ -1,11 +1,16 @@
 from practical.DeepClustering.DeepECT.deepect import (
     Cluster_Node,
     _DeepECT_Module,
+    DeepECT
 )
 import numpy as np
 import torch
 import torch.utils.data
 from clustpy.metrics.clustering_metrics import unsupervised_clustering_accuracy
+from clustpy.deep.autoencoders import FeedforwardAutoencoder
+
+from torch.utils.data import Dataset, DataLoader
+from torchvision import datasets, transforms
 
 
 def test_Cluster_Node():
@@ -330,3 +335,79 @@ def test_adaption_inner_nodes():
     # compare results
     assert torch.all(torch.eq(tree.root.center, new_root))
     assert torch.all(torch.eq(tree.root.left_child.center, new_root_left))
+
+
+transform = transforms.Compose([transforms.ToTensor()])
+mnist_dataset = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
+
+# augmentation_transform = transforms.Compose([
+#     transforms.RandomAffine(degrees=20, translate=(0.1,0.1), scale=(0.9, 1.1)),
+#     transforms.ColorJitter(brightness=0.2, contrast=0.2),
+#     transforms.RandomRotation(10),
+#     transforms.ToTensor()
+# ])
+augmentation_transform = transforms.Compose([
+    transforms.RandomAffine(degrees=15),
+    transforms.ToTensor()
+])
+
+class MNISTWithAugmentation(Dataset):
+    def __init__(self, original_dataset, augmentation_transform):
+        self.original_dataset = original_dataset
+        self.augmentation_transform = augmentation_transform
+
+    def __len__(self):
+        return len(self.original_dataset)
+
+    def __getitem__(self, idx):
+        original_image, label = self.original_dataset[idx]
+        augmented_image = self.augmentation_transform(transforms.ToPILImage()(original_image))
+        return idx, original_image.reshape(28*28), augmented_image.reshape(28*28)
+    
+class MNIST(Dataset):
+    def __init__(self, original_dataset):
+        self.original_dataset = original_dataset
+
+    def __len__(self):
+        return len(self.original_dataset)
+
+    def __getitem__(self, idx):
+        original_image, label = self.original_dataset[idx]
+        return idx, original_image.reshape(28*28)
+
+class MNISTWithAugmentation(Dataset):
+    def __init__(self, original_dataset, augmentation_transform):
+        self.original_dataset = original_dataset
+        self.augmentation_transform = augmentation_transform
+
+    def __len__(self):
+        return len(self.original_dataset)
+
+    def __getitem__(self, idx):
+        original_image, label = self.original_dataset[idx]
+        augmented_image = self.augmentation_transform(transforms.ToPILImage()(original_image))
+        return idx, original_image.reshape(28*28), augmented_image.reshape(28*28)
+
+# Create an instance of the custom Dataset
+augmented_mnist_dataset = MNISTWithAugmentation(mnist_dataset, augmentation_transform)
+
+# Step 4: Create a DataLoader
+trainloader = DataLoader(augmented_mnist_dataset, batch_size=256, shuffle=True)
+testloader = DataLoader(MNIST(mnist_dataset), batch_size=256, shuffle=False)
+
+# # Example of iterating over the DataLoader
+# for idx, original_batch, augmented_batch in dataloader:
+#     print(f"Indexes: {idx}")
+#     print(f"Original Batch Shape: {original_batch.shape}")
+#     print(f"Augmented Batch Shape: {augmented_batch.shape}")
+#     break  # Just to print one batch and stop
+
+
+autoencoder = FeedforwardAutoencoder([784, 500, 500, 2000, 10])
+autoencoder.load_state_dict(
+    torch.load("practical/DeepClustering/DeepECT/pretrained_AE.pth")
+)
+autoencoder.fitted = True
+deepect = DeepECT(number_classes=10, autoencoder=autoencoder, max_leaf_nodes=20, custom_dataloaders=(trainloader, testloader), augmentation_invariance=True)
+deepect.fit(mnist_dataset.data.reshape(len(mnist_dataset), 784).numpy())
+print(unsupervised_clustering_accuracy(mnist_dataset.targets.numpy(), deepect.DeepECT_labels_))

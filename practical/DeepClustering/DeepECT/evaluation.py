@@ -1,6 +1,8 @@
 import os
 import sys
 
+import pandas as pd
+
 sys.path.append(os.getcwd())
 
 from enum import Enum
@@ -16,6 +18,12 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import normalized_mutual_info_score
 from sklearn.utils import Bunch
 
+
+class DatasetType(Enum):
+    MNIST = 'MNIST'
+    FASHION_MNIST = 'Fashion MNIST'
+    USPS = 'USPS'
+    REUTERS = 'Reuters'
 
 class FlatClusteringMethod(Enum):
     DEEPECT = 'DeepECT'
@@ -120,6 +128,7 @@ def flat(autoencoder: _AbstractAutoencoder, autoencoder_params_path: str, datase
     # Load and preprocess data
     data = dataset['data']
     labels = dataset['target']
+    results = []
 
 
     for method in FlatClusteringMethod:
@@ -134,6 +143,11 @@ def flat(autoencoder: _AbstractAutoencoder, autoencoder_params_path: str, datase
             # Calculate evaluation metrics
             nmi = calculate_nmi(labels, predicted_labels)
             acc = calculate_acc(labels, predicted_labels)
+            results.append({
+                'method': method.value,
+                'nmi': nmi,
+                'acc': acc
+            })
 
         elif method == FlatClusteringMethod.DEEPECT_AUGMENTED:
             # Perform flat clustering with DeepECT and augmentation
@@ -141,7 +155,9 @@ def flat(autoencoder: _AbstractAutoencoder, autoencoder_params_path: str, datase
         elif method == FlatClusteringMethod.IDEC:
             # Perform flat clustering with IDEC
             pass
-    
+    df_results = pd.DataFrame(results)
+    print('\nFlat Clustering Results:')
+    print(df_results)
 
     
     
@@ -154,10 +170,18 @@ def hierarchical(autoencoder: _AbstractAutoencoder, autoencoder_params_path: str
     # Load and preprocess data
     data = dataset['data']
     labels = dataset['target']
+    results = []
 
     for method in HierarchicalClusteringMethod:
         if method == HierarchicalClusteringMethod.DEEPECT:
             # Perform hierarchical clustering with DeepECT
+            dp = 0
+            lp = 0
+            results.append({
+                'method': method.value,
+                'dp': dp,
+                'lp': lp
+            })
             pass
         elif method == HierarchicalClusteringMethod.DEEPECT_AUGMENTED:
             # Perform hierarchical clustering with DeepECT and augmentation
@@ -178,15 +202,28 @@ def hierarchical(autoencoder: _AbstractAutoencoder, autoencoder_params_path: str
             # Perform hierarchical clustering with Autoencoder and complete
             pass
 
+    df_results = pd.DataFrame(results)
+    print('\nHierarchical Clustering Results:')
+    print(df_results)
+
 # Example usage
-def evaluation(init_autoencoder: _AbstractAutoencoder, autoencoder_params_path: str, data_loading_fn, seed: int):
-    dataset = data_loading_fn()
+def evaluation(init_autoencoder: _AbstractAutoencoder, dataset_type: DatasetType, seed: int, autoencoder_params_path: str = None):
+    if dataset_type == DatasetType.MNIST:
+        dataset = load_mnist()
+    elif dataset_type == DatasetType.FASHION_MNIST:
+        pass
+    elif dataset_type == DatasetType.USPS:
+        pass
+    elif dataset_type == DatasetType.REUTERS:
+        pass
+
+    if autoencoder_params_path is None:
+        autoencoder_params_path = f'practical/DeepClustering/DeepECT/pretrained_autoencoders/{dataset_type.value}_autoencoder_pretrained.pth'
+
     autoencoder = pretraining(init_autoencoder=init_autoencoder, autoencoder_params_path=autoencoder_params_path, dataset=dataset, seed=seed)
 
     flat(autoencoder=autoencoder, autoencoder_params_path=autoencoder_params_path, dataset=dataset, seed=seed)
     hierarchical(autoencoder=autoencoder, autoencoder_params_path=autoencoder_params_path, dataset=dataset, seed=seed)
 
 # Load the MNIST dataset and evaluate flat and hierarchical clustering
-dataset = load_mnist()
-autoencoder_params_path = 'practical/DeepClustering/DeepECT/pretrained_autoencoders/mnist_autoencoder_pretrained.pth'
-evaluation(init_autoencoder=FeedforwardAutoencoder, autoencoder_params_path=autoencoder_params_path, data_loading_fn=load_mnist, seed=42)
+evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.MNIST, seed=42)

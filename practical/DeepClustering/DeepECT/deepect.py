@@ -1,5 +1,4 @@
-from queue import Queue
-from typing import List, Tuple, Union
+from typing import List, Union
 import os
 import sys
 
@@ -15,10 +14,7 @@ from clustpy.deep._train_utils import get_standard_initial_deep_clustering_setti
 from clustpy.deep._utils import set_torch_seed
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
 from sklearn.cluster import KMeans
-from sklearn.utils import check_random_state
 from clustpy.data.real_torchvision_data import load_mnist
-from clustpy.data import load_reuters
-from clustpy.metrics.clustering_metrics import unsupervised_clustering_accuracy
 from tqdm import tqdm
 from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
 
@@ -378,7 +374,6 @@ class Cluster_Tree:
                 )
             return node.assignment_indices, node.assignments
 
-
     def nc_loss(self, augmented_batch: torch.Tensor = None) -> torch.Tensor:
         """
         Function for calculating the nc loss used for
@@ -421,11 +416,13 @@ class Cluster_Tree:
                 if augmented_batch is not None:
                     sum_assignments_aug = torch.sum(augmented_batch[indices], dim=0)
                     sum_assignments = torch.add(sum_assignments, sum_assignments_aug)
-                    return sum_assignments/(2*len(assignments))
+                    return sum_assignments / (2 * len(assignments))
                 else:
-                    return sum_assignments/len(assignments)
-            
-            leafnode_minibatch_centers = list(map(calc_assignment_center,leafnode_assignments))
+                    return sum_assignments / len(assignments)
+
+            leafnode_minibatch_centers = list(
+                map(calc_assignment_center, leafnode_assignments)
+            )
 
         # reformat list of tensors to one sinlge tensor of shape (#leafnodes,#emb_features)
         leafnode_minibatch_centers_tensor = torch.stack(
@@ -440,7 +437,9 @@ class Cluster_Tree:
         loss = torch.sum(distance) / len(leafnode_center_tensor)
         return loss
 
-    def dc_loss(self, batchsize: int, augmented_batch: torch.Tensor = None) -> torch.Tensor:
+    def dc_loss(
+        self, batchsize: int, augmented_batch: torch.Tensor = None
+    ) -> torch.Tensor:
         """
         Function for calculating the overall dc loss used for
         improving the embedded space for a better clustering result.
@@ -474,7 +473,7 @@ class Cluster_Tree:
         self,
         root: Cluster_Node,
         sibling_loss: List[torch.Tensor],
-        augmented_batch: torch.Tensor
+        augmented_batch: torch.Tensor,
     ) -> int:
         """
         Helper function for recursively calculating the
@@ -507,9 +506,13 @@ class Cluster_Tree:
         # Calculate lc loss for siblings if they exist
         if root.left_child and root.right_child:
             # calculate dc loss for left child with respect to the right child
-            loss_left = self._single_sibling_loss(root.left_child, root.right_child, augmented_batch)
+            loss_left = self._single_sibling_loss(
+                root.left_child, root.right_child, augmented_batch
+            )
             # calculate dc loss for right child with respect to the left child
-            loss_right = self._single_sibling_loss(root.right_child, root.left_child, augmented_batch)
+            loss_right = self._single_sibling_loss(
+                root.right_child, root.left_child, augmented_batch
+            )
             # store the losses
             sibling_loss.extend([loss_left, loss_right])
 
@@ -543,11 +546,24 @@ class Cluster_Tree:
         # transform tensor from 1d to 2d
         sibling_direction = sibling_direction[None]
         # project each sample assigned to <node> in the direction of its sibling and sum up the absolute projection values for each sample
-        absolute_projections = torch.abs(torch.matmul(sibling_direction, -(node.assignments - node.center.detach()).T))
+        absolute_projections = torch.abs(
+            torch.matmul(
+                sibling_direction, -(node.assignments - node.center.detach()).T
+            )
+        )
         # add projections of augmented samples if they exist
         if augmented_batch is not None:
-            absolute_projections_aug = torch.abs(torch.matmul(sibling_direction, -(augmented_batch[node.assignment_indices] - node.center.detach()).T))
-            absolute_projections = torch.add(absolute_projections, absolute_projections_aug)
+            absolute_projections_aug = torch.abs(
+                torch.matmul(
+                    sibling_direction,
+                    -(
+                        augmented_batch[node.assignment_indices] - node.center.detach()
+                    ).T,
+                )
+            )
+            absolute_projections = torch.add(
+                absolute_projections, absolute_projections_aug
+            )
         loss = torch.sum(absolute_projections)
         return loss
 
@@ -699,7 +715,7 @@ class Cluster_Tree:
         autoencoder: torch.nn.Module,
         optimizer: torch.optim.Optimizer,
         augmentation_invariance: bool,
-        seed: int,
+        random_state: np.random.RandomState,
         device: Union[torch.device | str],
     ) -> None:
         """Grows the tree at the leaf node with the highest squared distance
@@ -751,7 +767,11 @@ class Cluster_Tree:
                 if highest_dist_leaf_node.assignments is not None:
                     assignments.append(highest_dist_leaf_node.assignments.cpu())
             child_assignments = KMeans(
-                n_clusters=2, init="random", tol=0.0, n_init=20, random_state=seed
+                n_clusters=2,
+                init="random",
+                tol=0.0,
+                n_init=20,
+                random_state=random_state,
             ).fit(torch.cat(assignments, dim=0).numpy())
             print(f"Leaf assignments: {len(child_assignments.labels_)}")
             child_weights = np.array(
@@ -816,8 +836,8 @@ class _DeepECT_Module(torch.nn.Module):
         init_leafnode_centers: np.ndarray,
         init_labels: np.ndarray,
         device: torch.device,
-        seed: int,
-        augmentation_invariance: bool = False
+        random_state: np.random.RandomState,
+        augmentation_invariance: bool = False,
     ):
         super().__init__()
         self.augmentation_invariance = augmentation_invariance
@@ -834,7 +854,7 @@ class _DeepECT_Module(torch.nn.Module):
             device,
         )
         self.device = device
-        self.random_state = seed
+        self.random_state = random_state
 
     def fit(
         self,
@@ -878,7 +898,7 @@ class _DeepECT_Module(torch.nn.Module):
                     autoencoder,
                     optimizer,
                     self.augmentation_invariance,
-                    seed=self.random_state,
+                    random_state=self.random_state,
                     device=device,
                 )
 
@@ -890,7 +910,7 @@ class _DeepECT_Module(torch.nn.Module):
                 # after full epoch shuffle again
                 train_iterator = iter(trainloader)
                 batch = next(train_iterator)
-            
+
             if self.augmentation_invariance:
                 idxs, M, M_aug = batch
             else:
@@ -901,17 +921,23 @@ class _DeepECT_Module(torch.nn.Module):
                 [idxs, M], rec_loss_fn, self.device
             )
             if self.augmentation_invariance:
-               rec_loss_aug, embedded_aug, reconstructed_aug = autoencoder.loss([idxs, M_aug], rec_loss_fn, self.device) 
-
+                rec_loss_aug, embedded_aug, reconstructed_aug = autoencoder.loss(
+                    [idxs, M_aug], rec_loss_fn, self.device
+                )
 
             self.cluster_tree.assign_to_nodes(embedded)
 
             # calculate cluster loss
-            nc_loss = self.cluster_tree.nc_loss(augmented_batch = embedded_aug if self.augmentation_invariance else None)
-            dc_loss = self.cluster_tree.dc_loss(len(M), augmented_batch = embedded_aug if self.augmentation_invariance else None)
+            nc_loss = self.cluster_tree.nc_loss(
+                augmented_batch=embedded_aug if self.augmentation_invariance else None
+            )
+            dc_loss = self.cluster_tree.dc_loss(
+                len(M),
+                augmented_batch=embedded_aug if self.augmentation_invariance else None,
+            )
 
             if self.augmentation_invariance:
-                loss = nc_loss + dc_loss + (rec_loss + rec_loss_aug)/2
+                loss = nc_loss + dc_loss + (rec_loss + rec_loss_aug) / 2
             else:
                 loss = nc_loss + dc_loss + rec_loss
 
@@ -985,7 +1011,7 @@ def _deep_ect(
     max_leaf_nodes: int,
     custom_dataloaders: tuple,
     augmentation_invariance: bool,
-    seed: int,
+    random_state: np.random.RandomState,
     autoencoder_save_param_path: str = "pretrained_ae.pth",
 ):
     """
@@ -1040,7 +1066,7 @@ def _deep_ect(
     """
     # Get initial setting (device, dataloaders, pretrained AE and initial clustering result)
     save_ae_state_dict = not hasattr(autoencoder, "fitted") or not autoencoder.fitted
-    set_torch_seed(seed)
+    set_torch_seed(random_state)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
@@ -1066,15 +1092,19 @@ def _deep_ect(
         embedding_size,
         custom_dataloaders,
         KMeans,
-        {"random_state": seed, "n_init": 20, "init": "random", "tol": 0.0},
-        seed,
+        {"random_state": random_state, "n_init": 20, "init": "random", "tol": 0.0},
+        random_state,
     )
     print(device)
     if save_ae_state_dict:
         autoencoder.save_parameters(autoencoder_save_param_path)
     # Setup DeepECT Module
     deepect_module = _DeepECT_Module(
-        init_leafnode_centers, init_labels, device, seed, augmentation_invariance
+        init_leafnode_centers,
+        init_labels,
+        device,
+        random_state,
+        augmentation_invariance,
     ).to(device)
     # Use DeepECT optimizer parameters (usually learning rate is reduced by a magnitude of 10)
     optimizer = optimizer_class(
@@ -1117,7 +1147,7 @@ class DeepECT:
         max_leaf_nodes: int = 20,
         custom_dataloaders: tuple = None,
         augmentation_invariance: bool = False,
-        seed: np.random.RandomState = np.random.RandomState(42),
+        random_state: np.random.RandomState = np.random.RandomState(42),
         autoencoder_param_path: str = None,
     ):
         """
@@ -1196,7 +1226,7 @@ class DeepECT:
         self.custom_dataloaders = custom_dataloaders
         self.augmentation_invariance = augmentation_invariance
         self.max_leaf_nodes = max_leaf_nodes
-        self.seed = seed
+        self.random_state = random_state
         self.autoencoder_param_path = autoencoder_param_path
 
     def fit(self, X: np.ndarray) -> "DeepECT":
@@ -1214,7 +1244,9 @@ class DeepECT:
         self : DeepECT
             this instance of the DeepECT algorithm
         """
-        augmentation_invariance_check(self.augmentation_invariance, self.custom_dataloaders)
+        augmentation_invariance_check(
+            self.augmentation_invariance, self.custom_dataloaders
+        )
         tree, autoencoder = _deep_ect(
             X,
             self.batch_size,
@@ -1231,7 +1263,7 @@ class DeepECT:
             self.max_leaf_nodes,
             self.custom_dataloaders,
             self.augmentation_invariance,
-            self.seed.get_state()[1][0],# pass just an integer as seed
+            self.random_state,
             self.autoencoder_param_path,
         )
         self.tree_ = tree

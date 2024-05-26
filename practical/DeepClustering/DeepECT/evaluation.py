@@ -1,6 +1,7 @@
 import os
 import sys
 
+import numpy as np
 import pandas as pd
 
 sys.path.append(os.getcwd())
@@ -10,8 +11,7 @@ from enum import Enum
 import torch
 from clustpy.data import load_fmnist, load_mnist, load_reuters, load_usps
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
-from clustpy.deep.autoencoders._abstract_autoencoder import \
-    _AbstractAutoencoder
+from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
 from clustpy.deep.dec import IDEC
 from clustpy.metrics import unsupervised_clustering_accuracy
 from sklearn.cluster import KMeans
@@ -109,6 +109,7 @@ def pretraining(
 
     if not os.path.exists(autoencoder_params_path):
         # Train the autoencoder if parameters file does not exist
+        autoencoder.to(device)
         autoencoder.fit(
             n_epochs=50,
             optimizer_params={"lr": 0.0001},
@@ -135,6 +136,7 @@ def flat(
 ):
     # Set the seed for reproducibility
     torch.manual_seed(seed)
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     # Load and preprocess data
     data = dataset["data"]
@@ -147,18 +149,25 @@ def flat(
         # Load the autoencoder parameters
         autoencoder.load_parameters(autoencoder_params_path)
         autoencoder.fitted = True
+
         if method == FlatClusteringMethod.KMEANS:
+            autoencoder.to(device)
             # Encode the data
             embeddings = (
-                autoencoder.encode(torch.tensor(data, dtype=torch.float32))
+                autoencoder.encode(
+                    torch.tensor(data, dtype=torch.float32, device=device)
+                )
                 .detach()
+                .cpu()
                 .numpy()
             )
             # Perform flat clustering with KMeans
-            kmeans = KMeans(n_clusters=n_clusters, random_state=seed)
-            print('fitting KMeans...')
+            kmeans = KMeans(
+                n_clusters=n_clusters, init="random", n_init=20, random_state=seed
+            )
+            print("fitting KMeans...")
             predicted_labels = kmeans.fit_predict(embeddings)
-            print('finished fitting Kmeans')
+            print("finished fitting Kmeans")
 
             # Calculate evaluation metrics
             results.append(
@@ -168,16 +177,18 @@ def flat(
                     "nmi": deepect.tree_.flat_nmi(labels, n_clusters),
                     "acc": deepect.tree_.flat_accuracy(labels, n_clusters),
                     "ari": deepect.tree_.flat_ari(labels, n_clusters),
+                    "dp": deepect.tree_.dendrogram_purity(labels),
+                    "lp": deepect.tree_.leaf_purity(labels)[0],
                     "seed": seed,
                 }
             )
-
         elif method == FlatClusteringMethod.DEEPECT:
+            autoencoder.to(device)
             deepect = DeepECT(
                 autoencoder=autoencoder,
                 clustering_optimizer_params={"lr": 1e-4, "betas": (0.9, 0.999)},
                 max_leaf_nodes=max_leaf_nodes,
-                seed=seed,
+                random_state=np.random.RandomState(seed),
             )
             deepect.fit(data)
             # Calculate evaluation metrics
@@ -198,22 +209,27 @@ def flat(
                 pass
 
             results.append(
-            {
-                "dataset": dataset_type.value,
-                "method": method.value,
-                "nmi": 0,
-                "acc": 0,
-                "ari": 0,
-                "seed": seed,
-            }
+                {
+                    "dataset": dataset_type.value,
+                    "method": method.value,
+                    "nmi": 0,
+                    "acc": 0,
+                    "ari": 0,
+                    "seed": seed,
+                }
             )
 
         elif method == FlatClusteringMethod.IDEC:
             # Perform flat clustering with IDEC
-            idec = IDEC(n_clusters=n_clusters, autoencoder=autoencoder, clustering_epochs=5, random_state=seed)
-            print('fitting IDEC...')
+            idec = IDEC(
+                n_clusters=n_clusters,
+                autoencoder=autoencoder,
+                clustering_epochs=5,
+                random_state=seed,
+            )
+            print("fitting IDEC...")
             idec.fit(data)
-            print('finished fitting IDEC')
+            print("finished fitting IDEC")
 
             predicted_labels = idec.predict(data)
             # Calculate evaluation metrics
@@ -227,7 +243,7 @@ def flat(
                     "seed": seed,
                 }
             )
-        
+
     df_results = pd.DataFrame(results)
     return df_results
 
@@ -253,30 +269,7 @@ def hierarchical(
         # Load the autoencoder parameters
         autoencoder.load_parameters(autoencoder_params_path)
         autoencoder.fitted = True
-        if method == HierarchicalClusteringMethod.DEEPECT:
-            # Perform hierarchical clustering with DeepECT
-            deepect = DeepECT(
-                autoencoder=autoencoder,
-                clustering_optimizer_params={"lr": 1e-4, "betas": (0.9, 0.999)},
-                max_leaf_nodes=max_leaf_nodes,
-                seed=seed,
-            )
-            deepect.fit(data)
-            results.append(
-                {
-                    "dataset": dataset_type.value,
-                    "method": method.value,
-                    "dp": deepect.tree_.dendrogram_purity(labels),
-                    "lp": deepect.tree_.leaf_purity(labels)[0],
-                    "seed": seed,
-                }
-            )
-        elif method == HierarchicalClusteringMethod.DEEPECT_AUGMENTED:
-            # Perform hierarchical clustering with DeepECT and augmentation
-            pass
-            if dataset_type == DatasetType.REUTERS:
-                pass
-        elif method == HierarchicalClusteringMethod.IDEC_SINGLE:
+        if method == HierarchicalClusteringMethod.IDEC_SINGLE:
             # Perform hierarchical clustering with IDEC and single
             pass
         elif method == HierarchicalClusteringMethod.IDEC_COMPLETE:
@@ -313,7 +306,7 @@ def evaluate(
         dataset = load_reuters()
 
     if autoencoder_params_path is None:
-        autoencoder_params_path = f"practical/DeepClustering/DeepECT/pretrained_autoencoders/{dataset_type.value}_autoencoder_pretrained.pth"
+        autoencoder_params_path = f"practical/DeepClustering/DeepECT/pretrained_autoencoders/{dataset['dataset_name']}_autoencoder_pretrained.pth"
 
     autoencoder = pretraining(
         init_autoencoder=init_autoencoder,
@@ -338,6 +331,8 @@ def evaluate(
     )
 
     return flat_results, hierarchical_results
+
+
 # Load the MNIST dataset and evaluate flat and hierarchical clustering
 evaluate(
     init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.MNIST, seed=42

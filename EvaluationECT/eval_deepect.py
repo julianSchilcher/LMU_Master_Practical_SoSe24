@@ -65,7 +65,8 @@ def main():
         deepect.fit(data)
         print(len(deepect.DeepECT_labels_))
         print(deepect.dendrogram)
-        print(deepect.leaf)
+        leaf_purity_value = deepect.leaf
+        print(leaf_purity_value)
         
         # test the model
         evaluate(labels, deepect.DeepECT_labels_)

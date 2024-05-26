@@ -5,6 +5,8 @@ import sys
 import numpy as np
 import pandas as pd
 
+
+from baseline_hierachical.ae_plus import *
 sys.path.append(os.getcwd())
 
 from enum import Enum
@@ -19,6 +21,8 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
 from sklearn.utils import Bunch
 
+import sys
+sys.path.append("/Users/zy/LMU_Master_Practical_SoSe24/")
 from practical.DeepClustering.DeepECT.deepect import DeepECT
 
 
@@ -126,10 +130,11 @@ def pretraining(
         print("Autoencoder pretraining complete and saved.")
     else:
         # Load the existing parameters
-        autoencoder.load_parameters(autoencoder_params_path)
+        autoencoder.load_parameters(autoencoder_params_path, map_location=torch.device(device)) 
         print("Autoencoder parameters loaded from file.")
 
     return autoencoder
+
 
 
 def flat(
@@ -296,13 +301,38 @@ def hierarchical(
             pass
         elif method == HierarchicalClusteringMethod.AE_BISECTING:
             # Perform hierarchical clustering with Autoencoder and bisection
-            pass
+            dendrogram, leaf = ae_bisecting(data=data, labels=labels, autoencoder=autoencoder, max_leaf_nodes=max_leaf_nodes, n_clusters=n_clusters, seed=seed)
+            results.append(
+                {"dataset": dataset_type.value,
+                "method": method.value,
+                "dp": dendrogram,
+                "lp": leaf,
+                "seed": seed}
+            )
         elif method == HierarchicalClusteringMethod.AE_SINGLE:
             # Perform hierarchical clustering with Autoencoder and single
-            pass
+            results = ae_single(data=data, labels=labels, autoencoder=autoencoder, max_leaf_nodes=max_leaf_nodes, n_clusters=n_clusters, seed = seed)
+            results.append(
+                {"dataset": dataset_type.value,
+                "method": method.value,
+                "dp": dendrogram,
+                "lp": leaf,
+                "seed": seed}
+            )
         elif method == HierarchicalClusteringMethod.AE_COMPLETE:
             # Perform hierarchical clustering with Autoencoder and complete
-            pass
+            results = ae_complete(data=data, labels=labels, autoencoder=autoencoder, max_leaf_nodes=max_leaf_nodes, n_clusters=n_clusters, seed=seed)
+            results.append(
+                {"dataset": dataset_type.value,
+                "method": method.value,
+                "dp": dendrogram,
+                "lp": leaf,
+                "seed": seed}
+            )
+
+    df_results = pd.DataFrame(results)
+    return df_results
+
 
     df_results = pd.DataFrame(results)
     return df_results
@@ -358,7 +388,7 @@ if __name__ == "__main__":
     flat_results, _ = evaluate(
         init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.MNIST, seed=42
     )
-    print(flat_results)
+    print(_)
     # evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.USPS, seed=42)
     # evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.REUTERS, seed=42)
     # evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.FASHION_MNIST, seed=42)

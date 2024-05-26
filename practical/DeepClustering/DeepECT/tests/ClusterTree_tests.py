@@ -408,6 +408,7 @@ autoencoder.load_state_dict(
     torch.load("practical/DeepClustering/DeepECT/pretrained_AE.pth")
 )
 autoencoder.fitted = True
-deepect = DeepECT(number_classes=10, autoencoder=autoencoder, max_leaf_nodes=20, custom_dataloaders=(trainloader, testloader), augmentation_invariance=True)
+deepect = DeepECT(number_classes=10, autoencoder=autoencoder, max_leaf_nodes=20, max_iterations=50000, custom_dataloaders=(trainloader, testloader), augmentation_invariance=True)
 deepect.fit(mnist_dataset.data.reshape(len(mnist_dataset), 784).numpy())
 print(unsupervised_clustering_accuracy(mnist_dataset.targets.numpy(), deepect.DeepECT_labels_))
+

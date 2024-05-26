@@ -13,11 +13,12 @@ from clustpy.data import load_fmnist, load_mnist, load_reuters, load_usps
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
 from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
 from scipy.optimize import linear_sum_assignment
-from sklearn.cluster import KMeans
+from sklearn.cluster import AgglomerativeClustering, KMeans
 from sklearn.metrics import normalized_mutual_info_score
 from sklearn.utils import Bunch
 
 from practical.DeepClustering.DeepECT.deepect import DeepECT
+from clustpy.deep.dec import IDEC
 
 
 class DatasetType(Enum):
@@ -212,24 +213,28 @@ def hierarchical(
         autoencoder.fitted = True
         if method == HierarchicalClusteringMethod.DEEPECT:
             # Perform hierarchical clustering with DeepECT
-            deepect = DeepECT()
-            dp = 0
-            lp = 0
+            deepect = DeepECT(
+                autoencoder=autoencoder,
+                clustering_optimizer_params={"lr": 1e-4, "betas": (0.9, 0.999)},
+                max_leaf_nodes=12 if dataset_type == DatasetType.REUTERS else 20,
+                seed=seed,
+            )
+            deepect.fit(data)
             results.append(
                 {
                     "dataset": dataset_type.value,
                     "method": method.value,
-                    "dp": dp,
-                    "lp": lp,
+                    "dp": deepect.tree_.dendrogram_purity(labels),
+                    "lp": deepect.tree_.leaf_purity(labels),
                     "seed": seed,
                 }
             )
-            pass
         elif method == HierarchicalClusteringMethod.DEEPECT_AUGMENTED:
             # Perform hierarchical clustering with DeepECT and augmentation
             pass
         elif method == HierarchicalClusteringMethod.IDEC_SINGLE:
             # Perform hierarchical clustering with IDEC and single
+
             pass
         elif method == HierarchicalClusteringMethod.IDEC_COMPLETE:
             # Perform hierarchical clustering with IDEC and complete

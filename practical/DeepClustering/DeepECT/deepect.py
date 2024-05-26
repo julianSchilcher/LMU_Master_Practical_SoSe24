@@ -8,14 +8,13 @@ import torch.utils.data
 from clustpy.deep._train_utils import get_standard_initial_deep_clustering_setting
 from clustpy.deep._utils import set_torch_seed
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
-from sklearn.cluster import MiniBatchKMeans, KMeans
+from sklearn.cluster import KMeans
 from sklearn.utils import check_random_state
 from clustpy.data.real_torchvision_data import load_mnist
 from clustpy.data import load_reuters
 from clustpy.metrics.clustering_metrics import unsupervised_clustering_accuracy
 from tqdm import tqdm
-import math
-import os
+from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
 
 
 class Cluster_Node:
@@ -1004,7 +1003,7 @@ def _deep_ect(
     grow_interval: int,
     optimizer_class: torch.optim.Optimizer,
     rec_loss_fn: torch.nn.modules.loss._Loss,
-    autoencoder: torch.nn.Module,
+    autoencoder: _AbstractAutoencoder,
     embedding_size: int,
     max_leaf_nodes: int,
     custom_dataloaders: tuple,
@@ -1065,6 +1064,9 @@ def _deep_ect(
     # Get initial setting (device, dataloaders, pretrained AE and initial clustering result)
     save_ae_state_dict = not hasattr(autoencoder, "fitted") or not autoencoder.fitted
     set_torch_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
     (
         device,
         trainloader,
@@ -1134,7 +1136,7 @@ class DeepECT:
         pruning_threshold: float = 0.1,
         optimizer_class: torch.optim.Optimizer = torch.optim.Adam,
         rec_loss_fn: torch.nn.modules.loss._Loss = torch.nn.MSELoss(),
-        autoencoder: torch.nn.Module = None,
+        autoencoder: _AbstractAutoencoder = None,
         embedding_size: int = 10,
         max_leaf_nodes: int = 20,
         custom_dataloaders: tuple = None,

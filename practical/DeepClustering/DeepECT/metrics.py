@@ -10,11 +10,13 @@ class PurityNode:
     def __init__(
         self,
         id: int,
+        split_id: int,
         parent: "PurityNode" = None,
         left_child: "PurityNode" = None,
         right_child: "PurityNode" = None,
     ) -> "PurityNode":
         self.id = id
+        self.split_id = split_id
         self.parent: PurityNode = parent
         self.left_child: PurityNode = left_child
         self.right_child: PurityNode = right_child
@@ -27,19 +29,14 @@ class PurityNode:
 
     @property
     def assignments(self):
-        return np.asarray(sorted(self.assigned_indices), dtype=np.int16)
+        return sorted(self.assigned_indices)
 
     @property
     def is_leaf(self):
         return self.left_child is None and self.right_child is None
 
 
-class PurityTree:
-    def __init__(self, root_node: "PurityNode") -> None:
-        self.root = root_node
-
-
-def count_values_in_sequence(seq):
+def count_values_in_sequence(seq: np.ndarray):
     res = defaultdict(int)
     for key in seq:
         res[key] += 1
@@ -59,7 +56,7 @@ def weighted_avg_and_std(values, weights):
     return (average, np.sqrt(variance))
 
 
-def leaf_purity(tree_root: PurityNode, ground_truth):
+def leaf_purity(tree_root: PurityNode, ground_truth: np.ndarray):
     values = []
     weights = []
 
@@ -86,7 +83,7 @@ def leaf_purity(tree_root: PurityNode, ground_truth):
     return weighted_avg_and_std(values, weights)
 
 
-def dendrogram_purity(tree_root: PurityNode, ground_truth) -> float:
+def dendrogram_purity(tree_root: PurityNode, ground_truth: np.ndarray) -> float:
     total_per_label_frequencies = count_values_in_sequence(ground_truth)
     total_per_label_pairs_count = {
         k: comb(v, 2, True) for k, v in total_per_label_frequencies.items()
@@ -142,3 +139,71 @@ def dendrogram_purity(tree_root: PurityNode, ground_truth) -> float:
 
     calculate_purity(tree_root)
     return purity
+
+
+class PurityTree:
+    def __init__(self, root_node: "PurityNode") -> None:
+        self.root = root_node
+
+    @property
+    def leaf_nodes(self) -> List[PurityNode]:
+        def get_nodes_recursive(node: PurityNode):
+            result = []
+            if node.is_leaf:
+                result.append(node)
+                return result
+            result.extend(get_nodes_recursive(node.left_child))
+            result.extend(get_nodes_recursive(node.right_child))
+            return result
+
+        return get_nodes_recursive(self.root)
+
+    @property
+    def nodes(self):
+        def get_nodes_recursive(node: PurityNode):
+            result = [node]
+            if node.is_leaf:
+                return result
+            result.extend(get_nodes_recursive(node.left_child))
+            result.extend(get_nodes_recursive(node.right_child))
+            return result
+
+        return get_nodes_recursive(self.root)
+
+    def get_k_clusters(self, k: int) -> List[PurityNode]:
+        result_nodes = []
+        max_split_level = sorted(list(set([node.split_id for node in self.nodes])))[
+            k - 1
+        ]
+
+        # the leaf nodes after the first <k> - 1 growing steps (splits) are the nodes representing the <k> clusters
+        def get_nodes_at_split_level(node: PurityNode):
+            if (
+                node.is_leaf or node.left_child.split_id > max_split_level
+            ) and node.split_id <= max_split_level:
+                result_nodes.append(node)
+                return
+            get_nodes_at_split_level(node.left_child)
+            get_nodes_at_split_level(node.right_child)
+
+        get_nodes_at_split_level(self.root)
+        # consistency check
+        assert (
+            len(result_nodes) == k
+        ), "Number of cluster nodes doesn't correspond to number of classes"
+        return result_nodes
+
+    def dendrogram_purity(self, ground_truth: np.ndarray):
+        return dendrogram_purity(self.root, ground_truth)
+
+    def leaf_purity(self, ground_truth: np.ndarray):
+        return leaf_purity(self.root, ground_truth)
+
+    def flat_accuracy(self, ground_truth: np.ndarray, n_clusters: int):
+        pass
+
+    def flat_nmi(self, ground_truth: np.ndarray, n_clusters: int):
+        pass
+
+    def flat_ari(self, ground_truth: np.ndarray, n_clusters: int):
+        pass

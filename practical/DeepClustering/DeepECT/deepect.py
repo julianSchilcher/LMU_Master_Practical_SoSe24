@@ -1128,7 +1128,7 @@ class DeepECT:
         clustering_optimizer_params: dict = None,
         pretrain_epochs: int = 50,
         number_classes: int = 2,
-        max_iterations: int = 10000,
+        max_iterations: int = 50000,
         grow_interval: int = 500,
         pruning_threshold: float = 0.1,
         optimizer_class: torch.optim.Optimizer = torch.optim.Adam,
@@ -1265,15 +1265,14 @@ class DeepECT:
 
 if __name__ == "__main__":
     dataset, labels = load_mnist(return_X_y=True)
-    # autoencoder = FeedforwardAutoencoder([dataset.shape[1], 500, 500, 2000, 10])
-    # autoencoder.load_state_dict(
-    #     torch.load("practical/DeepClustering/DeepECT/pretrained_AE.pth")
-    # )
-    # autoencoder.fitted = True
-    # deepect = DeepECT(number_classes=10, autoencoder=autoencoder, max_leaf_nodes=20)
-    # deepect.fit(dataset)
-    # print(unsupervised_clustering_accuracy(labels, deepect.DeepECT_labels_))
-    print(np.min(dataset))
+    autoencoder = FeedforwardAutoencoder([dataset.shape[1], 500, 500, 2000, 10])
+    autoencoder.load_state_dict(
+        torch.load("practical/DeepClustering/DeepECT/pretrained_AE.pth")
+    )
+    autoencoder.fitted = True
+    deepect = DeepECT(number_classes=10, autoencoder=autoencoder, max_leaf_nodes=20)
+    deepect.fit(dataset)
+    print(unsupervised_clustering_accuracy(labels, deepect.DeepECT_labels_))
 
     # dataset, labels = load_reuters(return_X_y=True)
     # print(dataset.shape[0])

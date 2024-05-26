@@ -141,6 +141,7 @@ def flat(
     data = dataset["data"]
     labels = dataset["target"]
     results = []
+    n_clusters = 4 if dataset_type == DatasetType.REUTERS else 10
 
     for method in FlatClusteringMethod:
         # Load the autoencoder parameters
@@ -154,7 +155,7 @@ def flat(
                 .numpy()
             )
             # Perform flat clustering with KMeans
-            kmeans = KMeans(n_clusters=10, random_state=seed)
+            kmeans = KMeans(n_clusters=n_clusters, random_state=seed)
             predicted_labels = kmeans.fit_predict(embeddings)
             # Calculate evaluation metrics
             nmi = calculate_nmi(labels, predicted_labels)
@@ -194,6 +195,8 @@ def hierarchical(
     data = dataset["data"]
     labels = dataset["target"]
     results = []
+    max_leaf_nodes = 12 if dataset_type == DatasetType.REUTERS else 20
+    n_clusters = 4 if dataset_type == DatasetType.REUTERS else 10
 
     for method in HierarchicalClusteringMethod:
         # Load the autoencoder parameters
@@ -204,7 +207,7 @@ def hierarchical(
             deepect = DeepECT(
                 autoencoder=autoencoder,
                 clustering_optimizer_params={"lr": 1e-4, "betas": (0.9, 0.999)},
-                max_leaf_nodes=12 if dataset_type == DatasetType.REUTERS else 20,
+                max_leaf_nodes=max_leaf_nodes,
                 seed=seed,
             )
             deepect.fit(data)

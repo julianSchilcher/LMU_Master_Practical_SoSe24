@@ -190,7 +190,8 @@ def flat(
             )
         elif method == FlatClusteringMethod.DEEPECT_AUGMENTED:
             # Perform flat clustering with DeepECT and augmentation
-            pass
+            if dataset_type == DatasetType.REUTERS:
+                pass
         elif method == FlatClusteringMethod.IDEC:
             # Perform flat clustering with IDEC
             pass
@@ -240,6 +241,8 @@ def hierarchical(
         elif method == HierarchicalClusteringMethod.DEEPECT_AUGMENTED:
             # Perform hierarchical clustering with DeepECT and augmentation
             pass
+            if dataset_type == DatasetType.REUTERS:
+                pass
         elif method == HierarchicalClusteringMethod.IDEC_SINGLE:
             # Perform hierarchical clustering with IDEC and single
             pass

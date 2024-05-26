@@ -251,15 +251,14 @@ def flat(
             idec.fit(data)
             print("finished fitting IDEC")
 
-            predicted_labels = idec.predict(data)
             # Calculate evaluation metrics
             results.append(
                 {
                     "dataset": dataset_type.value,
                     "method": method.value,
-                    "nmi": calculate_nmi(labels, predicted_labels),
-                    "acc": calculate_acc(labels, predicted_labels),
-                    "ari": calculate_ari(labels, predicted_labels),
+                    "nmi": calculate_nmi(labels, idec.dec_labels_),
+                    "acc": calculate_acc(labels, idec.dec_labels_),
+                    "ari": calculate_ari(labels, idec.dec_labels_),
                     "seed": seed,
                 }
             )

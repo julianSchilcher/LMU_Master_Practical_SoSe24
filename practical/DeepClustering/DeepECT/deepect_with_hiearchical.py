@@ -13,10 +13,14 @@ from sklearn.cluster import MiniBatchKMeans, KMeans
 from sklearn.utils import check_random_state
 from clustpy.data.real_torchvision_data import load_mnist
 from clustpy.data import load_reuters
+from clustpy.data import load_usps
+from clustpy.data import load_fmnist
 from clustpy.metrics.clustering_metrics import unsupervised_clustering_accuracy
 from sklearn.metrics import normalized_mutual_info_score, adjusted_rand_score
 from tqdm import tqdm
 from scipy.special import comb
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class Cluster_Node:
     """
@@ -1363,14 +1367,32 @@ class DeepECT:
         self.dendrogram = dendrogram
         self.leaf = leaf
         return self
+    
+
+
+# if __name__ == "__main__":
+#     dataset, labels = load_fmnist(return_X_y=True)
+#     autoencoder = FeedforwardAutoencoder([dataset.shape[1], 500, 500, 2000, 10]).to(device)
+#     autoencoder.load_state_dict(
+#         torch.load("/Users/yy/LMU_Master_Practical_SoSe24/practical/DeepClustering/DeepECT/Fashion_MNIST_pre/model.path", map_location=device)
+#     )
+#     autoencoder.fitted = True
+#     deepect = DeepECT(labels,number_classes=10, autoencoder=autoencoder, max_leaf_nodes=20)
+#     deepect.fit(dataset)
+    
+#     print("den:", deepect.dendrogram)
+#     print("leaf:", deepect.leaf)
+#     print("acc:", unsupervised_clustering_accuracy(labels, deepect.DeepECT_labels_))
+#     print("nmi:", normalized_mutual_info_score(labels, deepect.DeepECT_labels_))
+#     print("ari:", adjusted_rand_score(labels, deepect.DeepECT_labels_))
+
+
+
 if __name__ == "__main__":
     dataset, labels = load_reuters(return_X_y=True)
     print(dataset.shape[0])
-    autoencoder = FeedforwardAutoencoder(
-        [dataset.shape[1], 500, 500, 2000, 10],
-    )
-    # 手动加载参数并设置它
-    state_dict = torch.load("/Users/yy/LMU_Master_Practical_SoSe24/practical/DeepClustering/DeepECT/pretrained_AE_reuters.pth", map_location=torch.device('cpu'))
+    autoencoder = FeedforwardAutoencoder([dataset.shape[1], 500, 500, 2000, 10])
+    state_dict = torch.load("/Users/yy/LMU_Master_Practical_SoSe24/practical/DeepClustering/DeepECT/pretrained_AE_reuters.pth",  map_location=torch.device('cpu'))
     autoencoder.load_state_dict(state_dict)
     autoencoder.fitted = True
 
@@ -1380,10 +1402,10 @@ if __name__ == "__main__":
         number_classes=4,
         embedding_size=10,
         pretrain_epochs=19,
-        max_leaf_nodes=12,
+        max_leaf_nodes=20,
         autoencoder=autoencoder,
     )
-    deepect.autoencoder.load_state_dict(torch.load("/Users/yy/LMU_Master_Practical_SoSe24/practical/DeepClustering/DeepECT/pretrained_AE_reuters.pth", map_location=torch.device('cpu')))
+    deepect.autoencoder.load_state_dict(torch.load("/Users/yy/LMU_Master_Practical_SoSe24/practical/DeepClustering/DeepECT/pretrained_AE_reuters.pth",  map_location=torch.device('cpu')))
     deepect.fit(dataset)
     
     print("den:", deepect.dendrogram)
@@ -1394,4 +1416,28 @@ if __name__ == "__main__":
 
     torch.save(deepect, "/Users/yy/LMU_Master_Practical_SoSe24/practical/DeepClustering/DeepECT/reuters_deepect.pth")
 
-
+"""
+    MNIST:  dend: 0.8167113909026195
+            leaf: 0.9208714285714286
+            acc: 0.9208714285714286
+            nmi: 0.8327991828732338
+            ari: 0.8311824687312072
+    
+    USP :   den:  0.8086953306699712
+            leaf: 0.901161540116154
+            acc: 0.6678855667885567
+            nmi: 0.7311400146480386
+            ari: 0.5963173877578779
+    
+    Reut:   den: 0.4378096994105657
+            leaf: 0.6662333333333333
+            acc: 0.37025
+            nmi: 0.49643987102875464
+            ari: 0.29871404538799773
+    
+    fMNIST: den: 0.44047789387015596
+            leaf: 0.6715428571428571
+            acc: 0.5484142857142857
+            nmi: 0.5626579028647154
+            ari: 0.39595517919704026
+    """

@@ -106,6 +106,7 @@ def pretraining(
 ):
     # Set the seed for reproducibility
     torch.manual_seed(seed)
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     # Load and preprocess data
     data = dataset["data"]
@@ -120,7 +121,11 @@ def pretraining(
     if not os.path.exists(autoencoder_params_path):
         # Train the autoencoder if parameters file does not exist
         autoencoder.fit(
-            n_epochs=50, optimizer_params={"lr": 0.0001}, data=data, batch_size=256
+            n_epochs=50,
+            optimizer_params={"lr": 0.0001},
+            data=data,
+            batch_size=256,
+            device=device,
         )
         autoencoder.save_parameters(autoencoder_params_path)
         print("Autoencoder pretraining complete and saved.")

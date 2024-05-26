@@ -1,3 +1,4 @@
+import math
 import os
 import sys
 
@@ -87,6 +88,10 @@ def calculate_ari(true_labels, predicted_labels):
     return adjusted_rand_score(true_labels, predicted_labels)
 
 
+def get_max_epoch_size(data, max_iterations, batch_size):
+    return math.ceil(max_iterations / (len(data) / batch_size))
+
+
 def pretraining(
     init_autoencoder: _AbstractAutoencoder,
     autoencoder_params_path: str,
@@ -111,7 +116,7 @@ def pretraining(
         # Train the autoencoder if parameters file does not exist
         autoencoder.to(device)
         autoencoder.fit(
-            n_epochs=50,
+            n_epochs=get_max_epoch_size(data, 130000, 256),
             optimizer_params={"lr": 0.0001},
             data=data,
             batch_size=256,
@@ -142,8 +147,12 @@ def flat(
     data = dataset["data"]
     labels = dataset["target"]
     results = []
+    max_iterations = 50000
+    batch_size = 256
     max_leaf_nodes = 12 if dataset_type == DatasetType.REUTERS else 20
     n_clusters = 4 if dataset_type == DatasetType.REUTERS else 10
+
+    max_clustering_epochs = get_max_epoch_size(data, max_iterations, batch_size)
 
     for method in FlatClusteringMethod:
         # Load the autoencoder parameters
@@ -163,7 +172,11 @@ def flat(
             )
             # Perform flat clustering with KMeans
             kmeans = KMeans(
-                n_clusters=n_clusters, init="random", n_init=20, random_state=seed
+                n_clusters=n_clusters,
+                init="random",
+                n_init=20,
+                random_state=seed,
+                max_iter=max_iterations,
             )
             print("fitting KMeans...")
             predicted_labels = kmeans.fit_predict(embeddings)
@@ -198,7 +211,7 @@ def flat(
                     "acc": deepect.tree_.flat_accuracy(labels, n_clusters),
                     "ari": deepect.tree_.flat_ari(labels, n_clusters),
                     "dp": deepect.tree_.dendrogram_purity(labels),
-                    "lp": deepect.tree_.leaf_purity(labels),
+                    "lp": deepect.tree_.leaf_purity(labels)[0],
                     "seed": seed,
                 }
             )
@@ -223,9 +236,16 @@ def flat(
             # Perform flat clustering with IDEC
             idec = IDEC(
                 n_clusters=n_clusters,
+                batch_size=batch_size,
                 autoencoder=autoencoder,
-                clustering_epochs=5,
+                clustering_epochs=max_clustering_epochs,
                 random_state=seed,
+                initial_clustering_class=KMeans,
+                initial_clustering_params={
+                    "init": "random",
+                    "n_init": 20,
+                    "random_state": seed,
+                },
             )
             print("fitting IDEC...")
             idec.fit(data)
@@ -334,9 +354,12 @@ def evaluate(
 
 
 # Load the MNIST dataset and evaluate flat and hierarchical clustering
-evaluate(
+flat_results, _ = evaluate(
     init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.MNIST, seed=42
 )
+print(flat_results)
 # evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.USPS, seed=42)
 # evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.REUTERS, seed=42)
 # evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.FASHION_MNIST, seed=42)
+
+# combine all results and per experiment, do pivot to aggregate the metrics over the seeds

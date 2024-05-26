@@ -304,6 +304,8 @@ def evaluation(
         seed=seed,
     )
 
+    return flat_results, hierarchical_results
+
 
 # Load the MNIST dataset and evaluate flat and hierarchical clustering
 evaluation(

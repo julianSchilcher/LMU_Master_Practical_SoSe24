@@ -1,4 +1,4 @@
-import math
+from collections import Counter
 from queue import Queue
 from typing import List, Tuple, Union
 
@@ -6,27 +6,16 @@ import numpy as np
 import torch
 import torch.utils
 import torch.utils.data
-from clustpy.deep._train_utils import \
-    get_standard_initial_deep_clustering_setting
+from clustpy.deep._train_utils import get_standard_initial_deep_clustering_setting
 from clustpy.deep._utils import set_torch_seed
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
 from sklearn.cluster import MiniBatchKMeans, KMeans
 from sklearn.utils import check_random_state
 from clustpy.data.real_torchvision_data import load_mnist
+from clustpy.data import load_reuters
 from clustpy.metrics.clustering_metrics import unsupervised_clustering_accuracy
 from tqdm import tqdm
 from scipy.special import comb
-from collections import Counter, defaultdict
-
-# dendrogram purity and leaf purity
-
-class Cluster_Measure:
-    """
-    Compute the dendrogram purity and leaf purity   
-    """
-    def __init__(self):
-        super(Cluster_Measure, self).__init__()
-        
 
 class Cluster_Node:
     """
@@ -42,7 +31,9 @@ class Cluster_Node:
         center: np.ndarray,
         device: torch.device,
         id: int = 0,
-        parent: 'Cluster_Node' = None
+        parent: "Cluster_Node" = None,
+        split_id: int = 0,
+        weight: int = 1,
     ) -> "Cluster_Node":
         """
         Constructor for class Cluster_Node
@@ -66,7 +57,7 @@ class Cluster_Node:
         self.device = device
         self.left_child = None
         self.right_child = None
-        self.weight = torch.tensor(1.0)
+        self.weight = torch.tensor(weight, dtype=torch.float)
         self.center = torch.nn.Parameter(
             torch.tensor(
                 center, requires_grad=True, device=self.device, dtype=torch.float
@@ -76,8 +67,8 @@ class Cluster_Node:
         self.assignment_indices: Union[torch.Tensor | None] = None
         self.sum_squared_dist: Union[torch.Tensor | None] = None
         self.id = id
+        self.split_id = split_id
         self.parent = parent
-
 
     def clear_assignments(self):
         if self.left_child is not None:
@@ -120,9 +111,12 @@ class Cluster_Node:
         self,
         optimizer: Union[torch.optim.Optimizer | None],
         left_child_centers: np.ndarray,
+        left_child_weight: int,
         right_child_centers: np.ndarray,
-        split: int = 0,
-        ):
+        right_child_weight: int,
+        max_id: int = 0,
+        max_split_id: int = 0,
+    ):
         """
         Set new childs to this cluster node and therefore changes this node to an inner node.
 
@@ -136,8 +130,22 @@ class Cluster_Node:
             indicates the current split count (max count of clusters)
 
         """
-        self.left_child = Cluster_Node(left_child_centers, self.device, split + 1, self)
-        self.right_child = Cluster_Node(right_child_centers, self.device, split + 2, self)
+        self.left_child = Cluster_Node(
+            left_child_centers,
+            self.device,
+            max_id + 1,
+            self,
+            max_split_id + 1,
+            left_child_weight,
+        )
+        self.right_child = Cluster_Node(
+            right_child_centers,
+            self.device,
+            max_id + 2,
+            self,
+            max_split_id + 1,
+            right_child_weight,
+        )
         self.from_leaf_to_inner()
 
         if optimizer is not None:
@@ -153,7 +161,10 @@ class Cluster_Tree:
     """
 
     def __init__(
-        self, init_leafnode_centers: np.ndarray, device: torch.device
+        self,
+        init_leafnode_centers: np.ndarray,
+        init_labels: np.ndarray,
+        device: torch.device,
     ) -> "Cluster_Tree":
         """
         Constructor for class Cluster_Tree
@@ -172,46 +183,56 @@ class Cluster_Tree:
         # center of root can be a dummy-center since its never needed
         self.root = Cluster_Node(np.zeros(init_leafnode_centers.shape[1]), device)
         # assign the 2 initial leaf nodes with its initial centers
-        self.root.set_childs(None, init_leafnode_centers[0], init_leafnode_centers[1])
-        # initialise the node counter to 3
-        self.number_nodes = 3
-        
+        self.root.set_childs(
+            None,
+            init_leafnode_centers[0],
+            init_labels[0],
+            init_leafnode_centers[1],
+            init_labels[1],
+        )
+
+    @property
+    def number_nodes(self):
+        def count_recursive(node: Cluster_Node):
+            if node.is_leaf_node():
+                return 1
+            return (
+                1 + count_recursive(node.left_child) + count_recursive(node.right_child)
+            )
+
+        return count_recursive(self.root)
+
+    @property
+    def nodes(self) -> List[Cluster_Node]:
+        def get_nodes_recursive(node: Cluster_Node):
+            result = [node]
+            if node.is_leaf_node():
+                return result
+            result.extend(get_nodes_recursive(node.left_child))
+            result.extend(get_nodes_recursive(node.right_child))
+            return result
+
+        return get_nodes_recursive(self.root)
+
+    @property
+    def leaf_nodes(self) -> List[Cluster_Node]:
+        def get_nodes_recursive(node: Cluster_Node):
+            result = []
+            if node.is_leaf_node():
+                result.append(node)
+                return result
+            result.extend(get_nodes_recursive(node.left_child))
+            result.extend(get_nodes_recursive(node.right_child))
+            return result
+
+        return get_nodes_recursive(self.root)
+
     def clear_node_assignments(self):
         self.root.clear_assignments()
 
-    def get_all_leaf_nodes(self) -> List[Cluster_Node]:
-        """
-        Returns a list of all leaf node references of this tree
-
-         Returns
-         -------
-         List[Cluster_Node]
-             References of all leaf nodes in the tree
-        """
-        leafnodes = []
-        self._collect_leafnodes(self.root, leafnodes)
-        return leafnodes
-
-    def _collect_leafnodes(self, node: Cluster_Node, leafnodes: list):
-        """
-        Helper function for recursively collecting all leaf nodes
-
-        Parameters
-        ----------
-        node : Cluster_Node
-            The node where the search for leaf nodes begin
-        leafnodes : list
-            This list stores the leaf nodes founded by traversing the tree
-        """
-        if node.is_leaf_node():
-            leafnodes.append(node)
-        else:
-            self._collect_leafnodes(node.left_child, leafnodes)
-            self._collect_leafnodes(node.right_child, leafnodes)
-
     def get_all_result_nodes(self, number_classes: int) -> List[Cluster_Node]:
         """
-        Returns a list of all class node references for the given number of classes. This nodes 
+        Returns a list of all class node references for the given number of classes. This nodes
         are the leaf nodes in the tree cut for the given number of classes. The number of returned nodes
         is equal to the given number of classes.
 
@@ -226,37 +247,30 @@ class Cluster_Tree:
             References of all nodes representing the given number of clusters.
         """
         result_nodes = []
+        max_split_level = sorted(list(set([node.split_id for node in self.nodes])))[
+            number_classes - 1
+        ]
+
         # the leaf nodes after the first <number_classes> - 1 growing steps (splits) are the nodes representing the <number_classes> clusters
-        split_level = number_classes - 1
-        self._collect_all_result_nodes(self.root, split_level, result_nodes)
+        def get_nodes_at_split_level(node: Cluster_Node):
+            if (
+                node.is_leaf_node() or node.left_child.split_id > max_split_level
+            ) and node.split_id <= max_split_level:
+                result_nodes.append(node)
+                return
+            get_nodes_at_split_level(node.left_child)
+            get_nodes_at_split_level(node.right_child)
+
+        get_nodes_at_split_level(self.root)
         # consistency check
-        assert len(result_nodes) == number_classes, "Number of cluster nodes doesn't correspond to number of classes"
+        assert (
+            len(result_nodes) == number_classes
+        ), "Number of cluster nodes doesn't correspond to number of classes"
         return result_nodes
 
-    def _collect_all_result_nodes(self, node: Cluster_Node, split_level: int, result_nodes: list):
-        """
-        Helper function for recursively collecting all leaf nodes of the cluster tree cut at split level <split_level>.
-
-        Parameters
-        ----------
-        node : Cluster_Node 
-            The node where the search for result nodes starts
-        split_level: int
-            The split level where the tree should be cuted. A split level i of a node n states that node n
-            was created in the i-th tree grow step (i-th split).
-        result_nodes : list
-            This list contains all leaf nodes of tree cut at level <split_level>.
-        """
-        # a node is part of the result if it is a leaf node of the cluster tree cut at split level <split_level>
-        if (node.is_leaf_node() or math.ceil(node.left_child.id / 2) > split_level):
-            result_nodes.append(node)
-        else:
-            self._collect_all_result_nodes(node.left_child, split_level, result_nodes)
-            self._collect_all_result_nodes(node.right_child, split_level, result_nodes)
-            
-
-
-    def assign_to_nodes(self, minibatch_embedded: torch.tensor, compute_sum_dist: bool = False):
+    def assign_to_nodes(
+        self, minibatch_embedded: torch.tensor, compute_sum_dist: bool = False
+    ):
         """
         This method assigns all samples in the minibatch to its nearest nodes in the cluster tree. It is performed bottom up, so each
         sample is first assigned to its nearest leaf node. Afterwards the samples are assigned recursivley to the inner nodes by merging
@@ -269,35 +283,40 @@ class Cluster_Tree:
         minibatch : torch.Tensor
             The minibatch with shape (#samples, #emb_features)
         """
-        # retrieve all leaf nodes from the current tree
-        leafnodes = self.get_all_leaf_nodes()
         # transform it into a list of leaf node centers and stack it into a tensor of shape (#leafnodes, #emb_features)
-        leafnode_centers = list(map(lambda node: node.center.data, leafnodes))
-        leafnode_tensor = torch.stack(leafnode_centers, dim=0) # (k, d)
+        leafnode_centers = list(map(lambda node: node.center.data, self.leaf_nodes))
+        leafnode_tensor = torch.stack(leafnode_centers, dim=0)  # (k, d)
 
         #  calculate the distance from each sample in the minibatch to all leaf nodes
         with torch.no_grad():
-            distance_matrix = torch.cdist(minibatch_embedded, leafnode_tensor, p=2) # kmeans uses L_2 norm (euclidean distance) (b, k)
-        distance_matrix = distance_matrix.squeeze() # (b, k)
+            distance_matrix = torch.cdist(
+                minibatch_embedded, leafnode_tensor, p=2
+            )  # kmeans uses L_2 norm (euclidean distance) (b, k)
         # the sample gets the nearest node assigned
         min_dists, assignments = torch.min(distance_matrix, dim=1)
 
         # for each leafnode, check which samples it has got assigned and store the assigned samples in the leafnode
-        for i, node in enumerate(leafnodes):
+        for i, node in enumerate(self.leaf_nodes):
             indices = (assignments == i).nonzero()
             if len(indices) < 1:
-                node.assignments = None # store None (perhaps overwrite previous assignment)
+                node.assignments = (
+                    None  # store None (perhaps overwrite previous assignment)
+                )
                 node.assignment_indices = None
-                node.sum_squared_dist = None 
+                node.sum_squared_dist = None
             else:
                 leafnode_data = minibatch_embedded[indices.squeeze()]
                 if leafnode_data.ndim == 1:
                     leafnode_data = leafnode_data[None]
                 node.assignments = leafnode_data
-                node.assignment_indices = indices.reshape(indices.nelement()) # one dimensional tensor containing the indices
+                node.assignment_indices = indices.reshape(
+                    indices.nelement()
+                )  # one dimensional tensor containing the indices
                 if compute_sum_dist:
-                    node.sum_squared_dist = torch.sum(min_dists[indices.squeeze()].pow(2))
-                
+                    node.sum_squared_dist = torch.sum(
+                        min_dists[indices.squeeze()].pow(2)
+                    )
+
     def _assign_to_splitnodes(self, node: Cluster_Node):
         """
         Function for recursively assigning samples to inner nodes by merging the assignments of its two childs
@@ -311,16 +330,22 @@ class Cluster_Tree:
             return node.assignment_indices, node.assignments
         else:
             # get assignments of left child
-            left_assignment_indices, left_assignments = self._assign_to_splitnodes(node.left_child)
+            left_assignment_indices, left_assignments = self._assign_to_splitnodes(
+                node.left_child
+            )
             # get assignments of right child
-            right_assignment_indices, right_assignments = self._assign_to_splitnodes(node.right_child)
+            right_assignment_indices, right_assignments = self._assign_to_splitnodes(
+                node.right_child
+            )
             # if one of the assignments is empty, then just use the assignments of the other node
             if left_assignments == None or right_assignments == None:
                 node.assignments = (
                     left_assignments if right_assignments == None else right_assignments
                 )
                 node.assignment_indices = (
-                    left_assignment_indices if right_assignments == None else right_assignment_indices
+                    left_assignment_indices
+                    if right_assignments == None
+                    else right_assignment_indices
                 )
             else:
                 # merge the assignments of the child nodes and store it in the nodes
@@ -331,7 +356,7 @@ class Cluster_Tree:
                     (left_assignment_indices, right_assignment_indices), dim=0
                 )
             return node.assignment_indices, node.assignments
-        
+
     def nc_loss(self) -> torch.Tensor:
         """
         Function for calculating the nc loss used for adopting the leaf node centers.
@@ -346,11 +371,14 @@ class Cluster_Tree:
         loss : torch.Tensor
             the NC loss
         """
-        leaf_nodes = self.get_all_leaf_nodes()
         # convert the list of leaf nodes to a list of the corresponding leaf node centers as tensors
-        leafnode_centers = [node.center for node in leaf_nodes if node.assignments is not None]
+        leafnode_centers = [
+            node.center for node in self.leaf_nodes if node.assignments is not None
+        ]
         if len(leafnode_centers) == 0:
-            return torch.tensor(0., dtype=torch.float, device=leaf_nodes[0].device)
+            return torch.tensor(
+                0.0, dtype=torch.float, device=self.leaf_nodes[0].device
+            )
         # !!! Maybe here a problem of concatenating parameter tensors !!
         # reformat list of tensors to one sinlge tensor of shape (#leafnodes,#emb_features)
         leafnode_center_tensor = torch.stack(leafnode_centers, dim=0)
@@ -358,7 +386,11 @@ class Cluster_Tree:
         # calculate the center of the assignments from the current minibatch for each leaf node
         with torch.no_grad():  # embedded space should not be optimized in this loss
             # get the assignments for each leaf node (from the current minibatch)
-            leafnode_assignments = [node.assignments for node in leaf_nodes if node.assignments is not None]
+            leafnode_assignments = [
+                node.assignments
+                for node in self.leaf_nodes
+                if node.assignments is not None
+            ]
             leafnode_minibatch_centers = list(
                 map(
                     lambda assignments: torch.sum(assignments, axis=0)
@@ -431,7 +463,7 @@ class Cluster_Tree:
             Returns the number of nodes in the cluster tree
         """
         if root is None:
-            return 
+            return
 
         # Traverse the left subtree
         self._calculate_sibling_loss(root.left_child, sibling_loss)
@@ -469,7 +501,7 @@ class Cluster_Tree:
             the dc loss for <node>
         """
         if node.assignments is None:
-            return torch.tensor(0., dtype=torch.float, device=node.device)
+            return torch.tensor(0.0, dtype=torch.float, device=node.device)
         # calculate direction (norm) vector between <node> and <sibling>
         sibling_direction = (
             node.center.detach() - sibling.center.detach()
@@ -487,7 +519,7 @@ class Cluster_Tree:
         )
         return loss
 
-    def adapt_inner_nodes(self, root: Cluster_Node, pruning_threshold: float):
+    def adapt_inner_nodes(self, root: Cluster_Node):
         """
         Function for recursively assigning samples to inner nodes by merging the assignments of its two childs
 
@@ -500,117 +532,141 @@ class Cluster_Tree:
             return
 
         # Traverse the left subtree
-        self.adapt_inner_nodes(root.left_child, pruning_threshold)
+        self.adapt_inner_nodes(root.left_child)
 
         # Traverse the right subtree
-        self.adapt_inner_nodes(root.right_child, pruning_threshold)
+        self.adapt_inner_nodes(root.right_child)
 
         # adapt node based on this 2 childs
         if root.left_child and root.right_child:
             # adapt weight for left child
-            left_child_len_assignments = len(root.left_child.assignments if root.left_child.assignments is not None else [])
-            root.left_child.weight = 0.5*(root.left_child.weight + left_child_len_assignments)
+            left_child_len_assignments = len(
+                root.left_child.assignments
+                if root.left_child.assignments is not None
+                else []
+            )
+            root.left_child.weight = 0.5 * (
+                root.left_child.weight + left_child_len_assignments
+            )
             # adapt weight for right child
-            right_child_len_assignments = len(root.right_child.assignments if root.right_child.assignments is not None else [])
-            root.right_child.weight = 0.5*(root.right_child.weight + right_child_len_assignments)
+            right_child_len_assignments = len(
+                root.right_child.assignments
+                if root.right_child.assignments is not None
+                else []
+            )
+            root.right_child.weight = 0.5 * (
+                root.right_child.weight + right_child_len_assignments
+            )
             # adapt center of parent based on the new weights
             with torch.no_grad():
-                child_centers = torch.stack((root.left_child.weight * root.left_child.center, 
-                                             root.right_child.weight * root.right_child.center), dim=0)
-                root.center = torch.sum(child_centers, axis=0)/torch.add(root.left_child.weight, root.right_child.weight)
-            root.assignments = torch.zeros(left_child_len_assignments+right_child_len_assignments, dtype=torch.int8, device=root.device)
+                child_centers = torch.stack(
+                    (
+                        root.left_child.weight * root.left_child.center,
+                        root.right_child.weight * root.right_child.center,
+                    ),
+                    dim=0,
+                )
+                root.center = torch.sum(child_centers, axis=0) / torch.add(
+                    root.left_child.weight, root.right_child.weight
+                )
+            root.assignments = torch.zeros(
+                left_child_len_assignments + right_child_len_assignments,
+                dtype=torch.int8,
+                device=root.device,
+            )
 
     def prune_tree(self, pruning_threshold: float):
+        """
+        Prunes the tree by removing nodes with weights below the pruning threshold.
+
+        Args:
+            pruning_threshold (float): The threshold value for pruning. Nodes with weights below this threshold will be removed.
+
+        Returns:
+            None
+        """
+
+        def prune_node(parent: Cluster_Node, child_attr: str):
             """
-            Prunes the tree by removing nodes with weights below the pruning threshold.
+            Prunes a node from the tree by replacing it with its child or sibling node.
 
             Args:
-                pruning_threshold (float): The threshold value for pruning. Nodes with weights below this threshold will be removed.
+                parent (Cluster_Node): The parent node from which the child or sibling node will be pruned.
+                child_attr (str): The attribute name of the child node to be pruned.
 
             Returns:
                 None
             """
+            child_node: Cluster_Node = getattr(parent, child_attr)
+            sibling_attr = (
+                "left_child" if child_attr == "right_child" else "right_child"
+            )
+            sibling_node: Cluster_Node = getattr(parent, sibling_attr)
 
-            def prune_node(parent: Cluster_Node, child_attr: str):
-                """
-                Prunes a node from the tree by replacing it with its child or sibling node.
-
-                Args:
-                    parent (Cluster_Node): The parent node from which the child or sibling node will be pruned.
-                    child_attr (str): The attribute name of the child node to be pruned.
-
-                Returns:
-                    None
-                """
-                self.number_nodes -= 1
-                child_node: Cluster_Node = getattr(parent, child_attr)
-                sibling_attr = 'left_child' if child_attr == 'right_child' else 'right_child'
-                sibling_node: Cluster_Node = getattr(parent, sibling_attr)
-
-                if sibling_node is None:
-                    # if parent == self.root:
-                    #     self.root = child_node
-                    #     self.root.parent = None
-                    # else:
-                    #     grandparent = parent.parent
-                    #     if grandparent.left_child == parent:
-                    #         grandparent.left_child = child_node
-                    #     else:
-                    #         grandparent.right_child = child_node
-                    #     if child_node is not None:
-                    #         child_node.parent = grandparent
-                    raise ValueError(sibling_node)
+            if sibling_node is None:
+                raise ValueError(sibling_node)
+            else:
+                if parent == self.root:
+                    self.root = sibling_node
+                    self.root.parent = None
                 else:
-                    if parent == self.root:
-                        self.root = sibling_node
-                        self.root.parent = None
+                    grandparent = parent.parent
+                    if grandparent.left_child == parent:
+                        grandparent.left_child = sibling_node
                     else:
-                        grandparent = parent.parent
-                        if grandparent.left_child == parent:
-                            grandparent.left_child = sibling_node
-                        else:
-                            grandparent.right_child = sibling_node
-                        sibling_node.parent = grandparent
-                    child_node.prune()
-                    del child_node
-                    del parent
-                    print(f"Tree size after pruning: {self.number_nodes}, leaf nodes: {len(self.get_all_leaf_nodes())}")
-                
+                        grandparent.right_child = sibling_node
+                    sibling_node.parent = grandparent
+                sibling_node.split_id = parent.split_id
+                child_node.prune()
+                del child_node
+                del parent
+                print(
+                    f"Tree size after pruning: {self.number_nodes}, leaf nodes: {len(self.leaf_nodes)}"
+                )
 
-            def prune_recursive(node: Cluster_Node):
-                """
-                Recursively prunes the tree starting from the given node.
+        def prune_recursive(node: Cluster_Node):
+            """
+            Recursively prunes the tree starting from the given node.
 
-                Parameters:
-                node (Cluster_Node): The node from which to start pruning.
+            Parameters:
+            node (Cluster_Node): The node from which to start pruning.
 
-                Returns:
-                None
-                """
-                if node.left_child:
-                    prune_recursive(node.left_child)
-                if node.right_child:
-                    prune_recursive(node.right_child)
+            Returns:
+            None
+            """
+            if node.left_child:
+                prune_recursive(node.left_child)
+            if node.right_child:
+                prune_recursive(node.right_child)
 
-                if node.weight < pruning_threshold:
-                    if node.parent is not None:
-                        if node.parent.left_child == node:
-                            prune_node(node.parent, 'left_child')
-                        else:
-                            prune_node(node.parent, 'right_child')
+            if node.weight < pruning_threshold:
+                if node.parent is not None:
+                    if node.parent.left_child == node:
+                        prune_node(node.parent, "left_child")
                     else:
-                        if self.root.left_child and self.root.left_child.weight < pruning_threshold:
-                            prune_node(self.root, 'left_child')
-                        if self.root.right_child and self.root.right_child.weight < pruning_threshold:
-                            prune_node(self.root, 'right_child')
+                        prune_node(node.parent, "right_child")
+                else:
+                    if (
+                        self.root.left_child
+                        and self.root.left_child.weight < pruning_threshold
+                    ):
+                        prune_node(self.root, "left_child")
+                    if (
+                        self.root.right_child
+                        and self.root.right_child.weight < pruning_threshold
+                    ):
+                        prune_node(self.root, "right_child")
 
-            prune_recursive(self.root)
-   
-    def grow_tree(self, 
-                  dataloader: torch.utils.data.DataLoader,
-                  autoencoder: torch.nn.Module,
-                  optimizer: torch.optim.Optimizer,
-                  device: Union[torch.device|str]) -> None:
+        prune_recursive(self.root)
+
+    def grow_tree(
+        self,
+        dataloader: torch.utils.data.DataLoader,
+        autoencoder: torch.nn.Module,
+        optimizer: torch.optim.Optimizer,
+        seed: int,
+        device: Union[torch.device | str],
+    ) -> None:
         """Grows the tree at the leaf node with the highest squared distance between its assignments and center.
         The distance is not normalized, so larger clusters will be chosen.
 
@@ -625,21 +681,31 @@ class Cluster_Tree:
         these new leaf nodes by applying two-means (k-means with
         k = 2) to the assigned data points.
         """
-        leaf_nodes = self.get_all_leaf_nodes()
-        batched_seqential_loader = torch.utils.data.DataLoader(dataloader.dataset, dataloader.batch_size, shuffle=False)
+        batched_seqential_loader = torch.utils.data.DataLoader(
+            dataloader.dataset, dataloader.batch_size, shuffle=False
+        )
         with torch.no_grad():
-            leaf_node_dist_sums = torch.zeros(len(leaf_nodes), dtype=torch.float, device="cpu")
+            leaf_node_dist_sums = torch.zeros(
+                len(self.leaf_nodes), dtype=torch.float, device="cpu"
+            )
             for batch in batched_seqential_loader:
                 idxs, x = batch
                 embed = autoencoder.encode(x.to(device))
                 self.assign_to_nodes(embed, compute_sum_dist=True)
-                leaf_node_dist_sums += torch.stack([
-                    leaf.sum_squared_dist.cpu() if leaf.sum_squared_dist is not None else torch.tensor(0, dtype=torch.float32, device="cpu")
-                    for leaf in leaf_nodes
-                ], dim=0)
+                leaf_node_dist_sums += torch.stack(
+                    [
+                        (
+                            leaf.sum_squared_dist.cpu()
+                            if leaf.sum_squared_dist is not None
+                            else torch.tensor(0, dtype=torch.float32, device="cpu")
+                        )
+                        for leaf in self.leaf_nodes
+                    ],
+                    dim=0,
+                )
 
             idx = leaf_node_dist_sums.argmax()
-            highest_dist_leaf_node = leaf_nodes[idx]
+            highest_dist_leaf_node = self.leaf_nodes[idx]
             # get all assignments for highest dist leaf node
             assignments = []
             for batch in batched_seqential_loader:
@@ -648,18 +714,29 @@ class Cluster_Tree:
                 self.assign_to_nodes(embed)
                 if highest_dist_leaf_node.assignments is not None:
                     assignments.append(highest_dist_leaf_node.assignments.cpu())
-            child_assignments = KMeans(n_clusters=2, n_init="auto").fit(
-                torch.cat(assignments, dim=0).numpy()
-            )
+            child_assignments = KMeans(
+                n_clusters=2, n_init="auto", random_state=seed
+            ).fit(torch.cat(assignments, dim=0).numpy())
             print(f"Leaf assignments: {len(child_assignments.labels_)}")
+            child_weights = np.array(
+                [
+                    len(child_assignments.labels_[child_assignments.labels_ == i])
+                    for i in np.unique(child_assignments.labels_)
+                    if i >= 0
+                ]
+            )
             highest_dist_leaf_node.set_childs(
                 optimizer,
                 child_assignments.cluster_centers_[0],
+                child_weights[0],
                 child_assignments.cluster_centers_[1],
-                max([leaf.id for leaf in leaf_nodes]),
+                child_weights[1],
+                max([leaf.id for leaf in self.leaf_nodes]),
+                max([node.split_id for node in self.nodes]),
             )
-            self.number_nodes += 2
-            print(f"Tree size after growing: {self.number_nodes}, leaf nodes: {len(self.get_all_leaf_nodes())}")
+            print(
+                f"Tree size after growing: {self.number_nodes}, leaf nodes: {len(self.leaf_nodes)}"
+            )
 
 
 class _DeepECT_Module(torch.nn.Module):
@@ -685,14 +762,27 @@ class _DeepECT_Module(torch.nn.Module):
     def __init__(
         self,
         init_leafnode_centers: np.ndarray,
+        init_labels: np.ndarray,
         device: torch.device,
+        seed: int,
         augmentation_invariance: bool = False,
     ):
         super().__init__()
         self.augmentation_invariance = augmentation_invariance
         # Create initial cluster tree
-        self.cluster_tree = Cluster_Tree(init_leafnode_centers, device)
+        self.cluster_tree = Cluster_Tree(
+            init_leafnode_centers,
+            np.array(
+                [
+                    len(init_labels[init_labels == i])
+                    for i in np.unique(init_labels)
+                    if i >= 0
+                ]
+            ),
+            device,
+        )
         self.device = device
+        self.random_state = seed
 
     def deepect_augmentation_invariance_loss(
         self, embedded: torch.Tensor, embedded_aug: torch.Tensor, alpha: float
@@ -726,12 +816,18 @@ class _DeepECT_Module(torch.nn.Module):
         loss = None
         return loss
 
-    def fit(self, autoencoder: torch.nn.Module, trainloader: torch.utils.data.DataLoader, max_iterations: int,
-            pruning_threshold: float,
-            grow_interval: int, 
-            max_leaf_nodes: int,
-            optimizer: torch.optim.Optimizer, 
-            rec_loss_fn: torch.nn.modules.loss._Loss, device: Union[torch.device|str]) -> '_DeepECT_Module':
+    def fit(
+        self,
+        autoencoder: torch.nn.Module,
+        trainloader: torch.utils.data.DataLoader,
+        max_iterations: int,
+        pruning_threshold: float,
+        grow_interval: int,
+        max_leaf_nodes: int,
+        optimizer: torch.optim.Optimizer,
+        rec_loss_fn: torch.nn.modules.loss._Loss,
+        device: Union[torch.device | str],
+    ) -> "_DeepECT_Module":
         """
         Trains the _DeepECT_Module in place.
 
@@ -759,11 +855,17 @@ class _DeepECT_Module(torch.nn.Module):
         train_iterator = iter(trainloader)
 
         for e in tqdm(range(max_iterations), desc="Fit", total=max_iterations):
-            self.cluster_tree.prune_tree(pruning_threshold)                    
-            if e > 0 and e % grow_interval == 0:                
-                if len(self.cluster_tree.get_all_leaf_nodes()) >= max_leaf_nodes:
+            self.cluster_tree.prune_tree(pruning_threshold)
+            if (e > 0 and e % grow_interval == 0) or self.cluster_tree.number_nodes < 3:
+                if len(self.cluster_tree.leaf_nodes) >= max_leaf_nodes:
                     break
-                self.cluster_tree.grow_tree(trainloader, autoencoder, optimizer, device=device)
+                self.cluster_tree.grow_tree(
+                    trainloader,
+                    autoencoder,
+                    optimizer,
+                    seed=self.random_state,
+                    device=device,
+                )
 
             # retrieve minibatch (endless)
             try:
@@ -775,14 +877,16 @@ class _DeepECT_Module(torch.nn.Module):
                 batch = next(train_iterator)
             idxs, M = batch
             # assign data points to leafnodes and splitnodes
-            rec_loss, embedded, reconstructed = autoencoder.loss(batch, rec_loss_fn, self.device)
+            rec_loss, embedded, reconstructed = autoencoder.loss(
+                batch, rec_loss_fn, self.device
+            )
 
             self.cluster_tree.assign_to_nodes(embedded)
 
             # calculate cluster loss
             nc_loss = self.cluster_tree.nc_loss()
-            dc_loss = self.cluster_tree.dc_loss(len(M))            
-            
+            dc_loss = self.cluster_tree.dc_loss(len(M))
+
             loss = nc_loss + dc_loss + rec_loss
 
             optimizer.zero_grad()
@@ -790,14 +894,18 @@ class _DeepECT_Module(torch.nn.Module):
             optimizer.step()
 
             # adapt centers of split nodes analytically
-            self.cluster_tree.adapt_inner_nodes(self.cluster_tree.root, pruning_threshold)
+            self.cluster_tree.adapt_inner_nodes(self.cluster_tree.root)
             self.cluster_tree.clear_node_assignments()
         return self
-        
-        
-    def predict(self, number_classes: int, dataloader: torch.utils.data.DataLoader, autoencoder: torch.nn.Module) -> Tuple[np.array, np.array]:
+
+    def predict(
+        self,
+        number_classes: int,
+        dataloader: torch.utils.data.DataLoader,
+        autoencoder: torch.nn.Module,
+    ) -> Tuple[np.array, np.array]:
         """
-        Batchwise prediction of the given samples in the dataloader for a given number of classes. 
+        Batchwise prediction of the given samples in the dataloader for a given number of classes.
 
         Parameters
         ----------
@@ -815,12 +923,12 @@ class _DeepECT_Module(torch.nn.Module):
         centers: numpy.array
             The centers of the <numb_classes> clusters
         """
-        
+
         # get all resulting leaf nodes after cutting the tree for <number_classes> clusters
         cluster_nodes = self.cluster_tree.get_all_result_nodes(number_classes)
 
         with torch.no_grad():
-        # perform prediction batchwise
+            # perform prediction batchwise
             predictions = []
             for batch in tqdm(dataloader, desc="Predict"):
                 # calculate embeddings of the samples which should be predicted
@@ -830,27 +938,43 @@ class _DeepECT_Module(torch.nn.Module):
                 self.cluster_tree.assign_to_nodes(embeddings)
                 self.cluster_tree._assign_to_splitnodes(self.cluster_tree.root)
                 # retrieve a list which stores the assigned sample indices for each node in <cluster_nodes>
-                assignments_list = list(map(lambda node: node.assignment_indices if node.assignment_indices is not None else torch.tensor([], dtype=torch.int, device=self.device), cluster_nodes))
+                assignments_list = list(
+                    map(
+                        lambda node: (
+                            node.assignment_indices
+                            if node.assignment_indices is not None
+                            else torch.tensor([], dtype=torch.int, device=self.device)
+                        ),
+                        cluster_nodes,
+                    )
+                )
                 # create a 1-dim. tensor which stores the labels for the samples
-                labels = torch.cat([torch.full((len(assignments) if assignments is not None else 0,), i, dtype=torch.int) for i, assignments in enumerate(assignments_list)]).cpu()
+                labels = torch.cat(
+                    [
+                        torch.full(
+                            (len(assignments) if assignments is not None else 0,),
+                            i,
+                            dtype=torch.int,
+                        )
+                        for i, assignments in enumerate(assignments_list)
+                    ]
+                ).cpu()
                 # flatten the list of assignments for each node to a single 1-dim. tensor
                 assignments = torch.cat(assignments_list)
                 # sort the labels based on the ordering of the samples in the batch
                 sorted_assignment_indices = torch.argsort(assignments).cpu()
                 predictions.append(labels[sorted_assignment_indices])
-                self.cluster_tree.clear_node_assignments()  
-                
+                self.cluster_tree.clear_node_assignments()
 
             # transform the predictions for each batch to a single output array for the whole dataset
             predictions_numpy = torch.cat(predictions, dim=0).numpy()
-        
+
             # return corresponding centers as well
             centers = list(map(lambda node: node.center.data, cluster_nodes))
             # reformat list of tensors to one sinlge tensor of shape (#leafnodes,#emb_features)
             centers = torch.stack(centers, dim=0).cpu().numpy()
-        
+
         return predictions_numpy, centers
-    
     def predictTree(self, batch_data, batch_ids, labels):
         leaf_nodes = self.cluster_tree.get_all_leaf_nodes()
         
@@ -965,10 +1089,10 @@ class _DeepECT_Module(torch.nn.Module):
 
         leaf_purity_value = weighted_purity_sum / total_points if total_points > 0 else 0
         return leaf_purity_value
-    
+
 def _deep_ect(
     X: np.ndarray,
-    labels,
+    labels:np.ndarray,
     batch_size: int,
     pretrain_optimizer_params: dict,
     clustering_optimizer_params: dict,
@@ -984,8 +1108,9 @@ def _deep_ect(
     max_leaf_nodes: int,
     custom_dataloaders: tuple,
     augmentation_invariance: bool,
-    random_state: np.random.RandomState,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, torch.nn.Module]:
+    seed: int,
+    autoencoder_save_param_path: str = "pretrained_ae.pth",
+):
     """
     Start the actual DeepECT clustering procedure on the input data set.
 
@@ -1032,6 +1157,7 @@ def _deep_ect(
         The final autoencoder
     """
     # Get initial setting (device, dataloaders, pretrained AE and initial clustering result)
+    save_ae_state_dict = not hasattr(autoencoder, "fitted") or not autoencoder.fitted
     (
         device,
         trainloader,
@@ -1039,7 +1165,7 @@ def _deep_ect(
         autoencoder,
         _,
         n_clusters,
-        _,
+        init_labels,
         init_leafnode_centers,
         _,
     ) = get_standard_initial_deep_clustering_setting(
@@ -1053,14 +1179,16 @@ def _deep_ect(
         autoencoder,
         embedding_size,
         custom_dataloaders,
-        MiniBatchKMeans,
-        {"batch_size": batch_size},
-        random_state,
+        KMeans,
+        {"random_state": seed},
+        seed,
     )
     print(device)
+    if save_ae_state_dict:
+        autoencoder.save_parameters(autoencoder_save_param_path)
     # Setup DeepECT Module
     deepect_module = _DeepECT_Module(
-        init_leafnode_centers, device, augmentation_invariance
+        init_leafnode_centers, init_labels, device, seed, augmentation_invariance
     ).to(device)
     # Use DeepECT optimizer parameters (usually learning rate is reduced by a magnitude of 10)
     optimizer = optimizer_class(
@@ -1068,13 +1196,23 @@ def _deep_ect(
     )
     # DeepECT Training loop
     deepect_module.fit(
-        autoencoder, trainloader, max_iterations, pruning_threshold, grow_interval, max_leaf_nodes, optimizer, rec_loss_fn, device
+        autoencoder,
+        trainloader,
+        max_iterations,
+        pruning_threshold,
+        grow_interval,
+        max_leaf_nodes,
+        optimizer,
+        rec_loss_fn,
+        device,
     )
     # Get labels
-    DeepECT_labels, DeepECT_centers = deepect_module.predict(number_classes, testloader, autoencoder)
+    DeepECT_labels, DeepECT_centers = deepect_module.predict(
+        number_classes, testloader, autoencoder
+    )
     dendragrom = deepect_module.dendrogram_purity(trainloader,autoencoder,device,number_classes, labels)
     leaf = deepect_module.leaf_purity(labels)
-    return DeepECT_labels, DeepECT_centers, autoencoder, dendragrom, leaf
+    return deepect_module.cluster_tree, DeepECT_labels, DeepECT_centers, autoencoder,dendragrom, leaf
 
 
 class DeepECT:
@@ -1097,7 +1235,8 @@ class DeepECT:
         max_leaf_nodes: int = 20,
         custom_dataloaders: tuple = None,
         augmentation_invariance: bool = False,
-        random_state: np.random.RandomState = np.random.RandomState(42),
+        seed: int = 42,
+        autoencoder_param_path: str = None,
     ):
         """
         The Deep Embedded Cluster Tree (DeepECT) algorithm.
@@ -1147,7 +1286,9 @@ class DeepECT:
             The final autoencoder
         """
         if max_leaf_nodes < number_classes:
-            raise ValueError(f"The given maximal number of leaf nodes ({max_leaf_nodes}) is smaller than the given number of classes ({number_classes})")
+            raise ValueError(
+                f"The given maximal number of leaf nodes ({max_leaf_nodes}) is smaller than the given number of classes ({number_classes})"
+            )
         self.batch_size = batch_size
         self.pretrain_optimizer_params = (
             {"lr": 1e-3}
@@ -1172,8 +1313,9 @@ class DeepECT:
         self.custom_dataloaders = custom_dataloaders
         self.augmentation_invariance = augmentation_invariance
         self.max_leaf_nodes = max_leaf_nodes
-        self.random_state = check_random_state(random_state)
-        set_torch_seed(self.random_state)
+        self.seed = seed
+        self.autoencoder_param_path = autoencoder_param_path
+        set_torch_seed(self.seed)
 
     def fit(self, X: np.ndarray) -> "DeepECT":
         """
@@ -1183,7 +1325,7 @@ class DeepECT:
         Parameters
         ----------
         X : np.ndarray
-            the given data set
+            the given data set as a 2d-array of shape (#samples, #features)
 
         Returns
         -------
@@ -1192,7 +1334,7 @@ class DeepECT:
         """
         # augmentation_invariance_check(self.augmentation_invariance, self.custom_dataloaders)
 
-        DeepECT_labels, DeepECT_centers, autoencoder, dendrogram, leaf = _deep_ect(
+        DeepECT_tree, DeepECT_labels, DeepECT_centers, autoencoder, dendrogram, leaf = _deep_ect(
             X,
             self.labels,
             self.batch_size,
@@ -1202,7 +1344,7 @@ class DeepECT:
             self.number_classes,
             self.max_iterations,
             self.pruning_threshold,
-            self.grow_interval,            
+            self.grow_interval,
             self.optimizer_class,
             self.rec_loss_fn,
             self.autoencoder,
@@ -1210,15 +1352,15 @@ class DeepECT:
             self.max_leaf_nodes,
             self.custom_dataloaders,
             self.augmentation_invariance,
-            self.random_state,
+            self.seed,
+            self.autoencoder_param_path,
         )
         self.DeepECT_labels_ = DeepECT_labels
         self.DeepECT_cluster_centers_ = DeepECT_centers
+        self.DeepECT_tree_ = DeepECT_tree
         self.autoencoder = autoencoder
         self.dendrogram = dendrogram
         self.leaf = leaf
         return self
 
 
-
-    

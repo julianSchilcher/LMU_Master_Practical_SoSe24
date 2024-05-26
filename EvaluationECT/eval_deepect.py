@@ -61,7 +61,7 @@ def main():
         ae = FeedforwardAutoencoder(layers=[data.shape[1], 500, 500, 2000, 10])
         ae.load_state_dict(torch.load(cfg.data.model["pure"][cfg.data.dataset], map_location=torch.device(device)))
         ae.fitted = True
-        deepect = DeepECT(labels, number_classes=10, autoencoder=ae, max_leaf_nodes=20)
+        deepect = DeepECT(labels, number_classes=4, autoencoder=ae, max_leaf_nodes=20)
         deepect.fit(data)
         print(len(deepect.DeepECT_labels_))
         print(deepect.dendrogram)

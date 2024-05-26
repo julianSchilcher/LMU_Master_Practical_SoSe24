@@ -161,7 +161,7 @@ def flat(
 
     max_clustering_epochs = get_max_epoch_size(data, max_iterations, batch_size)
 
-    for method in [FlatClusteringMethod.DEEPECT_AUGMENTED]:
+    for method in FlatClusteringMethod:
         # Load the autoencoder parameters
         autoencoder.load_parameters(autoencoder_params_path)
         autoencoder.fitted = True
@@ -480,15 +480,15 @@ def evaluate(
         dataset=dataset,
         seed=seed,
     )
-    # hierarchical_results = hierarchical(
-    #     autoencoder=autoencoder,
-    #     autoencoder_params_path=autoencoder_params_path,
-    #     dataset_type=dataset_type,
-    #     dataset=dataset,
-    #     seed=seed,
-    # )
+    hierarchical_results = hierarchical(
+        autoencoder=autoencoder,
+        autoencoder_params_path=autoencoder_params_path,
+        dataset_type=dataset_type,
+        dataset=dataset,
+        seed=seed,
+    )
 
-    return flat_results
+    return flat_results, hierarchical_results
 
 
 if __name__ == "__main__":

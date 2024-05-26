@@ -61,7 +61,7 @@ def main():
         ae = FeedforwardAutoencoder(layers=[data.shape[1], 500, 500, 2000, 10])
         ae.load_state_dict(torch.load(cfg.data.model["pure"][cfg.data.dataset], map_location=torch.device(device)))
         ae.fitted = True
-        deepect = DeepECT(labels, number_classes=10, autoencoder=ae, max_leaf_nodes=20)
+        deepect = DeepECT(labels, number_classes=4, autoencoder=ae, max_leaf_nodes=20)
         deepect.fit(data)
         print(len(deepect.DeepECT_labels_))
         print(deepect.dendrogram)
@@ -77,15 +77,19 @@ def main():
             acc: 0.9208714285714286
             nmi: 0.8327991828732338
             ari: 0.8311824687312072
-            
-    USP :   acc: 0.6893430256480593
-            nmi: 0.7344101253005622
-            ari: 0.6027551533369153
+    
+    USP :   den:  0.8086953306699712
+            leaf: 0.901161540116154
+            acc: 0.6678855667885567
+            nmi: 0.7311400146480386
+            ari: 0.5963173877578779
     Reuters:
     
-    fMNIST: acc: 0.50545
-            nmi: 0.558446373356682
-            ari: 0.3901464714980103
+    fMNIST: den: 0.4378096994105657
+            leaf:0.6662333333333333
+            acc: 0.37025
+            nmi: 0.49643987102875464
+            ari: 0.29871404538799773
     """
        
         

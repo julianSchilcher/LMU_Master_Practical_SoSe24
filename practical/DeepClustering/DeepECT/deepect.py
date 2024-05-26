@@ -792,38 +792,6 @@ class _DeepECT_Module(torch.nn.Module):
         self.device = device
         self.random_state = seed
 
-    def deepect_augmentation_invariance_loss(
-        self, embedded: torch.Tensor, embedded_aug: torch.Tensor, alpha: float
-    ) -> torch.Tensor:
-        """
-        Calculate the DeepECT loss of given embedded samples with augmentation invariance.
-
-        Parameters
-        ----------
-        embedded : torch.Tensor
-            the embedded samples
-        embedded_aug : torch.Tensor
-            the embedded augmented samples
-        alpha : float
-            the alpha value
-
-        Returns
-        -------
-        loss : torch.Tensor
-            the final DeepECT loss
-        """
-        # # Get loss of non-augmented data
-        # squared_diffs = squared_euclidean_distance(embedded, self.centers)
-        # probs = _DeepECT_get_probs(squared_diffs, alpha)
-        # clean_loss = (squared_diffs.sqrt() * probs).sum(1).mean()
-        # # Get loss of augmented data
-        # squared_diffs_augmented = squared_euclidean_distance(embedded_aug, self.centers)
-        # aug_loss = (squared_diffs_augmented.sqrt() * probs).sum(1).mean()
-        # # average losses
-        # loss = (clean_loss + aug_loss) / 2
-        loss = None
-        return loss
-
     def fit(
         self,
         autoencoder: torch.nn.Module,

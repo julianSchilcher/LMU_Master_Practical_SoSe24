@@ -23,6 +23,9 @@ from torchvision import transforms
 
 from practical.DeepClustering.DeepECT.deepect import DeepECT
 from practical.DeepClustering.DeepECT.baseline_hierachical.ae_plus import *
+from practical.DeepClustering.DeepECT.baseline_hierachical.methods import (
+    idec_hierarchical,
+)
 
 
 class DatasetType(Enum):
@@ -336,6 +339,28 @@ def hierarchical(
                     "method": method.value,
                     "dp": results[0],
                     "lp": results[1][0],
+                    "seed": seed,
+                }
+            )
+        elif method == HierarchicalClusteringMethod.IDEC_COMPLETE:
+            # Perform hierarchical clustering with IDEC and complete
+            pass
+        elif method == HierarchicalClusteringMethod.AE_BISECTING:
+            # Perform hierarchical clustering with Autoencoder and bisection
+            dendrogram, leaf = ae_bisecting(
+                data=data,
+                labels=labels,
+                autoencoder=autoencoder,
+                max_leaf_nodes=max_leaf_nodes,
+                n_clusters=n_clusters,
+                seed=seed,
+            )
+            results.append(
+                {
+                    "dataset": dataset_type.value,
+                    "method": method.value,
+                    "dp": dendrogram,
+                    "lp": leaf,
                     "seed": seed,
                 }
             )

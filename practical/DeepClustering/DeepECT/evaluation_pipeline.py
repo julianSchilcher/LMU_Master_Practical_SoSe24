@@ -372,7 +372,7 @@ def hierarchical(
             dendrogram, leaf = ae_bisecting(
                 data=data,
                 labels=labels,
-                autoencoder=autoencoder,
+                ae_module=autoencoder,
                 max_leaf_nodes=max_leaf_nodes,
                 n_clusters=n_clusters,
                 seed=seed,
@@ -513,14 +513,15 @@ def evaluate(
         seed=seed,
     )
 
-    flat_results = flat(
+    hierarchical_results = hierarchical(
         autoencoder=autoencoder,
         autoencoder_params_path=autoencoder_params_path,
         dataset_type=dataset_type,
         dataset=dataset,
         seed=seed,
     )
-    hierarchical_results = hierarchical(
+
+    flat_results = flat(
         autoencoder=autoencoder,
         autoencoder_params_path=autoencoder_params_path,
         dataset_type=dataset_type,

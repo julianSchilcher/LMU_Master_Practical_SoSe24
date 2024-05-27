@@ -495,7 +495,7 @@ if __name__ == "__main__":
 
     # Load the MNIST dataset and evaluate flat and hierarchical clustering
     flat_results, _ = evaluate(
-        init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.MNIST, seed=42, autoencoder_params_path="practical/DeepClustering/DeepECT/pretrained_AE.pth"
+        init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.MNIST, seed=42
     )
     print(_)
     # evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.USPS, seed=42)

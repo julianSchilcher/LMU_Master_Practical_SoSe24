@@ -308,6 +308,7 @@ def hierarchical(
 ):
     # Set the seed for reproducibility
     torch.manual_seed(seed)
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     # Load and preprocess data
     data = dataset["data"]
@@ -319,36 +320,42 @@ def hierarchical(
     for method in HierarchicalClusteringMethod:
         # Load the autoencoder parameters
         autoencoder.load_parameters(autoencoder_params_path)
+        autoencoder.to(device)
         autoencoder.fitted = True
         if method == HierarchicalClusteringMethod.AE_BISECTING:
             # Perform hierarchical clustering with Autoencoder and bisection
+            print("fitting ae_bisecting...")
             dendrogram, leaf = ae_bisecting(
                 data=data,
                 labels=labels,
                 ae_module=autoencoder,
                 max_leaf_nodes=max_leaf_nodes,
-                n_clusters=n_clusters,
+                n_cluster=n_clusters,
                 seed=seed,
+                device=device,
             )
+            print("finished ae_bisecting...")
             results.append(
                 {
                     "dataset": dataset_type.value,
                     "method": method.value,
-                    "dp": results[0],
-                    "lp": results[1][0],
+                    "dp": dendrogram,
+                    "lp": leaf[0],
                     "seed": seed,
                 }
             )
         elif method == HierarchicalClusteringMethod.IDEC_COMPLETE:
+            autoencoder.to(device)
+            print("fitting idec hierarchical...")
             (
                 dp_value_single,
                 dp_value_complete,
                 leaf_purity_value_single,
                 leaf_purity_value_complete,
             ) = idec_hierarchical.run_experiment(
-                data, labels, seed, n_clusters, autoencoder
+                data, labels, seed, n_clusters, autoencoder, device=device
             )
-
+            print("finished idec hierarchical...")
             results.append(
                 {
                     "dataset": dataset_type.value,
@@ -367,27 +374,11 @@ def hierarchical(
                     "seed": seed,
                 }
             )
-        elif method == HierarchicalClusteringMethod.AE_BISECTING:
-            # Perform hierarchical clustering with Autoencoder and bisection
-            dendrogram, leaf = ae_bisecting(
-                data=data,
-                labels=labels,
-                ae_module=autoencoder,
-                max_leaf_nodes=max_leaf_nodes,
-                n_clusters=n_clusters,
-                seed=seed,
-            )
-            results.append(
-                {
-                    "dataset": dataset_type.value,
-                    "method": method.value,
-                    "dp": dendrogram,
-                    "lp": leaf[0],
-                    "seed": seed,
-                }
-            )
+
         elif method == HierarchicalClusteringMethod.AE_SINGLE:
+            continue
             # Perform hierarchical clustering with Autoencoder and single
+            print("fitting ae_single...")
             dendrogram, leaf = ae_single(
                 data=data,
                 labels=labels,
@@ -395,7 +386,9 @@ def hierarchical(
                 max_leaf_nodes=max_leaf_nodes,
                 n_clusters=n_clusters,
                 seed=seed,
+                device=device,
             )
+            print("finished ae_single...")
             results.append(
                 {
                     "dataset": dataset_type.value,
@@ -406,7 +399,9 @@ def hierarchical(
                 }
             )
         elif method == HierarchicalClusteringMethod.AE_COMPLETE:
+            continue
             # Perform hierarchical clustering with Autoencoder and complete
+            print("fitting ae_complete...")
             dendrogram, leaf = ae_complete(
                 data=data,
                 labels=labels,
@@ -414,7 +409,9 @@ def hierarchical(
                 max_leaf_nodes=max_leaf_nodes,
                 n_clusters=n_clusters,
                 seed=seed,
+                device=device,
             )
+            print("fitting ae_single...")
             results.append(
                 {
                     "dataset": dataset_type.value,

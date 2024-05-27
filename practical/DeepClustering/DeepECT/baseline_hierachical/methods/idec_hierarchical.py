@@ -5,8 +5,8 @@ from sklearn.cluster import KMeans
 from practical.DeepClustering.DeepECT.ect.utils.evaluation.dendrogram_purity import *
 import time
 from pathlib import Path
-from ect.methods.DEC import DEC
-from ect.utils.evaluation import cluster_acc
+from practical.DeepClustering.DeepECT.ect.methods.DEC import DEC
+from practical.DeepClustering.DeepECT.ect.utils.evaluation import cluster_acc
 from sklearn.metrics import normalized_mutual_info_score as nmi
 from practical.DeepClustering.DeepECT.ect.utils.dec_utils import (
     dendrogram_purity_tree_from_clusters,
@@ -57,8 +57,8 @@ def run_experiment(
 
     # Initialize cluster centers based on a smaller sample
     # cluster_module = DEC(init_centers).cuda()
-    cluster_module = DEC(init_centers)
-    autoencoder = deepcopy(autoencoder)
+    cluster_module = DEC(init_centers).to(device)
+    # autoencoder = deepcopy(autoencoder)
     optimizer = torch.optim.Adam(
         list(autoencoder.parameters()) + list(cluster_module.parameters()), lr=0.001
     )
@@ -77,7 +77,6 @@ def run_experiment(
             n_batches += 1
             batch_size = batch_data.shape[0]
             embedded_data = autoencoder.encode(batch_data)
-            reconstructed_data = autoencoder.decode(embedded_data)
             labels = cluster_module.prediction_hard_np(embedded_data)
             pred_labels[index : index + batch_size] = labels
             index = index + batch_size
@@ -102,14 +101,14 @@ def run_experiment(
 
     evaluate("init", autoencoder, cluster_module)
 
-    n_rounds = 10000
+    n_rounds = 40000
     train_round_idx = 0
     while True:  # each iteration is equal to an epoch
         for batch_data in train_loader:
             train_round_idx += 1
             if train_round_idx > n_rounds:
                 break
-            # batch_data = batch_data[0].cuda()
+
             batch_data = batch_data[0].to(device)
 
             ae_loss, embedded_data, reconstruced_data = autoencoder.loss(

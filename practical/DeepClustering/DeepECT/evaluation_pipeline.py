@@ -225,16 +225,16 @@ def flat(
         elif method == FlatClusteringMethod.DEEPECT_AUGMENTED:
             # Perform flat clustering with DeepECT and augmentation
             if dataset_type == DatasetType.REUTERS:
-                results.append(
-                    {
-                        "dataset": dataset_type.value,
-                        "method": method.value,
-                        "nmi": "-",
-                        "acc": "-",
-                        "ari": "-",
-                        "seed": "-",
-                    }
-                )
+                # results.append(
+                #     {
+                #         "dataset": dataset_type.value,
+                #         "method": method.value,
+                #         "nmi": "-",
+                #         "acc": "-",
+                #         "ari": "-",
+                #         "seed": "-",
+                #     }
+                # )
                 continue
 
             custom_dataloaders = get_custom_dataloader_augmentations(data, dataset_type)
@@ -320,10 +320,7 @@ def hierarchical(
         # Load the autoencoder parameters
         autoencoder.load_parameters(autoencoder_params_path)
         autoencoder.fitted = True
-        if method == HierarchicalClusteringMethod.IDEC_COMPLETE:
-            # Perform hierarchical clustering with IDEC and complete
-            pass
-        elif method == HierarchicalClusteringMethod.AE_BISECTING:
+        if method == HierarchicalClusteringMethod.AE_BISECTING:
             # Perform hierarchical clustering with Autoencoder and bisection
             dendrogram, leaf = ae_bisecting(
                 data=data,
@@ -343,8 +340,33 @@ def hierarchical(
                 }
             )
         elif method == HierarchicalClusteringMethod.IDEC_COMPLETE:
-            # Perform hierarchical clustering with IDEC and complete
-            pass
+            (
+                dp_value_single,
+                dp_value_complete,
+                leaf_purity_value_single,
+                leaf_purity_value_complete,
+            ) = idec_hierarchical.run_experiment(
+                data, labels, seed, n_clusters, autoencoder
+            )
+
+            results.append(
+                {
+                    "dataset": dataset_type.value,
+                    "method": HierarchicalClusteringMethod.IDEC_COMPLETE,
+                    "dp": dp_value_complete,
+                    "lp": leaf_purity_value_complete,
+                    "seed": seed,
+                }
+            )
+            results.append(
+                {
+                    "dataset": dataset_type.value,
+                    "method": HierarchicalClusteringMethod.IDEC_SINGLE,
+                    "dp": dp_value_single,
+                    "lp": leaf_purity_value_single,
+                    "seed": seed,
+                }
+            )
         elif method == HierarchicalClusteringMethod.AE_BISECTING:
             # Perform hierarchical clustering with Autoencoder and bisection
             dendrogram, leaf = ae_bisecting(
@@ -360,13 +382,13 @@ def hierarchical(
                     "dataset": dataset_type.value,
                     "method": method.value,
                     "dp": dendrogram,
-                    "lp": leaf,
+                    "lp": leaf[0],
                     "seed": seed,
                 }
             )
         elif method == HierarchicalClusteringMethod.AE_SINGLE:
             # Perform hierarchical clustering with Autoencoder and single
-            results = ae_single(
+            dendrogram, leaf = ae_single(
                 data=data,
                 labels=labels,
                 ae_module=autoencoder,
@@ -378,14 +400,14 @@ def hierarchical(
                 {
                     "dataset": dataset_type.value,
                     "method": method.value,
-                    "dp": results[0],
-                    "lp": results[1][0],
+                    "dp": dendrogram,
+                    "lp": leaf[0],
                     "seed": seed,
                 }
             )
         elif method == HierarchicalClusteringMethod.AE_COMPLETE:
             # Perform hierarchical clustering with Autoencoder and complete
-            results = ae_complete(
+            dendrogram, leaf = ae_complete(
                 data=data,
                 labels=labels,
                 ae_module=autoencoder,
@@ -397,8 +419,8 @@ def hierarchical(
                 {
                     "dataset": dataset_type.value,
                     "method": method.value,
-                    "dp": results[0],
-                    "lp": results[1][0],
+                    "dp": dendrogram,
+                    "lp": leaf[0],
                     "seed": seed,
                 }
             )

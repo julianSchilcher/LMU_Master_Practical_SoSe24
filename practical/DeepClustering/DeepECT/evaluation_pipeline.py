@@ -4,26 +4,26 @@ import sys
 
 import numpy as np
 import pandas as pd
-
-
 from baseline_hierachical.ae_plus import *
+
 sys.path.append(os.getcwd())
 
+import sys
 from enum import Enum
 
 import torch
-from torch.utils.data import Dataset, DataLoader
-from torchvision import datasets, transforms
 from clustpy.data import load_fmnist, load_mnist, load_reuters, load_usps
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
-from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
+from clustpy.deep.autoencoders._abstract_autoencoder import \
+    _AbstractAutoencoder
 from clustpy.deep.dec import IDEC
 from clustpy.metrics import unsupervised_clustering_accuracy
 from sklearn.cluster import KMeans
 from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
 from sklearn.utils import Bunch
+from torch.utils.data import DataLoader, Dataset
+from torchvision import transforms
 
-import sys
 sys.path.append("/Users/zy/LMU_Master_Practical_SoSe24/")
 from practical.DeepClustering.DeepECT.deepect import DeepECT
 
@@ -324,9 +324,8 @@ def hierarchical(
                     {
                         "dataset": dataset_type.value,
                         "method": method.value,
-                        "nmi": "-",
-                        "acc": "-",
-                        "ari": "-",
+                        "dp": "-",
+                        "lp": "-",
                         "seed": "-",
                     }
                 )
@@ -348,9 +347,8 @@ def hierarchical(
                 {
                     "dataset": dataset_type.value,
                     "method": method.value,
-                    "nmi": deepect.tree_.flat_nmi(labels, n_clusters),
-                    "acc": deepect.tree_.flat_accuracy(labels, n_clusters),
-                    "ari": deepect.tree_.flat_ari(labels, n_clusters),
+                    "dp": deepect.tree_.dendrogram_purity(labels),
+                    "lp": deepect.tree_.leaf_purity(labels)[0],
                     "seed": seed,
                 }
             )

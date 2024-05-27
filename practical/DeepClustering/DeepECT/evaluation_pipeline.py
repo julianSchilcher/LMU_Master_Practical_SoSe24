@@ -1,10 +1,8 @@
 import math
 import os
 import sys
-
 import numpy as np
 import pandas as pd
-from baseline_hierachical.ae_plus import *
 
 sys.path.append(os.getcwd())
 
@@ -14,8 +12,7 @@ from enum import Enum
 import torch
 from clustpy.data import load_fmnist, load_mnist, load_reuters, load_usps
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
-from clustpy.deep.autoencoders._abstract_autoencoder import \
-    _AbstractAutoencoder
+from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
 from clustpy.deep.dec import IDEC
 from clustpy.metrics import unsupervised_clustering_accuracy
 from sklearn.cluster import KMeans
@@ -24,8 +21,8 @@ from sklearn.utils import Bunch
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
-sys.path.append("/Users/zy/LMU_Master_Practical_SoSe24/")
 from practical.DeepClustering.DeepECT.deepect import DeepECT
+from practical.DeepClustering.DeepECT.baseline_hierachical.ae_plus import *
 
 
 class DatasetType(Enum):
@@ -117,26 +114,24 @@ def pretraining(
     autoencoder: _AbstractAutoencoder = init_autoencoder(
         layers=[data.shape[1], 500, 500, 2000, 10], reusable=True
     )
-
     if not os.path.exists(autoencoder_params_path):
         # Train the autoencoder if parameters file does not exist
         autoencoder.to(device)
         autoencoder.fit(
-            n_epochs=get_max_epoch_size(data, 130000, 256),
+            n_epochs=get_max_epoch_size(data, 80000, 256),
             optimizer_params={"lr": 0.0001},
             data=data,
             batch_size=256,
             device=device,
-        )
+        ).cpu()
         autoencoder.save_parameters(autoencoder_params_path)
         print("Autoencoder pretraining complete and saved.")
     else:
         # Load the existing parameters
-        autoencoder.load_parameters(autoencoder_params_path, map_location=torch.device(device)) 
+        autoencoder.load_parameters(autoencoder_params_path)
         print("Autoencoder parameters loaded from file.")
 
     return autoencoder
-
 
 
 def flat(
@@ -163,7 +158,7 @@ def flat(
 
     for method in FlatClusteringMethod:
         # Load the autoencoder parameters
-        autoencoder.load_parameters(autoencoder_params_path)
+        autoencoder = autoencoder.load_parameters(autoencoder_params_path)
         autoencoder.fitted = True
 
         if method == FlatClusteringMethod.KMEANS:
@@ -207,7 +202,9 @@ def flat(
                 max_leaf_nodes=max_leaf_nodes,
                 random_state=np.random.RandomState(seed),
             )
+            print("fitting DeepECT...")
             deepect.fit(data)
+            print("finished DeepECT...")
             # Calculate evaluation metrics
             results.append(
                 {
@@ -236,7 +233,7 @@ def flat(
                     }
                 )
                 continue
-            
+
             custom_dataloaders = get_custom_dataloader_augmentations(data, dataset_type)
 
             deepect = DeepECT(
@@ -247,7 +244,9 @@ def flat(
                 augmentation_invariance=True,
                 random_state=np.random.RandomState(seed),
             )
+            print("fitting DeepECT+AUG...")
             deepect.fit(data)
+            print("finished DeepECT+AUG...")
             # Calculate evaluation metrics
             results.append(
                 {
@@ -256,10 +255,11 @@ def flat(
                     "nmi": deepect.tree_.flat_nmi(labels, n_clusters),
                     "acc": deepect.tree_.flat_accuracy(labels, n_clusters),
                     "ari": deepect.tree_.flat_ari(labels, n_clusters),
+                    "dp": deepect.tree_.dendrogram_purity(labels),
+                    "lp": deepect.tree_.leaf_purity(labels)[0],
                     "seed": seed,
                 }
             )
-
         elif method == FlatClusteringMethod.IDEC:
             # Perform flat clustering with IDEC
             idec = IDEC(
@@ -317,97 +317,88 @@ def hierarchical(
         # Load the autoencoder parameters
         autoencoder.load_parameters(autoencoder_params_path)
         autoencoder.fitted = True
-        if method == FlatClusteringMethod.DEEPECT_AUGMENTED:
-            # Perform flat clustering with DeepECT and augmentation
-            if dataset_type == DatasetType.REUTERS:
-                results.append(
-                    {
-                        "dataset": dataset_type.value,
-                        "method": method.value,
-                        "dp": "-",
-                        "lp": "-",
-                        "seed": "-",
-                    }
-                )
-                continue
-            
-            custom_dataloaders = get_custom_dataloader_augmentations(data, dataset_type)
-
-            deepect = DeepECT(
-                autoencoder=autoencoder,
-                clustering_optimizer_params={"lr": 1e-4, "betas": (0.9, 0.999)},
-                max_leaf_nodes=max_leaf_nodes,
-                custom_dataloaders=custom_dataloaders,
-                augmentation_invariance=True,
-                random_state=np.random.RandomState(seed),
-            )
-            deepect.fit(data)
-            # Calculate evaluation metrics
-            results.append(
-                {
-                    "dataset": dataset_type.value,
-                    "method": method.value,
-                    "dp": deepect.tree_.dendrogram_purity(labels),
-                    "lp": deepect.tree_.leaf_purity(labels)[0],
-                    "seed": seed,
-                }
-            )
-        elif method == HierarchicalClusteringMethod.IDEC_COMPLETE:
+        if method == HierarchicalClusteringMethod.IDEC_COMPLETE:
             # Perform hierarchical clustering with IDEC and complete
             pass
         elif method == HierarchicalClusteringMethod.AE_BISECTING:
             # Perform hierarchical clustering with Autoencoder and bisection
-            dendrogram, leaf = ae_bisecting(data=data, labels=labels, autoencoder=autoencoder, max_leaf_nodes=max_leaf_nodes, n_clusters=n_clusters, seed=seed)
+            dendrogram, leaf = ae_bisecting(
+                data=data,
+                labels=labels,
+                ae_module=autoencoder,
+                max_leaf_nodes=max_leaf_nodes,
+                n_clusters=n_clusters,
+                seed=seed,
+            )
             results.append(
-                {"dataset": dataset_type.value,
-                "method": method.value,
-                "dp": dendrogram,
-                "lp": leaf,
-                "seed": seed}
+                {
+                    "dataset": dataset_type.value,
+                    "method": method.value,
+                    "dp": results[0],
+                    "lp": results[1][0],
+                    "seed": seed,
+                }
             )
         elif method == HierarchicalClusteringMethod.AE_SINGLE:
             # Perform hierarchical clustering with Autoencoder and single
-            results = ae_single(data=data, labels=labels, autoencoder=autoencoder, max_leaf_nodes=max_leaf_nodes, n_clusters=n_clusters, seed = seed)
+            results = ae_single(
+                data=data,
+                labels=labels,
+                ae_module=autoencoder,
+                max_leaf_nodes=max_leaf_nodes,
+                n_clusters=n_clusters,
+                seed=seed,
+            )
             results.append(
-                {"dataset": dataset_type.value,
-                "method": method.value,
-                "dp": dendrogram,
-                "lp": leaf,
-                "seed": seed}
+                {
+                    "dataset": dataset_type.value,
+                    "method": method.value,
+                    "dp": results[0],
+                    "lp": results[1][0],
+                    "seed": seed,
+                }
             )
         elif method == HierarchicalClusteringMethod.AE_COMPLETE:
             # Perform hierarchical clustering with Autoencoder and complete
-            results = ae_complete(data=data, labels=labels, autoencoder=autoencoder, max_leaf_nodes=max_leaf_nodes, n_clusters=n_clusters, seed=seed)
+            results = ae_complete(
+                data=data,
+                labels=labels,
+                ae_module=autoencoder,
+                max_leaf_nodes=max_leaf_nodes,
+                n_clusters=n_clusters,
+                seed=seed,
+            )
             results.append(
-                {"dataset": dataset_type.value,
-                "method": method.value,
-                "dp": dendrogram,
-                "lp": leaf,
-                "seed": seed}
+                {
+                    "dataset": dataset_type.value,
+                    "method": method.value,
+                    "dp": results[0],
+                    "lp": results[1][0],
+                    "seed": seed,
+                }
             )
 
     df_results = pd.DataFrame(results)
     return df_results
 
 
-    df_results = pd.DataFrame(results)
-    return df_results
-
 def get_custom_dataloader_augmentations(data: np.ndarray, dataset_type: DatasetType):
-    
-    augmentation_transform = transforms.Compose([
-        transforms.RandomAffine(degrees=15),
-        transforms.ToTensor(),
-        transforms.Lambda(lambda x:x*255)
-    ])
+
+    augmentation_transform = transforms.Compose(
+        [
+            transforms.RandomAffine(degrees=15),
+            transforms.ToTensor(),
+            transforms.Lambda(lambda x: x * 255),
+        ]
+    )
 
     class Augmented_Dataset(Dataset):
         def __init__(self, original_dataset, augmentation_transform, dataset_name):
-            if(dataset_name == DatasetType.USPS):
+            if dataset_name == DatasetType.USPS:
                 self.image_size = 16
             else:
                 self.image_size = 28
-            
+
             self.original_dataset = original_dataset
             self.augmentation_transform = augmentation_transform
 
@@ -416,12 +407,16 @@ def get_custom_dataloader_augmentations(data: np.ndarray, dataset_type: DatasetT
 
         def __getitem__(self, idx):
             original_image = self.original_dataset[idx]
-            augmented_image = self.augmentation_transform(transforms.ToPILImage()(original_image.reshape(self.image_size,self.image_size)/255))
+            augmented_image = self.augmentation_transform(
+                transforms.ToPILImage()(
+                    original_image.reshape(self.image_size, self.image_size) / 255
+                )
+            )
             return idx, original_image, augmented_image.reshape(self.image_size**2)
 
     class Original_Dataset(Dataset):
         def __init__(self, original_dataset, dataset_name):
-            if(dataset_name == DatasetType.USPS):
+            if dataset_name == DatasetType.USPS:
                 self.image_size = 16
             else:
                 self.image_size = 28
@@ -433,7 +428,7 @@ def get_custom_dataloader_augmentations(data: np.ndarray, dataset_type: DatasetT
         def __getitem__(self, idx):
             original_image = self.original_dataset[idx]
             return idx, original_image.reshape(self.image_size**2)
-    
+
     # Create an instance of the datasets
     augmented_dataset = Augmented_Dataset(data, augmentation_transform, dataset_type)
     original_dataset = Original_Dataset(data, dataset_type)

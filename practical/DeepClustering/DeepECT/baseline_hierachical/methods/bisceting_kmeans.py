@@ -3,8 +3,15 @@ from sklearn.cluster import KMeans
 import attr
 from queue import PriorityQueue
 import sys
-sys.path.append("/Users/zy/LMU_Master_Practical_SoSe24/practical/DeepClustering")
-from DeepECT.baseline_hierachical.methods.dendrogram_purity import DpNode, DpLeaf
+import os
+
+sys.path.append(os.getcwd())
+
+from practical.DeepClustering.DeepECT.baseline_hierachical.methods.dendrogram_purity import (
+    DpNode,
+    DpLeaf,
+)
+
 
 def sum_square_error(centroid, data):
     return np.sum(np.linalg.norm(data - centroid, 2, 1))
@@ -79,20 +86,36 @@ def bisection(max_k: int, data: np.ndarray) -> tree_node:
         labels = np.array(k.fit_predict(split_data), dtype=np.float32)
         labels = labels.reshape([len(labels), 1])
 
-        left_idx = np.asanyarray([i for i in range(split_data.shape[0]) if labels[i] == 0])
+        left_idx = np.asanyarray(
+            [i for i in range(split_data.shape[0]) if labels[i] == 0]
+        )
         left_data = split_data[left_idx, :]
         left_child = tree_node(next_node_id, np.mean(left_data, 0))
         next_node_id += 1
         leaf_to_split.left_child = left_child
-        queue.put((-1.0 * sum_square_error(left_child.centroid, left_data), left_child, left_data))
+        queue.put(
+            (
+                -1.0 * sum_square_error(left_child.centroid, left_data),
+                left_child,
+                left_data,
+            )
+        )
         # print(f"left_child sse {left_child.sse}")
 
-        right_idx = np.asanyarray([i for i in range(split_data.shape[0]) if labels[i] == 1])
+        right_idx = np.asanyarray(
+            [i for i in range(split_data.shape[0]) if labels[i] == 1]
+        )
         right_data = split_data[right_idx, :]
         right_child = tree_node(next_node_id, np.mean(right_data, 0))
         next_node_id += 1
         leaf_to_split.right_child = right_child
-        queue.put((-1.0 * sum_square_error(right_child.centroid, right_data), right_child, right_data))
+        queue.put(
+            (
+                -1.0 * sum_square_error(right_child.centroid, right_data),
+                right_child,
+                right_data,
+            )
+        )
         # print(f"right_child sse {right_child.sse}")
 
         current_k += 1  # it is only one leaf node more
@@ -143,7 +166,7 @@ def predict_id_tree(tree_root: tree_node, data: np.array, ids: np.array = None):
         else:
             left_child = empty_recursive(node.left_child)
         if node.right_child is None:
-            right_child = DpLeaf([], node.id * 1000 + 1) 
+            right_child = DpLeaf([], node.id * 1000 + 1)
         else:
             right_child = empty_recursive(node.right_child)
         return DpNode(left_child, right_child)

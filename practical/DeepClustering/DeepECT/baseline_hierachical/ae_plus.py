@@ -6,8 +6,8 @@ import numpy as np
 import torch
 import sys
 sys.path.append("/Users/zy/LMU_Master_Practical_SoSe24/practical/DeepClustering")
-from DeepECT.baseline_hierachical.methods.dendrogram_purity import *
-from DeepECT.baseline_hierachical.methods.bisceting_kmeans import *
+from practical.DeepClustering.DeepECT.baseline_hierachical.methods.dendrogram_purity import *
+from practical.DeepClustering.DeepECT.baseline_hierachical.methods.bisceting_kmeans import *
 from metrics import dendrogram_purity, leaf_purity
 from sklearn.cluster import AgglomerativeClustering
 

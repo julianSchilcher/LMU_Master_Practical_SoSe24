@@ -5,6 +5,7 @@ import sys
 import numpy as np
 import pandas as pd
 
+from baseline_hierachical.methods import idec_hierarchical
 
 from baseline_hierachical.ae_plus import *
 sys.path.append(os.getcwd())
@@ -354,9 +355,26 @@ def hierarchical(
                     "seed": seed,
                 }
             )
-        elif method == HierarchicalClusteringMethod.IDEC_COMPLETE:
-            # Perform hierarchical clustering with IDEC and complete
-            pass
+        elif method == HierarchicalClusteringMethod.IDEC_COMPLETE or HierarchicalClusteringMethod.IDEC_SINGLE:
+
+            dp_value_single, dp_value_complete, leaf_purity_value_single, leaf_purity_value_complete = idec_hierarchical.run_experiment(data, labels, seed, 10, autoencoder)
+            
+            if method == HierarchicalClusteringMethod.IDEC_COMPLETE:
+                results.append(
+                    {"dataset": dataset_type.value,
+                    "method": method.value,
+                    "dp": dp_value_complete,
+                    "lp": leaf_purity_value_complete,
+                    "seed": seed}
+                )
+            else:
+                results.append(
+                    {"dataset": dataset_type.value,
+                    "method": method.value,
+                    "dp": dp_value_single,
+                    "lp": leaf_purity_value_single,
+                    "seed": seed}
+                )   
         elif method == HierarchicalClusteringMethod.AE_BISECTING:
             # Perform hierarchical clustering with Autoencoder and bisection
             dendrogram, leaf = ae_bisecting(data=data, labels=labels, autoencoder=autoencoder, max_leaf_nodes=max_leaf_nodes, n_clusters=n_clusters, seed=seed)

@@ -4,7 +4,7 @@ import attr
 from queue import PriorityQueue
 import sys
 sys.path.append("/Users/zy/LMU_Master_Practical_SoSe24/practical/DeepClustering")
-from DeepECT.baseline_hierachical.methods.dendrogram_purity import DpNode, DpLeaf
+from practical.DeepClustering.DeepECT.baseline_hierachical.methods.dendrogram_purity import DpNode, DpLeaf
 
 def sum_square_error(centroid, data):
     return np.sum(np.linalg.norm(data - centroid, 2, 1))

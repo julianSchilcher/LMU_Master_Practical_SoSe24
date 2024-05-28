@@ -24,7 +24,7 @@ from torchvision import transforms
 from practical.DeepClustering.DeepECT.deepect import DeepECT
 from practical.DeepClustering.DeepECT.baseline_hierachical.ae_plus import *
 from practical.DeepClustering.DeepECT.baseline_hierachical.methods import (
-    idec_hierarchical,
+    idec_hierarchical, idec_hierarchical_clustpy
 )
 
 
@@ -121,8 +121,8 @@ def pretraining(
         # Train the autoencoder if parameters file does not exist
         autoencoder.to(device)
         autoencoder.fit(
-            n_epochs=get_max_epoch_size(data, 80000, 256),
-            optimizer_params={"lr": 0.0001},
+            n_epochs=get_max_epoch_size(data, 80000, 256), # 50
+            optimizer_params={"lr": 0.0001},# 0.001
             data=data,
             batch_size=256,
             device=device,
@@ -347,12 +347,15 @@ def hierarchical(
         elif method == HierarchicalClusteringMethod.IDEC_COMPLETE:
             autoencoder.to(device)
             print("fitting idec hierarchical...")
-            (
-                dp_value_single,
-                dp_value_complete,
-                leaf_purity_value_single,
-                leaf_purity_value_complete,
-            ) = idec_hierarchical.run_experiment(
+            # (
+            #     dp_value_single,
+            #     dp_value_complete,
+            #     leaf_purity_value_single,
+            #     leaf_purity_value_complete,
+            # ) = idec_hierarchical.run_experiment(
+            #     data, labels, seed, n_clusters, autoencoder, device=device
+            # )
+            dp_value_single, dp_value_complete, leaf_purity_value_single, leaf_purity_value_complete = idec_hierarchical_clustpy.run_idec_hierarchical(
                 data, labels, seed, n_clusters, autoencoder, device=device
             )
             print("finished idec hierarchical...")

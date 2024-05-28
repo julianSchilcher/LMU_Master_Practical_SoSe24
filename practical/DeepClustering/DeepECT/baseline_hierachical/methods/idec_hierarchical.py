@@ -14,6 +14,7 @@ from practical.DeepClustering.DeepECT.ect.utils.dec_utils import (
 import random
 from practical.DeepClustering.DeepECT.ect.utils.deterministic import set_random_seed
 from copy import deepcopy
+from clustpy.metrics import unsupervised_clustering_accuracy
 
 
 def run_experiment(
@@ -63,9 +64,9 @@ def run_experiment(
         list(autoencoder.parameters()) + list(cluster_module.parameters()), lr=0.001
     )
 
-    def evaluate(train_round_idx, ae_module, cluster_module):
+    def evaluate(train_round_idx, autoencoder, cluster_module):
         test_loader = torch.utils.data.DataLoader(
-            torch.utils.data.TensorDataset(pt_data), batch_size=256
+            torch.utils.data.TensorDataset(pt_data), batch_size=256, shuffle=False
         )
 
         pred_labels = np.zeros(pt_data.shape[0], dtype=int)
@@ -80,6 +81,7 @@ def run_experiment(
             labels = cluster_module.prediction_hard_np(embedded_data)
             pred_labels[index : index + batch_size] = labels
             index = index + batch_size
+        print(unsupervised_clustering_accuracy(ground_truth_labels, pred_labels))
         pred_tree = dendrogram_purity_tree_from_clusters(
             cluster_module, pred_labels, "single"
         )
@@ -126,7 +128,7 @@ def run_experiment(
             loss.backward()
             optimizer.step()
 
-            if train_round_idx % 2000 == 0:
+            if train_round_idx % 500 == 0:
                 print(evaluate(train_round_idx, autoencoder, cluster_module))
         else:  # For else is being executed if break did not occur, we continue the while true loop otherwise we break it too
             continue

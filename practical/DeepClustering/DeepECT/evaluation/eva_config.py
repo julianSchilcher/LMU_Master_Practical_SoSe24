@@ -6,11 +6,7 @@ def get_config():
     
     # data
     config.data = data = ml_collections.ConfigDict()
-<<<<<<< HEAD:practical/DeepClustering/DeepECT/evaluation/eva_config.py
-    data.dataset = "Reuters"
-=======
     data.dataset = "USP"
->>>>>>> origin/evaluation:EvaluationECT/eva_config.py
     data.model = {
                 "layer_wise":{ "Fashion_MNIST": "C:/Users/Li/Desktop/deepect/LMU_Master_Practical_SoSe24/EvaluationECT/experiments/pre_training/model/layer_wise/Fashion_MNIST_pre/vae_Fashion_MNIST_4/model.path",
                             "MNIST": "C:/Users/Li/Desktop/deepect/LMU_Master_Practical_SoSe24/EvaluationECT/experiments/pre_training/model/layer_wise/MNIST_pre/vae_MNIST_0/model.path",

@@ -17,7 +17,8 @@ from sklearn.cluster import KMeans
 from clustpy.data.real_torchvision_data import load_mnist
 from tqdm import tqdm
 from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
-
+# from practical.DeepClustering.DeepECT.initial_stack_ae import get_trained_stacked_autoencoder
+# from practical.DeepClustering.DeepECT.initial_stack_ae import get_stack_initial_deep_clustering_setting
 from practical.DeepClustering.DeepECT.metrics import (
     PredictionClusterNode,
     PredictionClusterTree,
@@ -1069,7 +1070,7 @@ def _deep_ect(
     set_torch_seed(random_state)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-
+ 
     (
         device,
         trainloader,
@@ -1095,6 +1096,7 @@ def _deep_ect(
         {"random_state": random_state, "n_init": 20, "init": "random", "tol": 0.0},
         random_state,
     )
+
     print(device)
     if save_ae_state_dict:
         autoencoder.save_parameters(autoencoder_save_param_path)
@@ -1158,6 +1160,8 @@ class DeepECT:
 
         Parameters
         ----------
+        standard: bool
+            choose autoencoder
         batch_size : int
             size of the data batches (default: 256)
         pretrain_optimizer_params : dict

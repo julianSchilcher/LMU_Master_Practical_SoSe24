@@ -153,7 +153,7 @@ def predict_by_tree(tree_root: tree_node, data: np.ndarray, n_clusters=-1):
     for idx, row in enumerate(data):
         labels[idx] = walk_tree(tree_root, row)
 
-    return labels.astype(np.int)
+    return labels.astype(int)
 
 
 def predict_id_tree(tree_root: tree_node, data: np.array, ids: np.array = None):

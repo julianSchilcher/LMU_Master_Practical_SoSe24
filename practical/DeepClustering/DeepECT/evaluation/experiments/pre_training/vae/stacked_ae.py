@@ -9,6 +9,7 @@ from practical.DeepClustering.DeepECT.evaluation.experiments.pre_training.vae.fu
 )
 import logging
 from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
+from clustpy.data import load_fmnist
 
 logger = logging.getLogger(__name__)
 
@@ -214,7 +215,7 @@ class stacked_ae(_AbstractAutoencoder):
         """
 
         for layer in range(1, self.n_layers + 1):
-            logger.debug(f"Pretrain layer {layer}")
+            print(f"Pretrain layer {layer}")
             optimizer = self.optimizer_fn(self.parameters_pretrain(layer))
             round = 0
             while True:  # each iteration is equal to an epoch
@@ -247,13 +248,13 @@ class stacked_ae(_AbstractAutoencoder):
                     loss.backward()
                     optimizer.step()
                     if round % 100 == 0:
-                        logger.debug(f"Round {round} current loss: {loss.item()}")
+                        print(f"Round {round} current loss: {loss.item()}")
                 else:
                     continue
                 break
 
     def refine_training(self, dataset, rounds, corruption_fn=None, optimizer_fn=None):
-        logger.debug(f"Refine training")
+        print(f"Refine training")
         if optimizer_fn is None:
             optimizer = self.optimizer_fn(self.parameters())
         else:
@@ -279,7 +280,7 @@ class stacked_ae(_AbstractAutoencoder):
                 loss.backward()
                 optimizer.step()
                 if index % 100 == 0:
-                    logger.debug(f"Round {index} current loss: {loss.item()}")
+                    print(f"Round {index} current loss: {loss.item()}")
             else:
                 continue
             break

@@ -26,9 +26,11 @@ def ae_bisecting(data, labels, ae_module, max_leaf_nodes, n_cluster, seed, devic
     set_random_seed(seed)
     embedded_data = None
     for batch_data in torch.utils.data.DataLoader(data, batch_size=256, shuffle=False):
+        
         embedded_batch_np = (
-            ae_module.forward(batch_data.to(device)).detach().cpu().numpy()
-        )
+                ae_module.encode(batch_data.to(device)).detach().cpu().numpy()
+            )
+
         if embedded_data is None:
             embedded_data = embedded_batch_np
         else:
@@ -48,16 +50,17 @@ def ae_single(data, labels, ae_module, max_leaf_nodes, n_clusters, seed, device)
     embedded_data = None
     for batch_data in torch.utils.data.DataLoader(data, batch_size=256, shuffle=False):
         embedded_batch_np = (
-            ae_module.forward(batch_data.to(device)).detach().cpu().numpy()
-        )
+                ae_module.encode(batch_data.to(device)).detach().cpu().numpy()
+            )
         if embedded_data is None:
             embedded_data = embedded_batch_np
         else:
             embedded_data = np.concatenate([embedded_data, embedded_batch_np], 0)
     del ae_module
     single_cluster = AgglomerativeClustering(
-        compute_full_tree=False, n_clusters=n_clusters, linkage="single"
+        compute_full_tree=True, n_clusters=n_clusters, linkage="single"
     ).fit(embedded_data)
+
     single_labels = single_cluster.labels_
     single_purity_tree = prune_dendrogram_purity_tree(
         to_dendrogram_purity_tree(single_cluster.children_), max_leaf_nodes
@@ -73,15 +76,15 @@ def ae_complete(data, labels, ae_module, max_leaf_nodes, n_clusters, seed, devic
     embedded_data = None
     for batch_data in torch.utils.data.DataLoader(data, batch_size=256, shuffle=False):
         embedded_batch_np = (
-            ae_module.forward(batch_data.to(device)).detach().cpu().numpy()
-        )
+                ae_module.encode(batch_data.to(device)).detach().cpu().numpy()
+            )
         if embedded_data is None:
             embedded_data = embedded_batch_np
         else:
             embedded_data = np.concatenate([embedded_data, embedded_batch_np], 0)
     del ae_module
     complete_cluster = AgglomerativeClustering(
-        compute_full_tree=False, n_clusters=n_clusters, linkage="complete"
+        compute_full_tree=True, n_clusters=n_clusters, linkage="complete"
     ).fit(embedded_data)
     complete_labels = complete_cluster.labels_
     complete_purity_tree = prune_dendrogram_purity_tree(

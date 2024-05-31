@@ -5,6 +5,7 @@ from enum import Enum
 import numpy as np
 import pandas as pd
 import torch
+from torch.utils.data import TensorDataset, DataLoader
 from clustpy.data import load_fmnist, load_mnist, load_reuters, load_usps
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
 from clustpy.deep.autoencoders._abstract_autoencoder import \
@@ -16,11 +17,13 @@ from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
 from sklearn.utils import Bunch
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
+from practical.DeepClustering.DeepECT.evaluation.experiments.pre_training.vae.stacked_ae import stacked_ae
 
 from practical.DeepClustering.DeepECT.baseline_hierachical.ae_plus import *
 from practical.DeepClustering.DeepECT.baseline_hierachical.methods import \
     idec_hierarchical_clustpy
 from practical.DeepClustering.DeepECT.deepect import DeepECT
+
 
 
 class DatasetType(Enum):
@@ -93,44 +96,43 @@ def get_max_epoch_size(data, max_iterations, batch_size):
     return math.ceil(max_iterations / (len(data) / batch_size))
 
 
-def pretraining(
-    init_autoencoder: _AbstractAutoencoder,
-    autoencoder_params_path: str,
-    dataset: Bunch,
-    seed: int,
-):
-    # Set the seed for reproducibility
+def pretraining(init_autoencoder, autoencoder_standard, autoencoder_params_path, dataset, seed):
     torch.manual_seed(seed)
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-    # Load and preprocess data
     data = dataset["data"]
+    data = torch.tensor(data, dtype=torch.float32)
 
-    # TODO: Check for augmentation here
-
-    # Initialize the autoencoder
-    autoencoder: _AbstractAutoencoder = init_autoencoder(
-        layers=[data.shape[1], 500, 500, 2000, 10], reusable=True
-    )
     if not os.path.exists(autoencoder_params_path):
-        # Train the autoencoder if parameters file does not exist
-        autoencoder.to(device)
-        autoencoder.fit(
-            n_epochs=get_max_epoch_size(data, 80000, 256), # 50
-            optimizer_params={"lr": 0.0001},# 0.001
-            data=data,
-            batch_size=256,
-            device=device,
-        ).cpu()
-        autoencoder.save_parameters(autoencoder_params_path)
-        print("Autoencoder pretraining complete and saved.")
-    else:
-        # Load the existing parameters
+        if autoencoder_standard:
+            autoencoder = init_autoencoder(layers=[data.shape[1], 500, 500, 2000, 10], reusable=True)
+            autoencoder.to(device)
+            autoencoder.fit(n_epochs=get_max_epoch_size(data, 80000, 256), optimizer_params={"lr": 0.0001}, data=data, batch_size=256, device=device).cpu()
+            autoencoder.save_parameters(autoencoder_params_path)
+            print("Autoencoder pretraining complete and saved.")
+        else:
+            weight_initalizer = torch.nn.init.xavier_normal_
+            loss_fn = torch.nn.MSELoss()
+            steps_per_layer = 20000
+            refine_training_steps = 50000
+            
+            def add_noise(batch):
+                mask = torch.empty(batch.shape, device=batch.device).bernoulli_(0.8)
+                return batch * mask
+            autoencoder = stacked_ae(data.shape[1], [500, 500, 2000, 10], weight_initalizer, activation_fn=torch.nn.ReLU(), loss_fn=loss_fn, optimizer_fn=lambda parameters: torch.optim.Adam(parameters, lr=0.0001)).to(device)
+            autoencoder.pretrain(DataLoader(TensorDataset(data), batch_size=256, shuffle=True), steps_per_layer, corruption_fn=add_noise)
+            autoencoder.refine_training(DataLoader(TensorDataset(data), batch_size=256, shuffle=True), refine_training_steps, corruption_fn=add_noise)
+            autoencoder.save_parameters(autoencoder_params_path)
+            print("Autoencoder pretraining complete and saved.")
+    elif not autoencoder_standard:
+        autoencoder = stacked_ae(data.shape[1], [500, 500, 2000, 10], torch.nn.init.xavier_normal_)
         autoencoder.load_parameters(autoencoder_params_path)
         print("Autoencoder parameters loaded from file.")
+    else:
+        autoencoder = init_autoencoder(layers=[data.shape[1], 500, 500, 2000, 10], reusable=True)
+        autoencoder.load_parameters(autoencoder_params_path)
 
     return autoencoder
-
 
 def flat(
     autoencoder: _AbstractAutoencoder,
@@ -259,6 +261,7 @@ def flat(
                 }
             )
         elif method == FlatClusteringMethod.IDEC:
+            
             # Perform flat clustering with IDEC
             idec = IDEC(
                 n_clusters=n_clusters,
@@ -318,8 +321,10 @@ def hierarchical(
         autoencoder.to(device)
         autoencoder.fitted = True
         if method == HierarchicalClusteringMethod.AE_BISECTING:
+            
             # Perform hierarchical clustering with Autoencoder and bisection
             print("fitting ae_bisecting...")
+
             dendrogram, leaf = ae_bisecting(
                 data=data,
                 labels=labels,
@@ -340,6 +345,7 @@ def hierarchical(
                 }
             )
         elif method == HierarchicalClusteringMethod.IDEC_COMPLETE:
+            
             autoencoder.to(device)
             print("fitting idec hierarchical...")
             # (
@@ -374,7 +380,7 @@ def hierarchical(
             )
 
         elif method == HierarchicalClusteringMethod.AE_SINGLE:
-            continue
+            
             # Perform hierarchical clustering with Autoencoder and single
             print("fitting ae_single...")
             dendrogram, leaf = ae_single(
@@ -397,7 +403,7 @@ def hierarchical(
                 }
             )
         elif method == HierarchicalClusteringMethod.AE_COMPLETE:
-            continue
+            
             # Perform hierarchical clustering with Autoencoder and complete
             print("fitting ae_complete...")
             dendrogram, leaf = ae_complete(
@@ -484,6 +490,7 @@ def get_custom_dataloader_augmentations(data: np.ndarray, dataset_type: DatasetT
 
 def evaluate_one_seed(
     init_autoencoder: _AbstractAutoencoder,
+    autoencoder_standard:bool,
     dataset_type: DatasetType,
     seed: int,
     autoencoder_params_path: str = None,
@@ -497,11 +504,15 @@ def evaluate_one_seed(
     elif dataset_type == DatasetType.REUTERS:
         dataset = load_reuters()
 
-    if autoencoder_params_path is None:
+    if autoencoder_params_path is None and autoencoder_standard:
         autoencoder_params_path = f"practical/DeepClustering/DeepECT/pretrained_autoencoders/{dataset['dataset_name']}_autoencoder_pretrained.pth"
+
+    if autoencoder_params_path is None and not autoencoder_standard:
+        autoencoder_params_path = f"practical/DeepClustering/DeepECT/pretrained_autoencoders/{dataset['dataset_name']}_stacked_ae_pretrained.pth"
 
     autoencoder = pretraining(
         init_autoencoder=init_autoencoder,
+        autoencoder_standard=autoencoder_standard,
         autoencoder_params_path=autoencoder_params_path,
         dataset=dataset,
         seed=seed,
@@ -524,6 +535,7 @@ def evaluate_one_seed(
     )
 
     return flat_results, hierarchical_results
+    
 
 def evaluate_multiple_seeds(
     init_autoencoder: _AbstractAutoencoder,

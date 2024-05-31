@@ -26,7 +26,7 @@ from practical.DeepClustering.DeepECT.evaluation.experiments.pre_training.vae.st
 from practical.DeepClustering.DeepECT.deepect import DeepECT
 from practical.DeepClustering.DeepECT.baseline_hierachical.ae_plus import *
 from practical.DeepClustering.DeepECT.baseline_hierachical.methods import (
-    idec_hierarchical, idec_hierarchical_clustpy
+    idec_hierarchical_clustpy
 )
 
 

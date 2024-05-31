@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 import sys
 sys.path.append('/Users/yy/LMU_Master_Practical_SoSe24/practical/DeepClustering/DeepECT/evaluation/experiments/pre_training/vae')
-from functional import window
+from practical.DeepClustering.DeepECT.evaluation.experiments.pre_training.vae.functional import window
 import logging
 from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
 

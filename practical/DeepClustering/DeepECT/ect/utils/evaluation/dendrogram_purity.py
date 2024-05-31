@@ -1,9 +1,9 @@
 import attr
-from ect.utils.functional import *
+from practical.DeepClustering.DeepECT.ect.utils.functional import *
 import math
 from scipy.special import comb
 import numpy as np
-from ect.utils.statistics import weighted_avg_and_std
+from practical.DeepClustering.DeepECT.ect.utils.statistics import weighted_avg_and_std
 
 
 # The dendogram purity can be computed in a bottom up manner
@@ -191,7 +191,7 @@ def to_dendrogram_purity_tree(children_array):
     return root
 
 
-from ect.utils.evaluation import cluster_acc
+from practical.DeepClustering.DeepECT.ect.utils.evaluation import cluster_acc
 from sklearn.metrics import normalized_mutual_info_score as nmi
 
 

@@ -1,15 +1,10 @@
 import math
 import os
+from enum import Enum
 import sys
 import PIL
 import numpy as np
 import pandas as pd
-
-sys.path.append(os.getcwd())
-
-import sys
-from enum import Enum
-
 import torch
 from torch.utils.data import TensorDataset, DataLoader
 from clustpy.data import load_fmnist, load_mnist, load_reuters, load_usps
@@ -642,6 +637,51 @@ def evaluate(
     )
 
     return flat_results, hierarchical_results
+
+
+def evaluate_multiple_seeds(
+    init_autoencoder: _AbstractAutoencoder,
+    dataset_type: DatasetType,
+    seeds: list,
+    autoencoder_params_path: str = None,
+):
+    all_flat_results = []
+    all_hierarchical_results = []
+
+    for seed in seeds:
+        flat_results, hierarchical_results = evaluate(
+            init_autoencoder=init_autoencoder,
+            dataset_type=dataset_type,
+            seed=seed,
+            autoencoder_params_path=autoencoder_params_path,
+        )
+        all_flat_results.append(flat_results)
+        all_hierarchical_results.append(hierarchical_results)
+
+    combined_flat_results = pd.concat(all_flat_results, ignore_index=True)
+    combined_hierarchical_results = pd.concat(
+        all_hierarchical_results, ignore_index=True
+    )
+
+    return combined_flat_results, combined_hierarchical_results
+
+
+def calculate_flat_mean_for_multiple_seeds(results: pd.DataFrame):
+    results = (
+        results.groupby(["dataset", "method"])
+        .agg({"nmi": "mean", "acc": "mean", "ari": "mean"})
+        .reset_index()
+    )
+    return results
+
+
+def calculate_hierarchical_mean_for_multiple_seeds(results: pd.DataFrame):
+    results = (
+        results.groupby(["dataset", "method"])
+        .agg({"dp": "mean", "lp": "mean"})
+        .reset_index()
+    )
+    return results
 
 
 if __name__ == "__main__":

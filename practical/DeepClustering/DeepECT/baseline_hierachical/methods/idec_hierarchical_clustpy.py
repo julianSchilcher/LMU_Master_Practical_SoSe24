@@ -7,15 +7,26 @@ import itertools
 from practical.DeepClustering.DeepECT.ect.utils.evaluation.dendrogram_purity import *
 
 
+def run_idec_hierarchical(
+    data,
+    ground_truth,
+    seed,
+    n_clusers,
+    autoencoder,
+    epochs=50,
+    batch_size=256,
+):
 
-
-def run_idec_hierarchical(data, ground_truth, seed, n_clusers, autoencoder, device="cpu"):
-
-    idec = IDEC(n_clusers, random_state=np.random.RandomState(seed), autoencoder=autoencoder, clustering_epochs=50)
+    idec = IDEC(
+        n_clusers,
+        batch_size=batch_size,
+        random_state=np.random.RandomState(seed),
+        autoencoder=autoencoder,
+        clustering_epochs=epochs,
+    )
     idec.fit(data)
     labels_pred = idec.labels_
     print(unsupervised_clustering_accuracy(ground_truth, labels_pred))
-
 
     pred_tree = dendrogram_purity_tree_from_clusters(
         idec.cluster_centers_, labels_pred, "single"
@@ -43,10 +54,17 @@ def run_idec_hierarchical(data, ground_truth, seed, n_clusers, autoencoder, devi
 
 def dendrogram_purity_tree_from_clusters(centers, pred_labels, linkage="single"):
 
-    clustering = AgglomerativeClustering(compute_full_tree=True, linkage=linkage).fit(centers)
+    clustering = AgglomerativeClustering(compute_full_tree=True, linkage=linkage).fit(
+        centers
+    )
 
-    grouped_ids = {k: [x[0] for x in v] for k, v in
-                   itertools.groupby(sorted(enumerate(pred_labels), key=operator.itemgetter(1)), key=operator.itemgetter(1))}
+    grouped_ids = {
+        k: [x[0] for x in v]
+        for k, v in itertools.groupby(
+            sorted(enumerate(pred_labels), key=operator.itemgetter(1)),
+            key=operator.itemgetter(1),
+        )
+    }
 
     def map_tree_rec(node):
         if node.is_leaf:

@@ -1,8 +1,12 @@
 import torch
 import torch.nn.functional as F
 import sys
-sys.path.append('/Users/yy/LMU_Master_Practical_SoSe24/practical/DeepClustering/DeepECT/evaluation/experiments/pre_training/vae')
-from functional import window
+import os
+
+sys.path.append(os.getcwd())
+from practical.DeepClustering.DeepECT.evaluation.experiments.pre_training.vae.functional import (
+    window,
+)
 import logging
 from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
 
@@ -16,11 +20,19 @@ class stacked_ae(_AbstractAutoencoder):
         Xie, Junyuan, Ross Girshick, and Ali Farhadi. "Unsupervised deep embedding for clustering analysis." International conference on machine learning. 2016.
     """
 
-    def __init__(self, feature_dim, layer_dims, weight_initializer,
-                 loss_fn=lambda x, y: torch.mean((x - y) ** 2),
-                 optimizer_fn=lambda parameters: torch.optim.Adam(parameters, lr=0.001),
-                 tied_weights=False, activation_fn=None, bias_init=0.0, linear_embedded=True, linear_decoder_last=True
-                 ):
+    def __init__(
+        self,
+        feature_dim,
+        layer_dims,
+        weight_initializer,
+        loss_fn=lambda x, y: torch.mean((x - y) ** 2),
+        optimizer_fn=lambda parameters: torch.optim.Adam(parameters, lr=0.001),
+        tied_weights=False,
+        activation_fn=None,
+        bias_init=0.0,
+        linear_embedded=True,
+        linear_decoder_last=True,
+    ):
         """
         :param feature_dim:
         :param layer_dims:
@@ -86,11 +98,19 @@ class stacked_ae(_AbstractAutoencoder):
         self.param_bias_decoder.reverse()
         self.activation_fn = activation_fn
 
-    def forward_pretrain(self, input_data, stack, use_dropout=True, dropout_rate=0.2,
-                         dropout_is_training=True):
+    def forward_pretrain(
+        self,
+        input_data,
+        stack,
+        use_dropout=True,
+        dropout_rate=0.2,
+        dropout_is_training=True,
+    ):
         encoded_data = input_data
         if stack < 1 or stack > self.n_layers:
-            raise RuntimeError(f"stack number {stack} is out or range (0,{self.n_layers})")
+            raise RuntimeError(
+                f"stack number {stack} is out or range (0,{self.n_layers})"
+            )
         for l in range(stack):
             weights = self.param_weights_encoder[l]
             bias = self.param_bias_encoder[l]
@@ -99,7 +119,9 @@ class stacked_ae(_AbstractAutoencoder):
 
             if self.activation_fn is not None:
                 # print(f"{self.linear_embedded} is False or ({stack} < {self.n_layers} and {l} < {stack - 1})")
-                if self.linear_embedded is False or not (l == stack - 1 and stack == self.n_layers):
+                if self.linear_embedded is False or not (
+                    l == stack - 1 and stack == self.n_layers
+                ):
                     # print("\tuse activation function")
                     encoded_data = self.activation_fn(encoded_data)
                 else:
@@ -107,9 +129,12 @@ class stacked_ae(_AbstractAutoencoder):
                     pass
             if use_dropout:
                 if not (
-                        l == stack - 1 and stack == self.n_layers):  # The embedded space is linear and we do not want dropout
+                    l == stack - 1 and stack == self.n_layers
+                ):  # The embedded space is linear and we do not want dropout
                     # print("\tapply dropout")
-                    encoded_data = F.dropout(encoded_data, p=dropout_rate, training=dropout_is_training)
+                    encoded_data = F.dropout(
+                        encoded_data, p=dropout_rate, training=dropout_is_training
+                    )
         reconstructed_data = encoded_data
 
         for ll in range(stack - 1, -1, -1):
@@ -121,7 +146,11 @@ class stacked_ae(_AbstractAutoencoder):
             bias = self.param_bias_decoder[l]
             reconstructed_data = F.linear(reconstructed_data, weights, bias)
             if self.activation_fn is not None:
-                if self.linear_decoder_last is False or self.linear_decoder_last and ll > 0:
+                if (
+                    self.linear_decoder_last is False
+                    or self.linear_decoder_last
+                    and ll > 0
+                ):
                     reconstructed_data = self.activation_fn(reconstructed_data)
             if use_dropout and ll > 0:
                 reconstructed_data = F.dropout(reconstructed_data, p=dropout_rate)
@@ -129,12 +158,14 @@ class stacked_ae(_AbstractAutoencoder):
         return encoded_data, reconstructed_data
 
     def encode(self, input_data):
-        encoded_data = input_data
+        encoded_data = input_data.to(torch.float32)
         for l in range(self.n_layers):
             weights = self.param_weights_encoder[l]
             bias = self.param_bias_encoder[l]
             encoded_data = F.linear(encoded_data, weights, bias)
-            if self.activation_fn is not None and not (self.linear_embedded and l == self.n_layers - 1):
+            if self.activation_fn is not None and not (
+                self.linear_embedded and l == self.n_layers - 1
+            ):
                 encoded_data = self.activation_fn(encoded_data)
         return encoded_data
 
@@ -148,7 +179,9 @@ class stacked_ae(_AbstractAutoencoder):
                 weights = self.param_weights_decoder[l]
             bias = self.param_bias_decoder[l]
             reconstructed_data = F.linear(reconstructed_data, weights, bias)
-            if self.activation_fn is not None and not (self.linear_decoder_last and l == self.n_layers - 1):
+            if self.activation_fn is not None and not (
+                self.linear_decoder_last and l == self.n_layers - 1
+            ):
                 reconstructed_data = self.activation_fn(reconstructed_data)
         return reconstructed_data
 
@@ -170,7 +203,9 @@ class stacked_ae(_AbstractAutoencoder):
             parameters.append(self.param_bias_decoder[l])
         return parameters
 
-    def pretrain(self, dataset, rounds_per_layer=1000, dropout_rate=0.2, corruption_fn=None):
+    def pretrain(
+        self, dataset, rounds_per_layer=1000, dropout_rate=0.2, corruption_fn=None
+    ):
         """
         Uses Adam to pretrain the model layer by layer
         :param rounds_per_layer:
@@ -192,13 +227,21 @@ class stacked_ae(_AbstractAutoencoder):
                     batch_data = batch_data[0].to(next(self.parameters()).device)
                     if corruption_fn is not None:
                         corrupted_batch = corruption_fn(batch_data)
-                        _, reconstructed_data = self.forward_pretrain(corrupted_batch, layer, use_dropout=True,
-                                                                      dropout_rate=dropout_rate,
-                                                                      dropout_is_training=True)
+                        _, reconstructed_data = self.forward_pretrain(
+                            corrupted_batch,
+                            layer,
+                            use_dropout=True,
+                            dropout_rate=dropout_rate,
+                            dropout_is_training=True,
+                        )
                     else:
-                        _, reconstructed_data = self.forward_pretrain(batch_data, layer, use_dropout=True,
-                                                                      dropout_rate=dropout_rate,
-                                                                      dropout_is_training=True)
+                        _, reconstructed_data = self.forward_pretrain(
+                            batch_data,
+                            layer,
+                            use_dropout=True,
+                            dropout_rate=dropout_rate,
+                            dropout_is_training=True,
+                        )
                     loss = self.loss_fn(batch_data, reconstructed_data)
                     optimizer.zero_grad()
                     loss.backward()
@@ -225,7 +268,9 @@ class stacked_ae(_AbstractAutoencoder):
                 batch_data = batch_data[0].to(next(self.parameters()).device)
 
                 if corruption_fn is not None:
-                    embedded_data, reconstructed_data = self.forward(corruption_fn(batch_data))
+                    embedded_data, reconstructed_data = self.forward(
+                        corruption_fn(batch_data)
+                    )
                 else:
                     embedded_data, reconstructed_data = self.forward(batch_data)
 
@@ -239,9 +284,11 @@ class stacked_ae(_AbstractAutoencoder):
                 continue
             break
 
+
 def example_weight_initializer(tensor):
     if isinstance(tensor, torch.Tensor):
         torch.nn.init.xavier_uniform_(tensor)
+
 
 if __name__ == "__main__":
     # Load dataset
@@ -250,16 +297,14 @@ if __name__ == "__main__":
     layer_dims = [500, 500, 2000, 10]
 
     # Initialize autoencoder
-    autoencoder = stacked_ae(
-        feature_dim=feature_dim,
-        layer_dims=layer_dims)
+    autoencoder = stacked_ae(feature_dim=feature_dim, layer_dims=layer_dims)
 
     autoencoder.fitted = True
 
     # Placeholder for training dataset loader
     # Assuming dataset is a DataLoader object
     # Example: dataset = DataLoader(TensorDataset(torch.from_numpy(dataset)), batch_size=64, shuffle=True)
-    
+
     # Pretrain and refine training steps (assuming you have a DataLoader for dataset)
     # autoencoder.pretrain(dataset, rounds_per_layer=1000, dropout_rate=0.2)
     # autoencoder.refine_training(dataset, rounds=10000)

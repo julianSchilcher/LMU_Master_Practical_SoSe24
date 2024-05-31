@@ -1,19 +1,15 @@
 import math
 import os
-import sys
-import numpy as np
-import pandas as pd
-
-sys.path.append(os.getcwd())
-
-import sys
 from enum import Enum
 
+import numpy as np
+import pandas as pd
 import torch
 from torch.utils.data import TensorDataset, DataLoader
 from clustpy.data import load_fmnist, load_mnist, load_reuters, load_usps
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
-from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
+from clustpy.deep.autoencoders._abstract_autoencoder import \
+    _AbstractAutoencoder
 from clustpy.deep.dec import IDEC
 from clustpy.metrics import unsupervised_clustering_accuracy
 from sklearn.cluster import KMeans
@@ -23,11 +19,11 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 from practical.DeepClustering.DeepECT.evaluation.experiments.pre_training.vae.stacked_ae import stacked_ae
 
-from practical.DeepClustering.DeepECT.deepect import DeepECT
 from practical.DeepClustering.DeepECT.baseline_hierachical.ae_plus import *
-from practical.DeepClustering.DeepECT.baseline_hierachical.methods import (
+from practical.DeepClustering.DeepECT.baseline_hierachical.methods import \
     idec_hierarchical_clustpy
-)
+from practical.DeepClustering.DeepECT.deepect import DeepECT
+
 
 
 class DatasetType(Enum):
@@ -492,8 +488,7 @@ def get_custom_dataloader_augmentations(data: np.ndarray, dataset_type: DatasetT
     return trainloader, testloader
 
 
-# Example usage
-def evaluate(
+def evaluate_one_seed(
     init_autoencoder: _AbstractAutoencoder,
     autoencoder_standard:bool,
     dataset_type: DatasetType,
@@ -542,15 +537,46 @@ def evaluate(
     return flat_results, hierarchical_results
     
 
+def evaluate_multiple_seeds(
+    init_autoencoder: _AbstractAutoencoder,
+    dataset_type: DatasetType,
+    seeds: list,
+    autoencoder_params_path: str = None,
+):
+    all_flat_results = []
+    all_hierarchical_results = []
+
+    for seed in seeds:
+        flat_results, hierarchical_results = evaluate_one_seed(
+            init_autoencoder=init_autoencoder,
+            dataset_type=dataset_type,
+            seed=seed,
+            autoencoder_params_path=autoencoder_params_path,
+        )
+        all_flat_results.append(flat_results)
+        all_hierarchical_results.append(hierarchical_results)
+    
+    combined_flat_results = pd.concat(all_flat_results, ignore_index=True)
+    combined_hierarchical_results = pd.concat(all_hierarchical_results, ignore_index=True)
+
+    return combined_flat_results, combined_hierarchical_results
+
+def calculate_flat_mean_for_multiple_seeds(results: pd.DataFrame):
+    results = results.groupby(["dataset", "method"]).agg({'nmi': 'mean', 'acc': 'mean', 'ari': 'mean'}).reset_index()
+    return results
+
+def calculate_hierarchical_mean_for_multiple_seeds(results: pd.DataFrame):
+    results = results.groupby(["dataset", "method"]).agg({'dp': 'mean', 'lp': 'mean'}).reset_index()
+    return results
 
 if __name__ == "__main__":
 
-    # Load the dataset and evaluate flat and hierarchical clustering (stacked autoencoder)
-    flat_results_stack, hierarchical_results_stack = evaluate(
-        init_autoencoder=stacked_ae, autoencoder_standard=False, dataset_type=DatasetType.USPS, seed=42)
-    flat_results, hierarchical_results = evaluate(init_autoencoder=FeedforwardAutoencoder,  autoencoder_standard=True, dataset_type=DatasetType.USPS, seed=42)
-    print(flat_results_stack, hierarchical_results_stack)
-    print(flat_results, hierarchical_results)
+    # Load the MNIST dataset and evaluate flat and hierarchical clustering
+    flat_results, _ = evaluate_one_seed(
+        init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.MNIST, seed=42
+    )
+    print(_)
+    # evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.USPS, seed=42)
     # evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.REUTERS, seed=42)
     # evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.FASHION_MNIST, seed=42)
 

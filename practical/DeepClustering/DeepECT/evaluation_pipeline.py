@@ -2,6 +2,9 @@ import math
 import os
 from enum import Enum
 import sys
+
+sys.path.append(os.getcwd())
+from typing import List, Union
 import PIL
 import numpy as np
 import pandas as pd
@@ -18,6 +21,8 @@ from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
 from sklearn.utils import Bunch
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
+import multiprocessing as mp
+from itertools import product
 from practical.DeepClustering.DeepECT.evaluation.experiments.pre_training.vae.stacked_ae import (
     stacked_ae,
 )
@@ -315,6 +320,7 @@ def flat(
                 batch_size=batch_size,
                 autoencoder=autoencoder,
                 clustering_optimizer_params={"lr": 1e-4, "betas": (0.9, 0.999)},
+                cluster_loss_weight=10.0,  # needs to be 10 to weight cluster loss 10x higher than autoencoder loss like in the paper
                 clustering_epochs=max_clustering_epochs,
                 random_state=seed,
                 initial_clustering_class=KMeans,
@@ -576,6 +582,42 @@ def get_custom_dataloader_augmentations(data: np.ndarray, dataset_type: DatasetT
     return trainloader, testloader
 
 
+def get_dataset(dataset_type: DatasetType):
+    if dataset_type == DatasetType.MNIST:
+        dataset = load_mnist()
+        dataset["data"] = dataset["data"] * 0.02
+    elif dataset_type == DatasetType.FASHION_MNIST:
+        dataset = load_fmnist()
+        dataset["data"] = dataset["data"] / 255.0
+    elif dataset_type == DatasetType.USPS:
+        dataset = load_usps()
+    else:
+        dataset = load_reuters()
+        dataset["data"] = dataset["data"] * 100.0
+        dataset["target"] = dataset["target"]
+    return dataset
+
+
+def get_autoencoder_path(
+    autoencoder_type: AutoencoderType,
+    autoencoder_params_path: Union[str | None],
+    dataset: Bunch,
+    embedding_dim: int,
+    seed: int,
+):
+    if (
+        autoencoder_params_path is None
+        and autoencoder_type == AutoencoderType.CLUSTPY_STANDARD
+    ):
+        autoencoder_params_path = f"practical/DeepClustering/DeepECT/pretrained_autoencoders/{dataset['dataset_name']}_autoencoder_{embedding_dim}_pretrained_{seed}.pth"
+    elif (
+        autoencoder_params_path is None
+        and autoencoder_type == AutoencoderType.DEEPECT_STACKED_AE
+    ):
+        autoencoder_params_path = f"practical/DeepClustering/DeepECT/pretrained_autoencoders/{dataset['dataset_name']}_stacked_ae_{embedding_dim}_pretrained_{seed}.pth"
+    return autoencoder_params_path
+
+
 # Example usage
 def evaluate(
     autoencoder_type: AutoencoderType,
@@ -587,30 +629,11 @@ def evaluate(
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
     torch.use_deterministic_algorithms(mode=True)
 
-    if dataset_type == DatasetType.MNIST:
-        dataset = load_mnist()
-        dataset["data"] = dataset["data"] * 0.02
-    elif dataset_type == DatasetType.FASHION_MNIST:
-        dataset = load_fmnist()
-        dataset["data"] = dataset["data"] / 255.0
-    elif dataset_type == DatasetType.USPS:
-        dataset = load_usps()
-    elif dataset_type == DatasetType.REUTERS:
-        dataset = load_reuters()
-        dataset["data"] = dataset["data"] * 100.0
-        dataset["target"] = dataset["target"]
+    dataset = get_dataset(dataset_type)
 
-    if (
-        autoencoder_params_path is None
-        and autoencoder_type == AutoencoderType.CLUSTPY_STANDARD
-    ):
-        autoencoder_params_path = f"practical/DeepClustering/DeepECT/pretrained_autoencoders/{dataset['dataset_name']}_autoencoder_{embedding_dim}_pretrained_{seed}.pth"
-
-    if (
-        autoencoder_params_path is None
-        and autoencoder_type == AutoencoderType.DEEPECT_STACKED_AE
-    ):
-        autoencoder_params_path = f"practical/DeepClustering/DeepECT/pretrained_autoencoders/{dataset['dataset_name']}_stacked_ae_{embedding_dim}_pretrained_{seed}.pth"
+    autoencoder_params_path = get_autoencoder_path(
+        autoencoder_type, autoencoder_params_path, dataset, embedding_dim, seed
+    )
 
     autoencoder = pretraining(
         autoencoder_type=autoencoder_type,
@@ -684,21 +707,57 @@ def calculate_hierarchical_mean_for_multiple_seeds(results: pd.DataFrame):
     return results
 
 
-if __name__ == "__main__":
+def pretraining_with_data_load(
+    autoencoder_type: AutoencoderType,
+    autoencoder_params_path: str,
+    dataset_type: DatasetType,
+    seed: int,
+    embedding_dim: int,
+):
+    dataset = get_dataset(dataset_type)
 
+    autoencoder_params_path = get_autoencoder_path(
+        autoencoder_type, autoencoder_params_path, dataset, embedding_dim, seed
+    )
+
+    autoencoder = pretraining(
+        autoencoder_type=autoencoder_type,
+        autoencoder_params_path=autoencoder_params_path,
+        dataset=dataset,
+        seed=seed,
+        embedding_dim=embedding_dim,
+    )
+    del autoencoder
+    torch.cuda.memory.empty_cache()
+
+
+def pretrain_for_multiple_seeds(seeds: List[int], embedding_dims=[10], worker_num=1):
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
+    torch.use_deterministic_algorithms(mode=True)
+
+    all_autoencoders = list(
+        product(AutoencoderType, [None], DatasetType, seeds, embedding_dims)
+    )
+    with mp.Pool(processes=worker_num) as pool:
+        result = pool.starmap(pretraining_with_data_load, all_autoencoders)
+    return result
+
+
+if __name__ == "__main__":
+    pretrain_for_multiple_seeds([21, 42, 63, 84], worker_num=3)
     # Load the dataset and evaluate flat and hierarchical clustering (stacked autoencoder)
-    flat_results_stack, hierarchical_results_stack = evaluate(
-        autoencoder_type=AutoencoderType.DEEPECT_STACKED_AE,
-        dataset_type=DatasetType.USPS,
-        seed=42,
-    )
-    flat_results, hierarchical_results = evaluate(
-        autoencoder_type=AutoencoderType.CLUSTPY_STANDARD,
-        dataset_type=DatasetType.USPS,
-        seed=42,
-    )
-    print(flat_results_stack, hierarchical_results_stack)
-    print(flat_results, hierarchical_results)
+    # flat_results_stack, hierarchical_results_stack = evaluate(
+    #     autoencoder_type=AutoencoderType.DEEPECT_STACKED_AE,
+    #     dataset_type=DatasetType.USPS,
+    #     seed=42,
+    # )
+    # flat_results, hierarchical_results = evaluate(
+    #     autoencoder_type=AutoencoderType.CLUSTPY_STANDARD,
+    #     dataset_type=DatasetType.USPS,
+    #     seed=42,
+    # )
+    # print(flat_results_stack, hierarchical_results_stack)
+    # print(flat_results, hierarchical_results)
     # evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.REUTERS, seed=42)
     # evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.FASHION_MNIST, seed=42)
 

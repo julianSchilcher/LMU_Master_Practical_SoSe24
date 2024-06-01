@@ -948,19 +948,19 @@ class _DeepECT_Module(torch.nn.Module):
 
                     if self.augmentation_invariance:
                         loss = nc_loss + dc_loss + rec_loss + rec_loss_aug
-                        mov_rec_loss_aug = 0.5 * mov_rec_loss_aug + 0.5 * rec_loss_aug.item()
+                        mov_rec_loss_aug += rec_loss_aug.item()
                     else:
                         loss = nc_loss + dc_loss + rec_loss
 
-                    mov_nc_loss = 0.5 * mov_nc_loss + 0.5 * nc_loss.item()
-                    mov_dc_loss = 0.5 * mov_dc_loss + 0.5 * dc_loss.item()
-                    mov_rec_loss = 0.5 * mov_rec_loss + 0.5 * rec_loss.item()
-                    mov_loss = 0.5 * mov_loss + 0.5 * loss.item()
+                    mov_nc_loss += nc_loss.item()
+                    mov_dc_loss += dc_loss.item()
+                    mov_rec_loss += rec_loss.item()
+                    mov_loss += loss.item()
 
                     if progress_bar.n <= 10 or progress_bar.n % 100 == 0:
                         print(
-                            f"{progress_bar.n} - moving averages: dc_loss: {mov_dc_loss} "
-                            f"nc_loss: {mov_nc_loss} rec_loss: {mov_rec_loss} {f'rec_loss_aug: {mov_rec_loss_aug}' if self.augmentation_invariance else ''} total_loss: {mov_loss}"
+                            f"{progress_bar.n} - moving averages: dc_loss: {mov_dc_loss/progress_bar.n} "
+                            f"nc_loss: {mov_nc_loss/progress_bar.n} rec_loss: {mov_rec_loss/progress_bar.n} {f'rec_loss_aug: {mov_rec_loss_aug/progress_bar.n}' if self.augmentation_invariance else ''} total_loss: {mov_loss/progress_bar.n}"
                         )
 
                     loss.backward()

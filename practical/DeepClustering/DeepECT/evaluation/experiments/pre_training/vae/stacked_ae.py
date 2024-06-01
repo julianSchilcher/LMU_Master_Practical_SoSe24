@@ -220,7 +220,6 @@ class stacked_ae(_AbstractAutoencoder):
             round = 0
             while True:  # each iteration is equal to an epoch
                 for batch_data in dataset:
-
                     round += 1
                     if round > rounds_per_layer:
                         break

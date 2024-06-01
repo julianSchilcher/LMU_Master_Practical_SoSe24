@@ -23,6 +23,7 @@ def run_idec_hierarchical(
         random_state=np.random.RandomState(seed),
         autoencoder=autoencoder,
         clustering_epochs=epochs,
+        cluster_loss_weight=10.0,  # needs to be 10 to weight cluster loss 10x higher than autoencoder loss like in the paper
     )
     idec.fit(data)
     labels_pred = idec.labels_

@@ -130,7 +130,7 @@ def pretraining(
             )
             autoencoder.to(device)
             autoencoder.fit(
-                n_epochs=get_max_epoch_size(data, 80000, 256),
+                n_epochs=get_max_epoch_size(data, 50000, 256),
                 data=data,
                 batch_size=256,
                 device=device,

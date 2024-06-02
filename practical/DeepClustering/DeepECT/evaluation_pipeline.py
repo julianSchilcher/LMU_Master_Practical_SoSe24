@@ -483,7 +483,7 @@ def hierarchical(
             )
 
         elif method == HierarchicalClusteringMethod.AE_SINGLE:
-            if data.shape[0] > 80000:
+            if data.shape[0] >= 80000:
                 data_shuffled, labels_shuffled = shuffle_dataset(data, labels)
                 data_shuffled = data_shuffled[:80000, :]
                 labels_shuffled = labels_shuffled[:80000]
@@ -511,7 +511,7 @@ def hierarchical(
                 }
             )
         elif method == HierarchicalClusteringMethod.AE_COMPLETE:
-            if data.shape[0] > 80000:
+            if data.shape[0] >= 80000:
                 data_shuffled, labels_shuffled = shuffle_dataset(data, labels)
                 data_shuffled = data_shuffled[:80000, :]
                 labels_shuffled = labels_shuffled[:80000]
@@ -520,15 +520,15 @@ def hierarchical(
             # Perform hierarchical clustering with Autoencoder and complete
             print("fitting ae_complete...")
             dendrogram, leaf = ae_complete(
-                data=data,
-                labels=labels,
+                data=data_shuffled,
+                labels=labels_shuffled,
                 ae_module=autoencoder,
                 max_leaf_nodes=max_leaf_nodes,
                 n_clusters=n_clusters,
                 seed=seed,
                 device=device,
             )
-            print("fitting ae_single...")
+            print("finished ae_complete...")
             results.append(
                 {
                     "dataset": dataset_type.value,
@@ -550,7 +550,7 @@ def get_custom_dataloader_augmentations(data: np.ndarray, dataset_type: DatasetT
         0.14 if dataset_type == DatasetType.USPS else 0.08,
         0.14 if dataset_type == DatasetType.USPS else 0.08,
     )
-    image_min_value = -0.999999 if dataset_type == DatasetType.USPS else 0.0
+    image_min_value = 0.0  # -0.999999 if dataset_type == DatasetType.USPS else 0.0
     image_size = 16 if dataset_type == DatasetType.USPS else 28
     augmentation_transform = transforms.Compose(
         [
@@ -603,15 +603,16 @@ def get_custom_dataloader_augmentations(data: np.ndarray, dataset_type: DatasetT
 def get_dataset(dataset_type: DatasetType):
     if dataset_type == DatasetType.MNIST:
         dataset = load_mnist()
-        dataset["data"] = dataset["data"] * 0.02
+        dataset["data"] = np.asarray(dataset["data"] / 255.0, dtype=np.float32)
     elif dataset_type == DatasetType.FASHION_MNIST:
         dataset = load_fmnist()
-        dataset["data"] = dataset["data"] / 255.0
+        dataset["data"] = np.asarray(dataset["data"] / 255.0, dtype=np.float32)
     elif dataset_type == DatasetType.USPS:
         dataset = load_usps()
+        dataset["data"] = np.asarray(dataset["data"] / 255.0, dtype=np.float32)
     else:
         dataset = load_reuters()
-        dataset["data"] = dataset["data"] * 100.0
+        dataset["data"] = np.asarray(dataset["data"] * 100.0, dtype=np.float32)
         dataset["target"] = dataset["target"]
     return dataset
 
@@ -730,7 +731,7 @@ def evaluate_multiple_seeds(
 
 def calculate_flat_mean_for_multiple_seeds(results: pd.DataFrame):
     results = (
-        results.groupby(["dataset", "method"])
+        results.groupby(["autoencoder", "embedding_dim" "dataset", "method"])
         .agg({"nmi": "mean", "acc": "mean", "ari": "mean"})
         .reset_index()
     )
@@ -739,7 +740,7 @@ def calculate_flat_mean_for_multiple_seeds(results: pd.DataFrame):
 
 def calculate_hierarchical_mean_for_multiple_seeds(results: pd.DataFrame):
     results = (
-        results.groupby(["dataset", "method"])
+        results.groupby(["autoencoder", "embedding_dim", "dataset", "method"])
         .agg({"dp": "mean", "lp": "mean"})
         .reset_index()
     )
@@ -787,9 +788,9 @@ def pretrain_for_multiple_seeds(seeds: List[int], embedding_dims=[10], worker_nu
 
 
 if __name__ == "__main__":
-    # pretrain_for_multiple_seeds([42], embedding_dims=[4, 8, 10, 12, 20], worker_num=2)
-    seeds = [21, 42, 63, 84]
+    seeds = [21, 42]
     embedding_dims = [10]
+    pretrain_for_multiple_seeds(seeds, embedding_dims=embedding_dims, worker_num=2)
 
     for ae_type, d_type, seed, embedding_dim in product(
         AutoencoderType, DatasetType, seeds, embedding_dims
@@ -801,9 +802,11 @@ if __name__ == "__main__":
             seed=seed,
             embedding_dim=embedding_dim,
         )
+        print(flat_results_stack)
+        print(hierarchical_results_stack)
     # flat_results, hierarchical_results = evaluate(
     #     autoencoder_type=AutoencoderType.CLUSTPY_STANDARD,
-    #     dataset_type=DatasetType.USPS,
+    #     dataset_type=DatasetType.REUTERS,
     #     seed=42,
     # )
     # print(flat_results_stack, hierarchical_results_stack)

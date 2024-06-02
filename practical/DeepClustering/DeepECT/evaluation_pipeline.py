@@ -1,10 +1,12 @@
+import datetime
 import math
 import os
 from enum import Enum
 import sys
 
 sys.path.append(os.getcwd())
-from typing import List, Union
+import time
+from typing import List, Tuple, Union
 import PIL
 import numpy as np
 import pandas as pd
@@ -131,9 +133,11 @@ def pretraining(
             autoencoder.to(device)
             autoencoder.fit(
                 n_epochs=get_max_epoch_size(data, 50000, 256),
+                optimizer_params={},
                 data=data,
                 batch_size=256,
                 device=device,
+                print_step=1,
             )
             autoencoder.fitted = True
             autoencoder.cpu().save_parameters(autoencoder_params_path)
@@ -186,6 +190,18 @@ def pretraining(
     return autoencoder
 
 
+class Original_Dataset(Dataset):
+    def __init__(self, original_dataset):
+        self.original_dataset = original_dataset
+
+    def __len__(self):
+        return len(self.original_dataset)
+
+    def __getitem__(self, idx):
+        original_image = self.original_dataset[idx]
+        return idx, original_image
+
+
 def flat(
     autoencoder: _AbstractAutoencoder,
     autoencoder_params_path: str,
@@ -205,6 +221,17 @@ def flat(
     n_clusters = 4 if dataset_type == DatasetType.REUTERS else 10
 
     max_clustering_epochs = get_max_epoch_size(data, max_iterations, batch_size)
+
+    dataloaders = (
+        DataLoader(
+            Original_Dataset(data),
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=5,
+            prefetch_factor=200,
+        ),
+        DataLoader(Original_Dataset(data), batch_size=batch_size, shuffle=False),
+    )
 
     for method in FlatClusteringMethod:
         # Reproducibility
@@ -244,7 +271,6 @@ def flat(
                 }
             )
         elif method == FlatClusteringMethod.DEEPECT:
-            continue
             autoencoder.to(device)
             deepect = DeepECT(
                 max_iterations=max_iterations,
@@ -252,6 +278,7 @@ def flat(
                 clustering_optimizer_params={"lr": 1e-4, "betas": (0.9, 0.999)},
                 max_leaf_nodes=max_leaf_nodes,
                 random_state=np.random.RandomState(seed),
+                custom_dataloaders=dataloaders,
             )
             print("fitting DeepECT...")
             deepect.fit(data)
@@ -324,9 +351,8 @@ def flat(
                 clustering_epochs=max_clustering_epochs,
                 random_state=seed,
                 initial_clustering_class=KMeans,
-                initial_clustering_params={
-                    "n_init": 20,
-                },
+                initial_clustering_params={"n_init": 20},
+                custom_dataloaders=dataloaders,
             )
             print("fitting IDEC...")
             idec.fit(data)
@@ -386,8 +412,6 @@ def hierarchical(
         autoencoder.load_parameters(autoencoder_params_path)
         autoencoder.to(device)
         if method == HierarchicalClusteringMethod.AE_BISECTING:
-            continue
-
             # Perform hierarchical clustering with Autoencoder and bisection
             print("fitting ae_bisecting...")
 
@@ -411,17 +435,18 @@ def hierarchical(
                 }
             )
         elif method == HierarchicalClusteringMethod.IDEC_COMPLETE:
-            continue
             autoencoder.to(device)
+            dataloaders = (
+                DataLoader(
+                    Original_Dataset(data),
+                    batch_size,
+                    True,
+                    num_workers=5,
+                    prefetch_factor=200,
+                ),
+                DataLoader(Original_Dataset(data), batch_size, False),
+            )
             print("fitting idec hierarchical...")
-            # (
-            #     dp_value_single,
-            #     dp_value_complete,
-            #     leaf_purity_value_single,
-            #     leaf_purity_value_complete,
-            # ) = idec_hierarchical.run_experiment(
-            #     data, labels, seed, n_clusters, autoencoder, device=device
-            # )
             (
                 dp_value_single,
                 dp_value_complete,
@@ -435,12 +460,13 @@ def hierarchical(
                 autoencoder,
                 epochs=max_clustering_epochs,
                 batch_size=batch_size,
+                custom_dataloaders=dataloaders,
             )
             print("finished idec hierarchical...")
             results.append(
                 {
                     "dataset": dataset_type.value,
-                    "method": HierarchicalClusteringMethod.IDEC_COMPLETE,
+                    "method": HierarchicalClusteringMethod.IDEC_COMPLETE.value,
                     "dp": dp_value_complete,
                     "lp": leaf_purity_value_complete,
                     "seed": seed,
@@ -449,7 +475,7 @@ def hierarchical(
             results.append(
                 {
                     "dataset": dataset_type.value,
-                    "method": HierarchicalClusteringMethod.IDEC_SINGLE,
+                    "method": HierarchicalClusteringMethod.IDEC_SINGLE.value,
                     "dp": dp_value_single,
                     "lp": leaf_purity_value_single,
                     "seed": seed,
@@ -457,7 +483,6 @@ def hierarchical(
             )
 
         elif method == HierarchicalClusteringMethod.AE_SINGLE:
-            continue
             if data.shape[0] > 80000:
                 data_shuffled, labels_shuffled = shuffle_dataset(data, labels)
                 data_shuffled = data_shuffled[:80000, :]
@@ -486,7 +511,6 @@ def hierarchical(
                 }
             )
         elif method == HierarchicalClusteringMethod.AE_COMPLETE:
-            continue
             if data.shape[0] > 80000:
                 data_shuffled, labels_shuffled = shuffle_dataset(data, labels)
                 data_shuffled = data_shuffled[:80000, :]
@@ -540,8 +564,8 @@ def get_custom_dataloader_augmentations(data: np.ndarray, dataset_type: DatasetT
                 interpolation=PIL.Image.BILINEAR,
             ),
             transforms.ToTensor(),
-            transforms.Lambda(lambda x: x + image_min_value),
             transforms.Lambda(lambda x: x.reshape(image_size**2)),
+            transforms.Lambda(lambda x: x + image_min_value),
         ]
     )
 
@@ -559,24 +583,18 @@ def get_custom_dataloader_augmentations(data: np.ndarray, dataset_type: DatasetT
             augmented_image = self.augmentation_transform(original_image)
             return idx, original_image, augmented_image
 
-    class Original_Dataset(Dataset):
-        def __init__(self, original_dataset):
-            self.image_size = image_size
-            self.original_dataset = original_dataset
-
-        def __len__(self):
-            return len(self.original_dataset)
-
-        def __getitem__(self, idx):
-            original_image = self.original_dataset[idx]
-            return idx, original_image
-
     # Create an instance of the datasets
     augmented_dataset = Augmented_Dataset(data, augmentation_transform)
     original_dataset = Original_Dataset(data)
 
     # Create the dataloaders
-    trainloader = DataLoader(augmented_dataset, batch_size=256, shuffle=True)
+    trainloader = DataLoader(
+        augmented_dataset,
+        batch_size=256,
+        shuffle=True,
+        num_workers=5,
+        prefetch_factor=200,
+    )
     testloader = DataLoader(original_dataset, batch_size=256, shuffle=False)
 
     return trainloader, testloader
@@ -625,57 +643,78 @@ def evaluate(
     seed: int,
     autoencoder_params_path: str = None,
     embedding_dim: int = 10,
-):
-    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
-    torch.use_deterministic_algorithms(mode=True)
-
-    dataset = get_dataset(dataset_type)
-
-    autoencoder_params_path = get_autoencoder_path(
-        autoencoder_type, autoencoder_params_path, dataset, embedding_dim, seed
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    start = datetime.datetime.now()
+    hierarchical_results_path = f"practical/DeepClustering/DeepECT/results/{dataset_type.name}_{autoencoder_type.name}_{embedding_dim}_hierarchical_{seed}.pq"
+    flat_results_path = f"practical/DeepClustering/DeepECT/results/{dataset_type.name}_{autoencoder_type.name}_{embedding_dim}_flat_{seed}.pq"
+    print(
+        f"-------------------------------------------Run: {dataset_type.name}_{autoencoder_type.name}_{embedding_dim}_{seed}"
     )
+    if os.path.exists(hierarchical_results_path) and os.path.exists(flat_results_path):
+        hierarchical_results = pd.read_parquet(hierarchical_results_path)
+        flat_results = pd.read_parquet(flat_results_path)
+    else:
+        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
+        torch.use_deterministic_algorithms(mode=True)
+        dataset = get_dataset(dataset_type)
 
-    autoencoder = pretraining(
-        autoencoder_type=autoencoder_type,
-        autoencoder_params_path=autoencoder_params_path,
-        dataset=dataset,
-        seed=seed,
-        embedding_dim=embedding_dim,
+        autoencoder_params_path = get_autoencoder_path(
+            autoencoder_type, autoencoder_params_path, dataset, embedding_dim, seed
+        )
+
+        autoencoder = pretraining(
+            autoencoder_type=autoencoder_type,
+            autoencoder_params_path=autoencoder_params_path,
+            dataset=dataset,
+            seed=seed,
+            embedding_dim=embedding_dim,
+        )
+        # hierarchical
+        hierarchical_results = hierarchical(
+            autoencoder=autoencoder,
+            autoencoder_params_path=autoencoder_params_path,
+            dataset_type=dataset_type,
+            dataset=dataset,
+            seed=seed,
+        )
+        hierarchical_results["autoencoder"] = autoencoder_type.value
+        hierarchical_results["embedding_dim"] = embedding_dim
+        hierarchical_results.to_parquet(hierarchical_results_path)
+
+        # flat
+        flat_results = flat(
+            autoencoder=autoencoder,
+            autoencoder_params_path=autoencoder_params_path,
+            dataset_type=dataset_type,
+            dataset=dataset,
+            seed=seed,
+        )
+        flat_results["autoencoder"] = autoencoder_type.value
+        flat_results["embedding_dim"] = embedding_dim
+        flat_results.to_parquet(flat_results_path)
+
+    print(
+        f"-------------------------------------------Time needed: {(datetime.datetime.now()-start).total_seconds()/60}min"
     )
-
-    hierarchical_results = hierarchical(
-        autoencoder=autoencoder,
-        autoencoder_params_path=autoencoder_params_path,
-        dataset_type=dataset_type,
-        dataset=dataset,
-        seed=seed,
-    )
-
-    flat_results = flat(
-        autoencoder=autoencoder,
-        autoencoder_params_path=autoencoder_params_path,
-        dataset_type=dataset_type,
-        dataset=dataset,
-        seed=seed,
-    )
-
     return flat_results, hierarchical_results
 
 
 def evaluate_multiple_seeds(
-    init_autoencoder: _AbstractAutoencoder,
+    autoencoder_type: AutoencoderType,
     dataset_type: DatasetType,
-    seeds: list,
+    seeds: List[int],
+    embedding_dims: List[int] = [10],
     autoencoder_params_path: str = None,
 ):
     all_flat_results = []
     all_hierarchical_results = []
 
-    for seed in seeds:
+    for seed, embedding_dim in product(seeds, embedding_dims):
         flat_results, hierarchical_results = evaluate(
-            init_autoencoder=init_autoencoder,
+            autoencoder_type=autoencoder_type,
             dataset_type=dataset_type,
             seed=seed,
+            embedding_dim=embedding_dim,
             autoencoder_params_path=autoencoder_params_path,
         )
         all_flat_results.append(flat_results)
@@ -714,6 +753,7 @@ def pretraining_with_data_load(
     seed: int,
     embedding_dim: int,
 ):
+    start = datetime.datetime.now()
     dataset = get_dataset(dataset_type)
 
     autoencoder_params_path = get_autoencoder_path(
@@ -729,6 +769,9 @@ def pretraining_with_data_load(
     )
     del autoencoder
     torch.cuda.memory.empty_cache()
+    print(
+        f"-------------------------------------------Time needed: {(datetime.datetime.now()-start).total_seconds()/60}min"
+    )
 
 
 def pretrain_for_multiple_seeds(seeds: List[int], embedding_dims=[10], worker_num=1):
@@ -744,13 +787,20 @@ def pretrain_for_multiple_seeds(seeds: List[int], embedding_dims=[10], worker_nu
 
 
 if __name__ == "__main__":
-    pretrain_for_multiple_seeds([21, 42, 63, 84], worker_num=3)
-    # Load the dataset and evaluate flat and hierarchical clustering (stacked autoencoder)
-    # flat_results_stack, hierarchical_results_stack = evaluate(
-    #     autoencoder_type=AutoencoderType.DEEPECT_STACKED_AE,
-    #     dataset_type=DatasetType.USPS,
-    #     seed=42,
-    # )
+    # pretrain_for_multiple_seeds([42], embedding_dims=[4, 8, 10, 12, 20], worker_num=2)
+    seeds = [21, 42, 63, 84]
+    embedding_dims = [10]
+
+    for ae_type, d_type, seed, embedding_dim in product(
+        AutoencoderType, DatasetType, seeds, embedding_dims
+    ):
+        # Load the dataset and evaluate flat and hierarchical clustering (stacked autoencoder)
+        flat_results_stack, hierarchical_results_stack = evaluate(
+            autoencoder_type=ae_type,
+            dataset_type=d_type,
+            seed=seed,
+            embedding_dim=embedding_dim,
+        )
     # flat_results, hierarchical_results = evaluate(
     #     autoencoder_type=AutoencoderType.CLUSTPY_STANDARD,
     #     dataset_type=DatasetType.USPS,

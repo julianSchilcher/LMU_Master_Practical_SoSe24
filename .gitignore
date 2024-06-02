@@ -137,3 +137,6 @@ dmypy.json
 
 # Shell scripts
 *.sh
+
+# pytorch
+*.pth

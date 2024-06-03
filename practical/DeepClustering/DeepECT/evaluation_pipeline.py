@@ -284,19 +284,33 @@ def flat(
             print("fitting DeepECT...")
             deepect.fit(data)
             print("finished DeepECT...")
-            # Calculate evaluation metrics
-            results.append(
-                {
-                    "dataset": dataset_type.value,
-                    "method": method.value,
-                    "nmi": deepect.tree_.flat_nmi(labels, n_clusters),
-                    "acc": deepect.tree_.flat_accuracy(labels, n_clusters),
-                    "ari": deepect.tree_.flat_ari(labels, n_clusters),
-                    "dp": deepect.tree_.dendrogram_purity(labels),
-                    "lp": deepect.tree_.leaf_purity(labels)[0],
-                    "seed": seed,
-                }
-            )
+            try:
+                # Calculate evaluation metrics
+                results.append(
+                    {
+                        "dataset": dataset_type.value,
+                        "method": method.value,
+                        "nmi": deepect.tree_.flat_nmi(labels, n_clusters),
+                        "acc": deepect.tree_.flat_accuracy(labels, n_clusters),
+                        "ari": deepect.tree_.flat_ari(labels, n_clusters),
+                        "dp": deepect.tree_.dendrogram_purity(labels),
+                        "lp": deepect.tree_.leaf_purity(labels)[0],
+                        "seed": seed,
+                    }
+                )
+            except:
+                results.append(
+                    {
+                        "dataset": dataset_type.value,
+                        "method": method.value,
+                        "nmi": np.nan,
+                        "acc": np.nan,
+                        "ari": np.nan,
+                        "dp": np.nan,
+                        "lp": np.nan,
+                        "seed": seed,
+                    }
+                )
 
         elif method == FlatClusteringMethod.DEEPECT_AUGMENTED:
             # Perform flat clustering with DeepECT and augmentation
@@ -328,18 +342,33 @@ def flat(
             deepect.fit(data)
             print("finished DeepECT+AUG...")
             # Calculate evaluation metrics
-            results.append(
-                {
-                    "dataset": dataset_type.value,
-                    "method": method.value,
-                    "nmi": deepect.tree_.flat_nmi(labels, n_clusters),
-                    "acc": deepect.tree_.flat_accuracy(labels, n_clusters),
-                    "ari": deepect.tree_.flat_ari(labels, n_clusters),
-                    "dp": deepect.tree_.dendrogram_purity(labels),
-                    "lp": deepect.tree_.leaf_purity(labels)[0],
-                    "seed": seed,
-                }
-            )
+            try:
+                # Calculate evaluation metrics
+                results.append(
+                    {
+                        "dataset": dataset_type.value,
+                        "method": method.value,
+                        "nmi": deepect.tree_.flat_nmi(labels, n_clusters),
+                        "acc": deepect.tree_.flat_accuracy(labels, n_clusters),
+                        "ari": deepect.tree_.flat_ari(labels, n_clusters),
+                        "dp": deepect.tree_.dendrogram_purity(labels),
+                        "lp": deepect.tree_.leaf_purity(labels)[0],
+                        "seed": seed,
+                    }
+                )
+            except:
+                results.append(
+                    {
+                        "dataset": dataset_type.value,
+                        "method": method.value,
+                        "nmi": np.nan,
+                        "acc": np.nan,
+                        "ari": np.nan,
+                        "dp": np.nan,
+                        "lp": np.nan,
+                        "seed": seed,
+                    }
+                )
         elif method == FlatClusteringMethod.IDEC:
 
             # Perform flat clustering with IDEC

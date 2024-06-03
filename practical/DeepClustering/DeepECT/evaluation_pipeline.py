@@ -143,7 +143,6 @@ def pretraining(
             autoencoder.cpu().save_parameters(autoencoder_params_path)
         elif autoencoder_type == AutoencoderType.DEEPECT_STACKED_AE:
             weight_initalizer = torch.nn.init.xavier_normal_
-            loss_fn = torch.nn.MSELoss()
             steps_per_layer = 20000
             refine_training_steps = 50000
 
@@ -155,8 +154,7 @@ def pretraining(
                 data.shape[1],
                 [500, 500, 2000, embedding_dim],
                 weight_initalizer,
-                activation_fn=torch.nn.ReLU(),
-                loss_fn=loss_fn,
+                activation_fn=lambda x: torch.nn.functional.relu(x),
                 optimizer_fn=lambda parameters: torch.optim.Adam(parameters, lr=0.0001),
             ).to(device)
             autoencoder.pretrain(
@@ -183,6 +181,9 @@ def pretraining(
                 data.shape[1],
                 [500, 500, 2000, embedding_dim],
                 torch.nn.init.xavier_normal_,
+                loss_fn=None,
+                optimizer_fn=None,
+                activation_fn=lambda x: torch.nn.functional.relu(x),
             )
             autoencoder.load_parameters(autoencoder_params_path)
         print("Autoencoder parameters loaded from file.")
@@ -671,16 +672,20 @@ def evaluate(
             embedding_dim=embedding_dim,
         )
         # hierarchical
-        hierarchical_results = hierarchical(
-            autoencoder=autoencoder,
-            autoencoder_params_path=autoencoder_params_path,
-            dataset_type=dataset_type,
-            dataset=dataset,
-            seed=seed,
-        )
-        hierarchical_results["autoencoder"] = autoencoder_type.value
-        hierarchical_results["embedding_dim"] = embedding_dim
-        hierarchical_results.to_parquet(hierarchical_results_path)
+        if not os.path.exists(hierarchical_results_path):
+            hierarchical_results = hierarchical(
+                autoencoder=autoencoder,
+                autoencoder_params_path=autoencoder_params_path,
+                dataset_type=dataset_type,
+                dataset=dataset,
+                seed=seed,
+            )
+            hierarchical_results["autoencoder"] = autoencoder_type.value
+            hierarchical_results["embedding_dim"] = embedding_dim
+            hierarchical_results.to_parquet(hierarchical_results_path)
+            print(hierarchical_results)
+        else:
+            hierarchical_results = pd.read_parquet(hierarchical_results_path)
 
         # flat
         flat_results = flat(
@@ -693,6 +698,7 @@ def evaluate(
         flat_results["autoencoder"] = autoencoder_type.value
         flat_results["embedding_dim"] = embedding_dim
         flat_results.to_parquet(flat_results_path)
+        print(flat_results)
 
     print(
         f"-------------------------------------------Time needed: {(datetime.datetime.now()-start).total_seconds()/60}min"
@@ -790,24 +796,21 @@ def pretrain_for_multiple_seeds(seeds: List[int], embedding_dims=[10], worker_nu
 if __name__ == "__main__":
     seeds = [21, 42]
     embedding_dims = [10]
-    pretrain_for_multiple_seeds(seeds, embedding_dims=embedding_dims, worker_num=2)
-
-    for ae_type, d_type, seed, embedding_dim in product(
-        AutoencoderType, DatasetType, seeds, embedding_dims
-    ):
+    worker_num = 2
+    pretrain_for_multiple_seeds(
+        seeds, embedding_dims=embedding_dims, worker_num=worker_num
+    )
+    all_autoencoders = list(
+        product(AutoencoderType, DatasetType, seeds, [None], embedding_dims)
+    )
+    for ae_type, dataset_type, seed, ae_path, embedding_dim in all_autoencoders:
+        evaluate(ae_type, dataset_type, seed, ae_path, embedding_dim)
         # Load the dataset and evaluate flat and hierarchical clustering (stacked autoencoder)
-        flat_results_stack, hierarchical_results_stack = evaluate(
-            autoencoder_type=ae_type,
-            dataset_type=d_type,
-            seed=seed,
-            embedding_dim=embedding_dim,
-        )
-        print(flat_results_stack)
-        print(hierarchical_results_stack)
+
     # flat_results, hierarchical_results = evaluate(
-    #     autoencoder_type=AutoencoderType.CLUSTPY_STANDARD,
-    #     dataset_type=DatasetType.REUTERS,
-    #     seed=42,
+    #    autoencoder_type=AutoencoderType.CLUSTPY_STANDARD,
+    #    dataset_type=DatasetType.REUTERS,
+    #    seed=42,
     # )
     # print(flat_results_stack, hierarchical_results_stack)
     # print(flat_results, hierarchical_results)

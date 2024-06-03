@@ -737,7 +737,7 @@ def evaluate_multiple_seeds(
 
 def calculate_flat_mean_for_multiple_seeds(results: pd.DataFrame):
     results = (
-        results.groupby(["autoencoder", "embedding_dim" "dataset", "method"])
+        results.groupby(["autoencoder", "embedding_dim", "dataset", "method"])
         .agg({"nmi": "mean", "acc": "mean", "ari": "mean"})
         .reset_index()
     )

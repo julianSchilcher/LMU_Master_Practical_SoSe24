@@ -118,7 +118,7 @@ def pretraining(
     seed,
     embedding_dim: int,
 ):
-    set_torch_seed(seed)
+    set_torch_seed(np.random.RandomState(seed))
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     data = dataset["data"]
@@ -233,7 +233,7 @@ def flat(
         DataLoader(Original_Dataset(data), batch_size=batch_size, shuffle=False),
     )
 
-    for method in FlatClusteringMethod:
+    for method in [FlatClusteringMethod.DEEPECT_AUGMENTED]:
         # Reproducibility
         set_torch_seed(seed)
         # Load the autoencoder parameters
@@ -434,7 +434,7 @@ def hierarchical(
 
     max_clustering_epochs = get_max_epoch_size(data, max_iterations, batch_size)
 
-    for method in HierarchicalClusteringMethod:
+    for method in []:
         # Reproducibility
         set_torch_seed(seed)
         # Load the autoencoder parameters
@@ -579,7 +579,7 @@ def get_custom_dataloader_augmentations(data: np.ndarray, dataset_type: DatasetT
         0.14 if dataset_type == DatasetType.USPS else 0.08,
         0.14 if dataset_type == DatasetType.USPS else 0.08,
     )
-    image_min_value = 0.0  # -0.999999 if dataset_type == DatasetType.USPS else 0.0
+    image_min_value = -0.999999 if dataset_type == DatasetType.USPS else 0.0
     image_size = 16 if dataset_type == DatasetType.USPS else 28
     augmentation_transform = transforms.Compose(
         [
@@ -631,8 +631,20 @@ def get_custom_dataloader_augmentations(data: np.ndarray, dataset_type: DatasetT
 
 def get_dataset(dataset_type: DatasetType):
     if dataset_type == DatasetType.MNIST:
-        dataset = load_mnist()
-        dataset["data"] = np.asarray(dataset["data"] / 255.0, dtype=np.float32)
+
+        print("New mnist")
+        from scipy import io
+        from sklearn.utils import Bunch
+        with open("./practical/DeepClustering/DeepECT/mnist-original.mat", 'rb') as matlab_file:
+                matlab_dict = io.loadmat(matlab_file, struct_as_record=True)
+
+        data = matlab_dict['data'].T.astype(np.float32)
+        label = np.squeeze(matlab_dict['label'], 0).astype(np.int32)
+        data = data * 0.02  
+        dataset = Bunch(data=data, target=label)
+        # dataset = load_mnist()
+        # dataset["data"] = np.asarray(dataset["data"] / 255.0, dtype=np.float32)
+
     elif dataset_type == DatasetType.FASHION_MNIST:
         dataset = load_fmnist()
         dataset["data"] = np.asarray(dataset["data"] / 255.0, dtype=np.float32)
@@ -680,13 +692,15 @@ def evaluate(
     print(
         f"-------------------------------------------Run: {dataset_type.name}_{autoencoder_type.name}_{embedding_dim}_{seed}"
     )
-    if os.path.exists(hierarchical_results_path) and os.path.exists(flat_results_path):
+    if os.path.exists(hierarchical_results_path) and os.path.exists(flat_results_path) and False:
         hierarchical_results = pd.read_parquet(hierarchical_results_path)
         flat_results = pd.read_parquet(flat_results_path)
     else:
         os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
         torch.use_deterministic_algorithms(mode=True)
+    
         dataset = get_dataset(dataset_type)
+
 
         autoencoder_params_path = get_autoencoder_path(
             autoencoder_type, autoencoder_params_path, dataset, embedding_dim, seed
@@ -725,7 +739,7 @@ def evaluate(
         )
         flat_results["autoencoder"] = autoencoder_type.value
         flat_results["embedding_dim"] = embedding_dim
-        flat_results.to_parquet(flat_results_path)
+        # flat_results.to_parquet(flat_results_path)
         print(flat_results)
 
     print(

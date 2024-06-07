@@ -236,7 +236,7 @@ def flat(
         DataLoader(Original_Dataset(data), batch_size=batch_size, shuffle=False),
     )
 
-    for method in [FlatClusteringMethod.DEEPECT_AUGMENTED]:
+    for method in FlatClusteringMethod:
         # Reproducibility
         set_torch_seed(seed)
         # Load the autoencoder parameters
@@ -437,7 +437,7 @@ def hierarchical(
 
     max_clustering_epochs = get_max_epoch_size(data, max_iterations, batch_size)
 
-    for method in []:
+    for method in HierarchicalClusteringMethod:
         # Reproducibility
         set_torch_seed(seed)
         # Load the autoencoder parameters

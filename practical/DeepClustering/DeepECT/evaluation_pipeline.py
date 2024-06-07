@@ -118,7 +118,7 @@ def pretraining(
     seed,
     embedding_dim: int,
 ):
-    set_torch_seed(seed)
+    set_torch_seed(np.random.RandomState(seed))
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     data = dataset["data"]

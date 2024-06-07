@@ -3,13 +3,16 @@ import math
 import os
 from enum import Enum
 import sys
-
+from pathlib import Path
 sys.path.append(os.getcwd())
 import time
 from typing import List, Tuple, Union
 import PIL
 import numpy as np
 import pandas as pd
+from scipy import io
+from sklearn.utils import Bunch
+from sklearn.datasets import fetch_rcv1
 import torch
 from torch.utils.data import TensorDataset, DataLoader
 from clustpy.data import load_fmnist, load_mnist, load_reuters, load_usps
@@ -632,31 +635,111 @@ def get_custom_dataloader_augmentations(data: np.ndarray, dataset_type: DatasetT
 def get_dataset(dataset_type: DatasetType):
     if dataset_type == DatasetType.MNIST:
 
-        print("New mnist")
-        from scipy import io
-        from sklearn.utils import Bunch
-        with open("./practical/DeepClustering/DeepECT/mnist-original.mat", 'rb') as matlab_file:
+        # data from paper, normalized to [0, 5.1]
+        with open("practical/DeepClustering/DeepECT/data/mnist-original.mat", 'rb') as matlab_file:
                 matlab_dict = io.loadmat(matlab_file, struct_as_record=True)
-
         data = matlab_dict['data'].T.astype(np.float32)
         label = np.squeeze(matlab_dict['label'], 0).astype(np.int32)
         data = data * 0.02  
-        dataset = Bunch(data=data, target=label)
+        dataset = Bunch(data=data, target=label, dataset_name='MNIST')
         # dataset = load_mnist()
         # dataset["data"] = np.asarray(dataset["data"] / 255.0, dtype=np.float32)
 
     elif dataset_type == DatasetType.FASHION_MNIST:
+        # paper also used fashionmnist from pytorch and scales to [0,1]
         dataset = load_fmnist()
         dataset["data"] = np.asarray(dataset["data"] / 255.0, dtype=np.float32)
     elif dataset_type == DatasetType.USPS:
-        dataset = load_usps()
-        dataset["data"] = np.asarray(dataset["data"] / 255.0, dtype=np.float32)
+        # usps data from paper normalized to [~-1,~1]
+        data_mat = io.loadmat("practical/DeepClustering/DeepECT/data/usps_resampled.mat")
+        data = np.concatenate([data_mat['train_patterns'].T, data_mat['test_patterns'].T], 0)
+        label = np.argmax(np.concatenate([data_mat['train_labels'].T, data_mat['test_labels'].T], 0), 1)
+        dataset = Bunch(data=data, target=label, dataset_name='USPS')
+        # dataset = load_usps()
+        # dataset["data"] = np.asarray(dataset["data"] / 255.0, dtype=np.float32)
     else:
-        dataset = load_reuters()
-        dataset["data"] = np.asarray(dataset["data"] * 100.0, dtype=np.float32)
-        dataset["target"] = dataset["target"]
+        if not os.path.exists('practical/DeepClustering/DeepECT/data/Reuters/reuters_preprocessed_data.npy'):
+            load_reuters_paper()
+        # in paper they did preprocessing on reuters (e.g. feature reduction)
+        data = np.load('practical/DeepClustering/DeepECT/data/Reuters/reuters_preprocessed_data.npy')
+        data = data * 100.0  # Similar to preprocessing done in DEC implementation
+        label = np.load('practical/DeepClustering/DeepECT/data/Reuters/reuters_preprocessed_target.npy')
+        dataset = Bunch(data=data, target=label, dataset_name='REUTERS')
+        # dataset = load_reuters()
+        # dataset["data"] = np.asarray(dataset["data"] * 100.0, dtype=np.float32)
+        # dataset["target"] = dataset["target"]
     return dataset
 
+def load_reuters_paper():
+    data_home = Path("practical/DeepClustering/DeepECT/data/Reuters")
+    topics_file = Path(data_home, 'rcv1.topics.hier.orig')
+
+    if not topics_file.exists():
+        import requests
+
+        data_home.mkdir(exist_ok=True, parents=True)
+        response = requests.get(
+            'http://www.ai.mit.edu/projects/jmlr/papers/volume5/lewis04a/a02-orig-topics-hierarchy/rcv1.topics.hier.orig')
+        txt = str(response.text)
+        print(topics_file)
+        f = open(topics_file, 'w+')
+        f.write(txt)
+        f.close()
+
+    cwd = os.getcwd()
+    data = fetch_rcv1(data_home=data_home, download_if_missing=True)
+    names = data.target_names
+
+    ind = np.full(len(names), False, dtype=bool)
+    f = open(topics_file, 'r')
+    count = 0
+    cat_names = []
+    for i in range(len(names) + 1):
+        s = f.readline()
+        if s[8:12] == 'Root':
+            ind[i - 1] = True
+            cat_names.append(s[50:-1])
+            count = count + 1
+    f.close()
+
+    labels = data.target[:, ind].copy()
+    labels = labels.toarray()
+    t = labels.sum(axis=1, keepdims=False)
+    single_docs = np.where(t == 1)[0]
+
+    # keep only the documents with single label
+    labels = labels[single_docs]
+    docs = data.data[single_docs]
+    #
+    frequency = np.squeeze(np.asarray(docs.sum(axis=0)))
+
+    fre_ind = np.argsort(frequency)
+    fre_ind = fre_ind[::-1]
+    selected_features = fre_ind[0:2000]
+    #
+    train_x = docs[:, selected_features].todense().astype(np.float32)
+    np.save(f'{data_home}/reuters_preprocessed_data.npy', train_x)
+
+    target_names = cat_names
+    target = labels.argmax(axis=1).astype(np.int32)
+    np.save(f'{data_home}/reuters_preprocessed_target.npy', target)
+
+    f = open(topics_file, 'r')
+    ind2 = np.full(len(names), False, dtype=bool)
+    for i in range(len(names) + 1):
+        s = f.readline()
+        if s[9:12] == 'CAT':
+            ind2[i - 1] = True
+            cat_names.append(s[50:-1])
+    f.close()
+
+    lbls_lvl2 = data.target[:, ind2].copy()
+    lbls_lvl2 = lbls_lvl2.toarray()
+    lbls_lvl2 = lbls_lvl2[single_docs]
+    lbls_lvl2 = np.concatenate([labels, lbls_lvl2], axis=1).astype(np.int32)
+
+    np.save(f'{data_home}/reuters_preprocessed_cat_names_2lvls.npy', np.asarray(cat_names))
+    np.save(f'{data_home}/reuters_preprocessed_labels_2lvls.npy', lbls_lvl2)
 
 def get_autoencoder_path(
     autoencoder_type: AutoencoderType,
@@ -692,7 +775,7 @@ def evaluate(
     print(
         f"-------------------------------------------Run: {dataset_type.name}_{autoencoder_type.name}_{embedding_dim}_{seed}"
     )
-    if os.path.exists(hierarchical_results_path) and os.path.exists(flat_results_path) and False:
+    if os.path.exists(hierarchical_results_path) and os.path.exists(flat_results_path):
         hierarchical_results = pd.read_parquet(hierarchical_results_path)
         flat_results = pd.read_parquet(flat_results_path)
     else:
@@ -739,7 +822,7 @@ def evaluate(
         )
         flat_results["autoencoder"] = autoencoder_type.value
         flat_results["embedding_dim"] = embedding_dim
-        # flat_results.to_parquet(flat_results_path)
+        flat_results.to_parquet(flat_results_path)
         print(flat_results)
 
     print(

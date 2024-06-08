@@ -24,7 +24,8 @@ from practical.DeepClustering.DeepECT.metrics import (
     PredictionClusterNode,
     PredictionClusterTree,
 )
-
+import logging
+logging.basicConfig(filename="loss.log",level=logging.INFO)
 
 class Cluster_Node:
     """
@@ -960,7 +961,7 @@ class _DeepECT_Module(torch.nn.Module):
                     if (
                         progress_bar.n <= 10 or progress_bar.n % 100 == 0
                     ) and progress_bar.n > 0:
-                        print(
+                        logging.info(
                             f"{progress_bar.n} - moving averages: dc_loss: {mov_dc_loss/progress_bar.n} "
                             f"nc_loss: {mov_nc_loss/progress_bar.n} rec_loss: {mov_rec_loss/progress_bar.n} {f'rec_loss_aug: {mov_rec_loss_aug/progress_bar.n}' if self.augmentation_invariance else ''} total_loss: {mov_loss/progress_bar.n}"
                         )

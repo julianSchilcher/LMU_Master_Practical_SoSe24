@@ -8,7 +8,6 @@ from practical.DeepClustering.DeepECT.ect.utils.evaluation.dendrogram_purity imp
 
 
 def run_idec_hierarchical(
-    data,
     ground_truth,
     seed,
     n_clusters,
@@ -28,7 +27,7 @@ def run_idec_hierarchical(
         initial_clustering_params={"n_init": 20},
         custom_dataloaders=custom_dataloaders,
     )
-    idec.fit(data)
+    idec.fit(np.asarray(custom_dataloaders[1].dataset, np.float32))
     labels_pred = idec.labels_
     print(unsupervised_clustering_accuracy(ground_truth, labels_pred))
 

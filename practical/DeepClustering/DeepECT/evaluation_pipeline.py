@@ -911,6 +911,8 @@ def pretraining_with_data_load(
         autoencoder_type, autoencoder_params_path, dataset, embedding_dim, seed
     )
 
+    print(f"---------------------------------------------{autoencoder_type.name} {dataset_type.name} {seed}")
+
     autoencoder = pretraining(
         autoencoder_type=autoencoder_type,
         autoencoder_params_path=autoencoder_params_path,

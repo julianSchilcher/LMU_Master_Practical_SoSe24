@@ -239,14 +239,12 @@ def fit(
                 batch_size=batch_size,
                 shuffle=True,
                 # num_workers=5,
-                prefetch_factor=200,
             ),
             DataLoader(
                 Original_Dataset(data),
                 batch_size=batch_size,
                 shuffle=False,
                 # num_workers=5,
-                prefetch_factor=200,
             ),
         )
         # Save path
@@ -254,6 +252,8 @@ def fit(
         if os.path.exists(result_path):
             results.append(pd.read_parquet(result_path))
             continue
+        # autoencoder save path
+        autoencoder_save_path = f"practical/DeepClustering/DeepECT/results_autoencoder/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.pth"
         # if not yet evaluated, fit + get results
         if method == ClusteringMethod.KMEANS:
             autoencoder.to(device)
@@ -623,7 +623,6 @@ def fit(
                 Original_Dataset(data_shuffled),
                 batch_size=batch_size,
                 shuffle=False,
-                prefetch_factor=200,
             )
             # Perform hierarchical clustering with Autoencoder and single
             print("fitting ae_single...")
@@ -662,7 +661,6 @@ def fit(
                 Original_Dataset(data_shuffled),
                 batch_size=batch_size,
                 shuffle=False,
-                prefetch_factor=200,
             )
             # Perform hierarchical clustering with Autoencoder and complete
             print("fitting ae_complete...")
@@ -690,6 +688,7 @@ def fit(
             )
             result_df.to_parquet(result_path)
             results.append(result_df)
+        autoencoder.save_parameters(autoencoder_save_path)
     return pd.concat(results, axis=0, ignore_index=True)
 
 
@@ -751,15 +750,13 @@ def get_custom_dataloader_augmentations(data: np.ndarray, dataset_type: DatasetT
         augmented_dataset,
         batch_size=256,
         shuffle=True,
-        num_workers=5,
-        prefetch_factor=200,
+        # num_workers=5,
     )
     testloader = DataLoader(
         original_dataset,
         batch_size=256,
         shuffle=False,
-        num_workers=5,
-        prefetch_factor=200,
+        # num_workers=5,
     )
 
     return trainloader, testloader
@@ -778,9 +775,7 @@ def get_dataset(dataset_type: DatasetType):
         # usps data from paper normalized to [~-1,~1]
         dataset = load_usps()
         dataset["data"] = np.asarray(
-            minmax_scale(dataset["data"].ravel(), feature_range=(-1, 1)).reshape(
-                (16, 16)
-            ),
+            minmax_scale(dataset["data"], feature_range=(-1, 1)),
             dtype=np.float32,
         )
     else:
@@ -911,7 +906,9 @@ def pretraining_with_data_load(
         autoencoder_type, autoencoder_params_path, dataset, embedding_dim, seed
     )
 
-    print(f"---------------------------------------------{autoencoder_type.name} {dataset_type.name} {seed}")
+    print(
+        f"---------------------------------------------{autoencoder_type.name} {dataset_type.name} {seed}"
+    )
 
     autoencoder = pretraining(
         autoencoder_type=autoencoder_type,
@@ -948,13 +945,13 @@ if __name__ == "__main__":
     )
     with mp.Pool(processes=worker_num) as pool:
         result = pool.starmap(evaluate, all_autoencoders)
-    # for ae_type, dataset_type, seed, ae_path, embedding_dim in all_autoencoders:
-    #     evaluate(ae_type, dataset_type, seed, ae_path, embedding_dim)
+    for ae_type, dataset_type, seed, ae_path, embedding_dim in all_autoencoders:
+        evaluate(ae_type, dataset_type, seed, ae_path, embedding_dim)
     #     # Load the dataset and evaluate flat and hierarchical clustering (stacked autoencoder)
 
     # flat_results, hierarchical_results = evaluate(
     #     autoencoder_type=AutoencoderType.CLUSTPY_STANDARD,
-    #     dataset_type=DatasetType.REUTERS,
+    #     dataset_type=DatasetType.USPS,
     #     seed=42,
     # )
     # print(flat_results_stack, hierarchical_results_stack)

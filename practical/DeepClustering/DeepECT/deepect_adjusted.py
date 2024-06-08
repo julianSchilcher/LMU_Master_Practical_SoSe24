@@ -1115,7 +1115,7 @@ def _deep_ect(
         embedding_size,
         custom_dataloaders,
         KMeans,
-        {"n_init": 20},
+        {"n_init": 20, "random_state": random_state},
         random_state,
     )
 

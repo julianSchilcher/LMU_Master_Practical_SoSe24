@@ -668,6 +668,7 @@ class Cluster_Tree:
                         grandparent.right_child = sibling_node
                     sibling_node.parent = grandparent
                 sibling_node.split_id = parent.split_id
+                sibling_node.weight = parent.weight
                 child_node.prune()
                 del child_node
                 del parent

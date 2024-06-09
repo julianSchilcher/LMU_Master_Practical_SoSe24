@@ -242,7 +242,7 @@ class stacked_ae(_AbstractAutoencoder):
                             dropout_rate=dropout_rate,
                             dropout_is_training=True,
                         )
-                    loss = self.loss_fn(batch_data, reconstructed_data)
+                    loss = self.loss_fn(reconstructed_data, batch_data)
                     optimizer.zero_grad()
                     loss.backward()
                     optimizer.step()

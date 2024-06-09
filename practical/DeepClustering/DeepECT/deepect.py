@@ -17,9 +17,7 @@ from sklearn.cluster import KMeans
 from clustpy.data.real_torchvision_data import load_mnist
 from tqdm import tqdm
 from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
-
-# from practical.DeepClustering.DeepECT.initial_stack_ae import get_trained_stacked_autoencoder
-# from practical.DeepClustering.DeepECT.initial_stack_ae import get_stack_initial_deep_clustering_setting
+import logging
 from practical.DeepClustering.DeepECT.metrics import (
     PredictionClusterNode,
     PredictionClusterTree,
@@ -959,7 +957,7 @@ class _DeepECT_Module(torch.nn.Module):
             mov_loss += loss.item()
 
             if (e <= 10 or e % 100 == 0) and e > 0:
-                print(
+                logging.info(
                     f"{e} - moving averages: dc_loss: {mov_dc_loss/e} "
                     f"nc_loss: {mov_nc_loss/e} rec_loss: {mov_rec_loss/e} {f'rec_loss_aug: {mov_rec_loss_aug/e}' if self.augmentation_invariance else ''} total_loss: {mov_loss/e}"
                 )

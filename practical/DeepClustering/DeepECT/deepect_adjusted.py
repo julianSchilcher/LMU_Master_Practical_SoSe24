@@ -25,7 +25,7 @@ from practical.DeepClustering.DeepECT.metrics import (
     PredictionClusterTree,
 )
 import logging
-logging.basicConfig(filename="loss.log",level=logging.INFO)
+
 
 class Cluster_Node:
     """
@@ -901,6 +901,7 @@ class _DeepECT_Module(torch.nn.Module):
         ) as progress_bar:
             while True:
                 for batch in trainloader:
+                    optimizer.zero_grad()
                     if progress_bar.n > max_iterations:
                         break
                     if (
@@ -974,7 +975,6 @@ class _DeepECT_Module(torch.nn.Module):
 
                     loss.backward()
                     optimizer.step()
-                    optimizer.zero_grad()
                     progress_bar.update()
                 else:
                     continue

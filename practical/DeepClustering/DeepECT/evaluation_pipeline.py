@@ -40,6 +40,8 @@ from practical.DeepClustering.DeepECT.baseline_hierachical.methods import (
     idec_hierarchical_clustpy,
 )
 
+import logging
+
 
 class DatasetType(Enum):
     MNIST = "MNIST"
@@ -255,6 +257,17 @@ def fit(
             continue
         # autoencoder save path
         autoencoder_save_path = f"practical/DeepClustering/DeepECT/results_autoencoder/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.pth"
+
+        # logging config
+        logging.root.handlers = []
+        log_path = f"practical/DeepClustering/DeepECT/results_log/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.txt"
+        logging.basicConfig(
+            level=logging.INFO,
+            handlers=[
+                logging.FileHandler(log_path),
+                logging.StreamHandler(sys.stdout),
+            ],
+        )
         # if not yet evaluated, fit + get results
         if method == ClusteringMethod.KMEANS:
             autoencoder.to(device)
@@ -940,8 +953,8 @@ if __name__ == "__main__":
     )
     with mp.Pool(processes=worker_num) as pool:
         result = pool.starmap(evaluate, all_autoencoders)
-    for ae_type, dataset_type, seed, ae_path, embedding_dim in all_autoencoders:
-        evaluate(ae_type, dataset_type, seed, ae_path, embedding_dim)
+    # for ae_type, dataset_type, seed, ae_path, embedding_dim in all_autoencoders:
+    #     evaluate(ae_type, dataset_type, seed, ae_path, embedding_dim)
     #     # Load the dataset and evaluate flat and hierarchical clustering (stacked autoencoder)
 
     # flat_results, hierarchical_results = evaluate(

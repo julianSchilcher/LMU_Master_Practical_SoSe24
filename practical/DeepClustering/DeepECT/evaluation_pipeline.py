@@ -287,8 +287,7 @@ def fit(
                     }
                 ]
             )
-            result_df.to_parquet(result_path)
-            results.append(result_df)
+
         elif method == ClusteringMethod.DEEPECT_OURS:
             autoencoder.to(device)
             deepect = DeepECTOurs(
@@ -339,8 +338,6 @@ def fit(
                     ]
                 )
 
-            result_df.to_parquet(result_path)
-            results.append(result_df)
         elif method == ClusteringMethod.DEEPECT_AUGMENTED_OURS:
             # Perform flat clustering with DeepECT and augmentation
             if dataset_type == DatasetType.REUTERS:
@@ -398,8 +395,7 @@ def fit(
                         }
                     ]
                 )
-            result_df.to_parquet(result_path)
-            results.append(result_df)
+
         elif method == ClusteringMethod.DEEPECT_PAPER:
             autoencoder.to(device)
             deepect = DeepECTPaper(
@@ -450,8 +446,6 @@ def fit(
                     ]
                 )
 
-            result_df.to_parquet(result_path)
-            results.append(result_df)
         elif method == ClusteringMethod.DEEPECT_AUGMENTED_PAPER:
             # Perform flat clustering with DeepECT and augmentation
             if dataset_type == DatasetType.REUTERS:
@@ -509,8 +503,7 @@ def fit(
                         }
                     ]
                 )
-            result_df.to_parquet(result_path)
-            results.append(result_df)
+
         elif method == ClusteringMethod.IDEC:
 
             # Perform flat clustering with IDEC
@@ -546,8 +539,7 @@ def fit(
                     }
                 ]
             )
-            result_df.to_parquet(result_path)
-            results.append(result_df)
+
         elif method == ClusteringMethod.AE_BISECTING:
             # Perform hierarchical clustering with Autoencoder and bisection
             print("fitting ae_bisecting...")
@@ -573,8 +565,7 @@ def fit(
                     }
                 ]
             )
-            result_df.to_parquet(result_path)
-            results.append(result_df)
+
         elif method == ClusteringMethod.IDEC_COMPLETE:
             autoencoder.to(device)
             print("fitting idec hierarchical...")
@@ -616,8 +607,6 @@ def fit(
                     },
                 ]
             )
-            result_df.to_parquet(result_path)
-            results.append(result_df)
 
         elif method == ClusteringMethod.AE_SINGLE:
             if data.shape[0] >= 80000:
@@ -655,8 +644,7 @@ def fit(
                     }
                 ]
             )
-            result_df.to_parquet(result_path)
-            results.append(result_df)
+
         elif method == ClusteringMethod.AE_COMPLETE:
             if data.shape[0] >= 80000:
                 data_shuffled, labels_shuffled = shuffle_dataset(data, labels)
@@ -693,8 +681,8 @@ def fit(
                     }
                 ]
             )
-            result_df.to_parquet(result_path)
-            results.append(result_df)
+        result_df.to_parquet(result_path)
+        results.append(result_df)
         autoencoder.save_parameters(autoencoder_save_path)
     return pd.concat(results, axis=0, ignore_index=True)
 

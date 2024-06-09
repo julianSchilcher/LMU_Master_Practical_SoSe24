@@ -156,6 +156,7 @@ def pretraining(
                 data.shape[1],
                 [500, 500, 2000, embedding_dim],
                 weight_initalizer,
+                loss_fn=torch.nn.MSELoss(),
                 activation_fn=lambda x: torch.nn.functional.relu(x),
                 optimizer_fn=lambda parameters: torch.optim.Adam(parameters, lr=0.0001),
             ).to(device)

@@ -673,6 +673,8 @@ class Cluster_Tree:
                 child_node.prune()
                 del child_node
                 del parent
+                for leaf in self.leaf_nodes:
+                    leaf.center.requires_grad = True
                 print(
                     f"Tree size after pruning: {self.number_nodes}, leaf nodes: {len(self.leaf_nodes)}"
                 )
@@ -893,6 +895,9 @@ class _DeepECT_Module(torch.nn.Module):
         mov_rec_loss = 0.0
         mov_rec_loss_aug = 0.0
         mov_loss = 0.0
+
+        optimizer.add_param_group({"params": self.cluster_tree.root.left_child.center})
+        optimizer.add_param_group({"params": self.cluster_tree.root.right_child.center})
 
         for e in tqdm(range(max_iterations), desc="Fit", total=max_iterations):
             optimizer.zero_grad()

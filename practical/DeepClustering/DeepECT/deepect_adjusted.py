@@ -1,30 +1,31 @@
-from typing import List, Union
 import os
 import sys
+from typing import List, Union
 
 sys.path.append(os.getcwd())
 
+import logging
 
 import numpy as np
 import torch
 import torch.utils
 import torch.utils.data
+from clustpy.data.real_torchvision_data import load_mnist
 from clustpy.deep._data_utils import augmentation_invariance_check
-from clustpy.deep._train_utils import get_standard_initial_deep_clustering_setting
+from clustpy.deep._train_utils import \
+    get_standard_initial_deep_clustering_setting
 from clustpy.deep._utils import set_torch_seed
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
+from clustpy.deep.autoencoders._abstract_autoencoder import \
+    _AbstractAutoencoder
 from sklearn.cluster import KMeans
-from clustpy.data.real_torchvision_data import load_mnist
 from tqdm import tqdm
-from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
 
 # from practical.DeepClustering.DeepECT.initial_stack_ae import get_trained_stacked_autoencoder
 # from practical.DeepClustering.DeepECT.initial_stack_ae import get_stack_initial_deep_clustering_setting
-from practical.DeepClustering.DeepECT.metrics import (
-    PredictionClusterNode,
-    PredictionClusterTree,
-)
-import logging
+from practical.DeepClustering.DeepECT.metrics import (PredictionClusterNode,
+                                                      PredictionClusterTree,
+                                                      calculate_accuracy)
 
 
 class Cluster_Node:
@@ -858,8 +859,10 @@ class _DeepECT_Module(torch.nn.Module):
         self.device = device
         self.random_state = random_state
 
+
     def fit(
         self,
+        labels,
         autoencoder: torch.nn.Module,
         trainloader: torch.utils.data.DataLoader,
         max_iterations: int,
@@ -892,6 +895,7 @@ class _DeepECT_Module(torch.nn.Module):
         mov_rec_loss = 0.0
         mov_rec_loss_aug = 0.0
         mov_loss = 0.0
+        mov_accuracy = 0.0
 
         optimizer.add_param_group({"params": self.cluster_tree.root.left_child.center})
         optimizer.add_param_group({"params": self.cluster_tree.root.right_child.center})
@@ -945,6 +949,25 @@ class _DeepECT_Module(torch.nn.Module):
                             embedded_aug if self.augmentation_invariance else None
                         ),
                     )
+                    batch_pred_labels = []
+                    for node in self.cluster_tree.leaf_nodes:
+                        if node.assignment_indices is not None:
+                            batch_pred_labels.append(
+                                torch.full((len(node.assignment_indices),), node.id, dtype=torch.long, device=self.device)
+                            )
+                    if batch_pred_labels:
+                        batch_pred_labels = torch.cat(batch_pred_labels)
+                    else:
+                        batch_pred_labels = torch.tensor([], dtype=torch.long, device=self.device)
+
+                    # Get the true labels for the current batch
+                    true_labels = labels[idxs]
+
+                    # Calculate accuracy for the current batch
+                    if len(true_labels) > 0:
+                        accuracy = calculate_accuracy(true_labels, batch_pred_labels.cpu().numpy())
+                    else:
+                        accuracy = 0.0
 
                     # adapt centers of split nodes analytically
                     self.cluster_tree.adapt_inner_nodes(self.cluster_tree.root)
@@ -964,13 +987,16 @@ class _DeepECT_Module(torch.nn.Module):
                     mov_dc_loss += dc_loss.item()
                     mov_rec_loss += rec_loss.item()
                     mov_loss += loss.item()
+                    mov_accuracy += accuracy
 
                     if (
                         progress_bar.n <= 10 or progress_bar.n % 100 == 0
                     ) and progress_bar.n > 0:
                         logging.info(
                             f"{progress_bar.n} - moving averages: dc_loss: {mov_dc_loss/progress_bar.n} "
-                            f"nc_loss: {mov_nc_loss/progress_bar.n} rec_loss: {mov_rec_loss/progress_bar.n} {f'rec_loss_aug: {mov_rec_loss_aug/progress_bar.n}' if self.augmentation_invariance else ''} total_loss: {mov_loss/progress_bar.n}"
+                            f"nc_loss: {mov_nc_loss/progress_bar.n} rec_loss: {mov_rec_loss/progress_bar.n} "
+                            f"{f'rec_loss_aug: {mov_rec_loss_aug/progress_bar.n}' if self.augmentation_invariance else ''} "
+                            f"total_loss: {mov_loss/progress_bar.n} accuracy: {accuracy/progress_bar.n}"
                         )
 
                     loss.backward()
@@ -1028,6 +1054,7 @@ class _DeepECT_Module(torch.nn.Module):
 
 def _deep_ect(
     X: np.ndarray,
+    Y: np.ndarray,
     batch_size: int,
     pretrain_optimizer_params: dict,
     clustering_optimizer_params: dict,
@@ -1140,8 +1167,10 @@ def _deep_ect(
     optimizer = optimizer_class(
         list(autoencoder.parameters()), **clustering_optimizer_params
     )
+    labels = Y
     # DeepECT Training loop
     deepect_module.fit(
+        labels,
         autoencoder,
         trainloader,
         max_iterations,
@@ -1261,7 +1290,7 @@ class DeepECT:
         self.random_state = random_state
         self.autoencoder_param_path = autoencoder_param_path
 
-    def fit(self, X: np.ndarray) -> "DeepECT":
+    def fit(self, X: np.ndarray, Y: np.ndarray) -> "DeepECT":
         """
         Initiate the actual clustering process on the input data set.
         The resulting cluster labels will be stored in the labels_ attribute.
@@ -1281,6 +1310,7 @@ class DeepECT:
         )
         tree, autoencoder = _deep_ect(
             X,
+            Y,
             self.batch_size,
             self.pretrain_optimizer_params,
             self.clustering_optimizer_params,
@@ -1311,7 +1341,7 @@ if __name__ == "__main__":
     )
     autoencoder.fitted = True
     deepect = DeepECT(autoencoder=autoencoder, max_leaf_nodes=20, max_iterations=10000)
-    deepect.fit(dataset)
+    deepect.fit(dataset, labels)
     print(deepect.tree_.flat_accuracy(labels, n_clusters=10))
     print(deepect.tree_.flat_nmi(labels, n_clusters=10))
     print(deepect.tree_.flat_ari(labels, n_clusters=10))

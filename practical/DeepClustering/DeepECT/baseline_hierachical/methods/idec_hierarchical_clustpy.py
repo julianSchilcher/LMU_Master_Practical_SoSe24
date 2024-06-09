@@ -52,6 +52,7 @@ def run_idec_hierarchical(
         dp_value_complete,
         leaf_purity_value_single,
         leaf_purity_value_complete,
+        idec.autoencoder,
     )
 
 

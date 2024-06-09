@@ -301,6 +301,7 @@ def fit(
             )
             print(f"fitting {method.name}...")
             deepect.fit(data)
+            autoencoder = deepect.autoencoder
             print(f"finished {method.name}...")
             try:
                 # Calculate evaluation metrics
@@ -359,6 +360,7 @@ def fit(
             )
             print(f"fitting {method.name}...")
             deepect.fit(data)
+            autoencoder = deepect.autoencoder
             print(f"finished {method.name}...")
             # Calculate evaluation metrics
             try:
@@ -410,6 +412,7 @@ def fit(
             )
             print(f"fitting {method.name}...")
             deepect.fit(data)
+            autoencoder = deepect.autoencoder
             print(f"finished {method.name}...")
             try:
                 # Calculate evaluation metrics
@@ -468,6 +471,7 @@ def fit(
             )
             print(f"fitting {method.name}...")
             deepect.fit(data)
+            autoencoder = deepect.autoencoder
             print(f"finished {method.name}...")
             # Calculate evaluation metrics
             try:
@@ -524,6 +528,7 @@ def fit(
             )
             print("fitting IDEC...")
             idec.fit(data)
+            autoencoder = idec.autoencoder
             print("finished fitting IDEC")
 
             # Calculate evaluation metrics
@@ -578,6 +583,7 @@ def fit(
                 dp_value_complete,
                 leaf_purity_value_single,
                 leaf_purity_value_complete,
+                autoencoder,
             ) = idec_hierarchical_clustpy.run_idec_hierarchical(
                 labels,
                 seed,

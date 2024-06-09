@@ -1,11 +1,12 @@
+from collections import defaultdict
 from typing import Any, Dict, List, Tuple, Union
 
+import clustpy.metrics
 import numpy as np
 import torch
 from scipy.special import comb
-from collections import defaultdict
-import clustpy.metrics
-from sklearn.metrics import normalized_mutual_info_score, adjusted_rand_score
+from sklearn.metrics import (accuracy_score, adjusted_rand_score,
+                             normalized_mutual_info_score)
 
 
 class PredictionClusterNode:
@@ -50,6 +51,10 @@ def count_values_in_sequence(seq: np.ndarray):
     for key in seq:
         res[key] += 1
     return dict(res)
+
+
+def calculate_accuracy(true_labels, predicted_labels):
+    return accuracy_score(true_labels, predicted_labels)
 
 
 def weighted_avg_and_std(values, weights):

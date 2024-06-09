@@ -1,46 +1,41 @@
 import datetime
 import math
 import os
-from enum import Enum
 import sys
-from pathlib import Path
+from enum import Enum
 
 sys.path.append(os.getcwd())
-import time
-from typing import List, Tuple, Union
-import PIL
+import logging
+import multiprocessing as mp
+from itertools import product
+from typing import List, Union
+
 import numpy as np
 import pandas as pd
-from scipy import io
-from sklearn.utils import Bunch
+import PIL
 import torch
-from torch.utils.data import TensorDataset, DataLoader
 from clustpy.data import load_fmnist, load_mnist, load_reuters, load_usps
-from clustpy.deep.autoencoders import FeedforwardAutoencoder
-from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
-from clustpy.deep.dec import IDEC
 from clustpy.deep._utils import set_torch_seed
+from clustpy.deep.autoencoders import FeedforwardAutoencoder
+from clustpy.deep.autoencoders._abstract_autoencoder import \
+    _AbstractAutoencoder
+from clustpy.deep.dec import IDEC
 from clustpy.metrics import unsupervised_clustering_accuracy
 from sklearn.cluster import KMeans
 from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
-from sklearn.utils import Bunch
 from sklearn.preprocessing import minmax_scale
-from torch.utils.data import DataLoader, Dataset
+from sklearn.utils import Bunch
+from torch.utils.data import DataLoader, Dataset, TensorDataset
 from torchvision import transforms
-import multiprocessing as mp
-from itertools import product
-from practical.DeepClustering.DeepECT.evaluation.experiments.pre_training.vae.stacked_ae import (
-    stacked_ae,
-)
 
-from practical.DeepClustering.DeepECT.deepect_adjusted import DeepECT as DeepECTPaper
-from practical.DeepClustering.DeepECT.deepect import DeepECT as DeepECTOurs
 from practical.DeepClustering.DeepECT.baseline_hierachical.ae_plus import *
-from practical.DeepClustering.DeepECT.baseline_hierachical.methods import (
-    idec_hierarchical_clustpy,
-)
-
-import logging
+from practical.DeepClustering.DeepECT.baseline_hierachical.methods import \
+    idec_hierarchical_clustpy
+from practical.DeepClustering.DeepECT.deepect import DeepECT as DeepECTOurs
+from practical.DeepClustering.DeepECT.deepect_adjusted import \
+    DeepECT as DeepECTPaper
+from practical.DeepClustering.DeepECT.evaluation.experiments.pre_training.vae.stacked_ae import \
+    stacked_ae
 
 
 class DatasetType(Enum):
@@ -420,7 +415,7 @@ def fit(
                 custom_dataloaders=dataloaders,
             )
             print(f"fitting {method.name}...")
-            deepect.fit(data)
+            deepect.fit(data, labels)
             autoencoder = deepect.autoencoder
             print(f"finished {method.name}...")
             try:
@@ -477,7 +472,7 @@ def fit(
                 random_state=np.random.RandomState(seed),
             )
             print(f"fitting {method.name}...")
-            deepect.fit(data)
+            deepect.fit(data, labels)
             autoencoder = deepect.autoencoder
             print(f"finished {method.name}...")
             # Calculate evaluation metrics

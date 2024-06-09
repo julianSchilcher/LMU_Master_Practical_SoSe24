@@ -888,17 +888,25 @@ class _DeepECT_Module(torch.nn.Module):
 
         train_iterator = iter(trainloader)
 
+        mov_dc_loss = 0.0
+        mov_nc_loss = 0.0
+        mov_rec_loss = 0.0
+        mov_rec_loss_aug = 0.0
+        mov_loss = 0.0
+
         for e in tqdm(range(max_iterations), desc="Fit", total=max_iterations):
+            optimizer.zero_grad()
             self.cluster_tree.prune_tree(pruning_threshold)
             if (e > 0 and e % grow_interval == 0) or self.cluster_tree.number_nodes < 3:
-                self.cluster_tree.grow_tree(
-                    trainloader,
-                    autoencoder,
-                    optimizer,
-                    self.augmentation_invariance,
-                    random_state=self.random_state,
-                    device=device,
-                )
+                if len(self.cluster_tree.leaf_nodes) < max_leaf_nodes:
+                    self.cluster_tree.grow_tree(
+                        trainloader,
+                        autoencoder,
+                        optimizer,
+                        self.augmentation_invariance,
+                        random_state=self.random_state,
+                        device=device,
+                    )
 
             # retrieve minibatch (endless)
             try:
@@ -936,10 +944,21 @@ class _DeepECT_Module(torch.nn.Module):
 
             if self.augmentation_invariance:
                 loss = nc_loss + dc_loss + (rec_loss + rec_loss_aug) / 2
+                mov_rec_loss_aug += rec_loss_aug.item()
             else:
                 loss = nc_loss + dc_loss + rec_loss
 
-            optimizer.zero_grad()
+            mov_nc_loss += nc_loss.item()
+            mov_dc_loss += dc_loss.item()
+            mov_rec_loss += rec_loss.item()
+            mov_loss += loss.item()
+
+            if (e <= 10 or e % 100 == 0) and e > 0:
+                print(
+                    f"{e} - moving averages: dc_loss: {mov_dc_loss/e} "
+                    f"nc_loss: {mov_nc_loss/e} rec_loss: {mov_rec_loss/e} {f'rec_loss_aug: {mov_rec_loss_aug/e}' if self.augmentation_invariance else ''} total_loss: {mov_loss/e}"
+                )
+
             loss.backward()
             optimizer.step()
 
@@ -1065,8 +1084,7 @@ def _deep_ect(
     # Get initial setting (device, dataloaders, pretrained AE and initial clustering result)
     save_ae_state_dict = not hasattr(autoencoder, "fitted") or not autoencoder.fitted
     set_torch_seed(random_state)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    torch.use_deterministic_algorithms(True)
 
     (
         device,
@@ -1136,7 +1154,7 @@ class DeepECT:
         pretrain_optimizer_params: dict = None,
         clustering_optimizer_params: dict = None,
         pretrain_epochs: int = 50,
-        max_iterations: int = 50000,
+        max_iterations: int = 40000,
         grow_interval: int = 500,
         pruning_threshold: float = 0.1,
         optimizer_class: torch.optim.Optimizer = torch.optim.Adam,

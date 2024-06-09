@@ -937,9 +937,9 @@ if __name__ == "__main__":
     seeds = [21, 42]
     embedding_dims = [10]
     worker_num = 2
-    pretrain_for_multiple_seeds(
-        seeds, embedding_dims=embedding_dims, worker_num=worker_num
-    )
+    # pretrain_for_multiple_seeds(
+    #     seeds, embedding_dims=embedding_dims, worker_num=worker_num
+    # )
     all_autoencoders = list(
         product(AutoencoderType, DatasetType, seeds, [None], embedding_dims)
     )

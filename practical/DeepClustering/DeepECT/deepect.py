@@ -966,7 +966,6 @@ class _DeepECT_Module(torch.nn.Module):
 
             loss.backward()
             optimizer.step()
-
             # adapt centers of split nodes analytically
             self.cluster_tree.adapt_inner_nodes(self.cluster_tree.root)
             self.cluster_tree.clear_node_assignments()

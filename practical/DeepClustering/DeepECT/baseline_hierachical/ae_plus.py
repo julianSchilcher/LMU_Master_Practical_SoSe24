@@ -28,7 +28,7 @@ def ae_bisecting(
         )
 
     tree = bisection(max_leaf_nodes, np.concatenate(embedded_data))
-    bisec_tree = predict_id_tree(tree, embedded_data)
+    bisec_tree = predict_id_tree(tree, np.concatenate(embedded_data))
     bisec_den = dendrogram_purity(bisec_tree, labels)
     bisec_lp = leaf_purity(bisec_tree, labels)
     return (

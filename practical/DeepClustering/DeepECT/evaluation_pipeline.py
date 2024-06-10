@@ -17,8 +17,7 @@ import torch
 from clustpy.data import load_fmnist, load_mnist, load_reuters, load_usps
 from clustpy.deep._utils import set_torch_seed
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
-from clustpy.deep.autoencoders._abstract_autoencoder import \
-    _AbstractAutoencoder
+from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
 from clustpy.deep.dec import IDEC
 from clustpy.metrics import unsupervised_clustering_accuracy
 from sklearn.cluster import KMeans
@@ -29,13 +28,14 @@ from torch.utils.data import DataLoader, Dataset, TensorDataset
 from torchvision import transforms
 
 from practical.DeepClustering.DeepECT.baseline_hierachical.ae_plus import *
-from practical.DeepClustering.DeepECT.baseline_hierachical.methods import \
-    idec_hierarchical_clustpy
+from practical.DeepClustering.DeepECT.baseline_hierachical.methods import (
+    idec_hierarchical_clustpy,
+)
 from practical.DeepClustering.DeepECT.deepect import DeepECT as DeepECTOurs
-from practical.DeepClustering.DeepECT.deepect_adjusted import \
-    DeepECT as DeepECTPaper
-from practical.DeepClustering.DeepECT.evaluation.experiments.pre_training.vae.stacked_ae import \
-    stacked_ae
+from practical.DeepClustering.DeepECT.deepect_adjusted import DeepECT as DeepECTPaper
+from practical.DeepClustering.DeepECT.evaluation.experiments.pre_training.vae.stacked_ae import (
+    stacked_ae,
+)
 
 
 class DatasetType(Enum):
@@ -125,6 +125,16 @@ def pretraining(
     if not os.path.exists(autoencoder_params_path):
         os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
         torch.use_deterministic_algorithms(mode=True)
+        # logging config
+        logging.root.handlers = []
+        log_path = f"practical/DeepClustering/DeepECT/pretrained_autoencoders_log/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{seed}.txt"
+        logging.basicConfig(
+            level=logging.INFO,
+            handlers=[
+                logging.FileHandler(log_path),
+                logging.StreamHandler(sys.stdout),
+            ],
+        )
         if autoencoder_type == AutoencoderType.CLUSTPY_STANDARD:
             autoencoder = FeedforwardAutoencoder(
                 layers=[data.shape[1], 500, 500, 2000, embedding_dim]
@@ -211,6 +221,7 @@ def fit(
     seed: int,
     autoencoder_type: AutoencoderType,
     embedding_dim: int,
+    can_use_workers: bool = False,
 ):
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
@@ -226,23 +237,29 @@ def fit(
 
     results = []
     for method in ClusteringMethod:
+        if method == ClusteringMethod.IDEC_SINGLE or (
+            method == ClusteringMethod.AE_COMPLETE and not can_use_workers
+        ):
+            continue
         # Reproducibility
         set_torch_seed(seed)
         # Load the autoencoder parameters
-        autoencoder = autoencoder.load_parameters(autoencoder_params_path)
+        autoencoder = autoencoder.load_parameters(autoencoder_params_path).to(device)
         # Load dataloaders
         dataloaders = (
             DataLoader(
                 Original_Dataset(data),
                 batch_size=batch_size,
                 shuffle=True,
-                # num_workers=5,
+                num_workers=5 if can_use_workers else 0,
+                prefetch_factor=200 if can_use_workers else None,
             ),
             DataLoader(
                 Original_Dataset(data),
                 batch_size=batch_size,
                 shuffle=False,
-                # num_workers=5,
+                num_workers=5 if can_use_workers else 0,
+                prefetch_factor=200 if can_use_workers else None,
             ),
         )
         # Save path
@@ -460,7 +477,9 @@ def fit(
                 continue
             autoencoder.to(device)
 
-            custom_dataloaders = get_custom_dataloader_augmentations(data, dataset_type)
+            custom_dataloaders = get_custom_dataloader_augmentations(
+                data, dataset_type, can_use_workers
+            )
 
             deepect = DeepECTPaper(
                 max_iterations=max_iterations,
@@ -691,7 +710,7 @@ def fit(
             )
         result_df.to_parquet(result_path)
         results.append(result_df)
-        autoencoder.save_parameters(autoencoder_save_path)
+        autoencoder.cpu().save_parameters(autoencoder_save_path)
     return pd.concat(results, axis=0, ignore_index=True)
 
 
@@ -705,7 +724,9 @@ def shuffle_dataset(data, labels):
         return shuffled_x
 
 
-def get_custom_dataloader_augmentations(data: np.ndarray, dataset_type: DatasetType):
+def get_custom_dataloader_augmentations(
+    data: np.ndarray, dataset_type: DatasetType, can_use_workers: bool = False
+):
     degrees = (-15, 15)
     translation = (
         0.14 if dataset_type == DatasetType.USPS else 0.08,
@@ -745,21 +766,23 @@ def get_custom_dataloader_augmentations(data: np.ndarray, dataset_type: DatasetT
             return idx, original_image, augmented_image
 
     # Create an instance of the datasets
-    augmented_dataset = Augmented_Dataset(data, augmentation_transform)
     original_dataset = Original_Dataset(data)
+    augmented_dataset = Augmented_Dataset(data, augmentation_transform)
 
     # Create the dataloaders
     trainloader = DataLoader(
         augmented_dataset,
         batch_size=256,
         shuffle=True,
-        # num_workers=5,
+        num_workers=5 if can_use_workers else 0,
+        prefetch_factor=200 if can_use_workers else None,
     )
     testloader = DataLoader(
         original_dataset,
         batch_size=256,
         shuffle=False,
-        # num_workers=5,
+        num_workers=5 if can_use_workers else 0,
+        prefetch_factor=200 if can_use_workers else None,
     )
 
     return trainloader, testloader
@@ -816,6 +839,7 @@ def evaluate(
     seed: int,
     autoencoder_params_path: str = None,
     embedding_dim: int = 10,
+    can_use_workers: bool = False,
 ) -> pd.DataFrame:
     start = datetime.datetime.now()
 
@@ -848,8 +872,9 @@ def evaluate(
         seed=seed,
         autoencoder_type=autoencoder_type,
         embedding_dim=embedding_dim,
+        can_use_workers=can_use_workers,
     )
-
+    print(results)
     print(
         f"-------------------------------------------Time needed: {(datetime.datetime.now()-start).total_seconds()/60}min"
     )
@@ -948,8 +973,10 @@ if __name__ == "__main__":
     )
     with mp.Pool(processes=worker_num) as pool:
         result = pool.starmap(evaluate, all_autoencoders)
-    # for ae_type, dataset_type, seed, ae_path, embedding_dim in all_autoencoders:
-    #     evaluate(ae_type, dataset_type, seed, ae_path, embedding_dim)
+    for ae_type, dataset_type, seed, ae_path, embedding_dim in all_autoencoders:
+        evaluate(
+            ae_type, dataset_type, seed, ae_path, embedding_dim, can_use_workers=True
+        )
     #     # Load the dataset and evaluate flat and hierarchical clustering (stacked autoencoder)
 
     # flat_results, hierarchical_results = evaluate(

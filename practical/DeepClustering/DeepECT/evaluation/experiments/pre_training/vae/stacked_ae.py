@@ -11,8 +11,6 @@ import logging
 from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
 from clustpy.data import load_fmnist
 
-logger = logging.getLogger(__name__)
-
 
 # Based on: https://gist.github.com/InnovArul/500e0c57e88300651f8005f9bd0d12bc
 class stacked_ae(_AbstractAutoencoder):
@@ -218,8 +216,10 @@ class stacked_ae(_AbstractAutoencoder):
             print(f"Pretrain layer {layer}")
             optimizer = self.optimizer_fn(self.parameters_pretrain(layer))
             round = 0
+            mov_loss = 0.0
             while True:  # each iteration is equal to an epoch
                 for batch_data in dataset:
+                    optimizer.zero_grad()
                     round += 1
                     if round > rounds_per_layer:
                         break
@@ -243,11 +243,13 @@ class stacked_ae(_AbstractAutoencoder):
                             dropout_is_training=True,
                         )
                     loss = self.loss_fn(reconstructed_data, batch_data)
-                    optimizer.zero_grad()
+                    mov_loss += loss.item()
                     loss.backward()
                     optimizer.step()
                     if round % 100 == 0:
-                        print(f"Round {round} current loss: {loss.item()}")
+                        logging.info(
+                            f"Layer {layer} Round {round} current loss: {mov_loss/round}"
+                        )
                 else:
                     continue
                 break
@@ -258,10 +260,11 @@ class stacked_ae(_AbstractAutoencoder):
             optimizer = self.optimizer_fn(self.parameters())
         else:
             optimizer = optimizer_fn(self.parameters())
-
+        mov_loss = 0.0
         index = 0
         while True:
             for batch_data in dataset:
+                optimizer.zero_grad()
                 index += 1
                 if index > rounds:
                     break
@@ -275,11 +278,13 @@ class stacked_ae(_AbstractAutoencoder):
                     embedded_data, reconstructed_data = self.forward(batch_data)
 
                 loss = self.loss_fn(reconstructed_data, batch_data)
-                optimizer.zero_grad()
+                mov_loss += loss.item()
                 loss.backward()
                 optimizer.step()
                 if index % 100 == 0:
-                    print(f"Round {index} current loss: {loss.item()}")
+                    logging.info(
+                        f"Finetuning Round {index} average loss: {mov_loss/index}"
+                    )
             else:
                 continue
             break

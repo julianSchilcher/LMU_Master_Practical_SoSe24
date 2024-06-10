@@ -1124,6 +1124,7 @@ def _deep_ect(
     # Get initial setting (device, dataloaders, pretrained AE and initial clustering result)
     save_ae_state_dict = not hasattr(autoencoder, "fitted") or not autoencoder.fitted
     set_torch_seed(random_state)
+    torch.use_deterministic_algorithms(True)
 
     (
         device,

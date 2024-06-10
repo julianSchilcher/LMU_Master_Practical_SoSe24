@@ -267,6 +267,8 @@ def fit(
         if os.path.exists(result_path):
             results.append(pd.read_parquet(result_path))
             continue
+        if method == ClusteringMethod.DEEPECT_AUGMENTED_OURS:
+            continue
         # autoencoder save path
         autoencoder_save_path = f"practical/DeepClustering/DeepECT/results_autoencoder/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.pth"
 
@@ -897,6 +899,7 @@ def evaluate_multiple_seeds(
             seed=seed,
             embedding_dim=embedding_dim,
             autoencoder_params_path=autoencoder_params_path,
+            can_use_workers=True,
         )
         results.append(result)
     return pd.concat(results, ignore_index=True)

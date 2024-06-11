@@ -736,19 +736,25 @@ def get_custom_dataloader_augmentations(
     )
     image_min_value = -0.999999 if dataset_type == DatasetType.USPS else 0.0
     image_size = 16 if dataset_type == DatasetType.USPS else 28
+
+    image_max_value = np.max(data) - image_min_value if dataset_type == DatasetType.USPS else np.max(data)
+
+
     augmentation_transform = transforms.Compose(
         [
             transforms.Lambda(lambda x: x - image_min_value),
+            transforms.Lambda(lambda x: x / image_max_value), # [0,1]
             transforms.Lambda(lambda x: x.reshape(image_size, image_size)),
-            transforms.ToPILImage(),
+            transforms.ToPILImage(), # [0,255]
             transforms.RandomAffine(
                 degrees=degrees,
                 shear=degrees,
                 translate=translation,
                 interpolation=PIL.Image.BILINEAR,
             ),
-            transforms.ToTensor(),
+            transforms.ToTensor(), # back to [0,1] again
             transforms.Lambda(lambda x: x.reshape(image_size**2)),
+            transforms.Lambda(lambda x: x * image_max_value), # back to original data range
             transforms.Lambda(lambda x: x + image_min_value),
         ]
     )

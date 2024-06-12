@@ -976,7 +976,7 @@ def pretrain_for_multiple_seeds(seeds: List[int], embedding_dims=[10], worker_nu
 if __name__ == "__main__":
     seeds = [21, 42]
     embedding_dims = [10]
-    worker_num = 2
+    worker_num = 4
     # pretrain_for_multiple_seeds(
     #     seeds, embedding_dims=embedding_dims, worker_num=worker_num
     # )

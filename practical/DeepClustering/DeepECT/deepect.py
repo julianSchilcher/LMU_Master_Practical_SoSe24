@@ -289,8 +289,7 @@ class Cluster_Tree:
         This method assigns all samples in the minibatch
         to its nearest nodes in the cluster tree. It is performed
         bottom up, so each sample is first assigned to its nearest
-        leaf node. Afterwards the samples are assigned recursivley to
-        the inner nodes by merging the assignments of the child node.
+        leaf node.
 
         Parameters
         ----------

@@ -17,8 +17,7 @@ from sklearn.cluster import KMeans
 from clustpy.data.real_torchvision_data import load_mnist
 from tqdm import tqdm
 from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
-# from practical.DeepClustering.DeepECT.initial_stack_ae import get_trained_stacked_autoencoder
-# from practical.DeepClustering.DeepECT.initial_stack_ae import get_stack_initial_deep_clustering_setting
+import logging
 from practical.DeepClustering.DeepECT.metrics import (
     PredictionClusterNode,
     PredictionClusterTree,
@@ -668,9 +667,12 @@ class Cluster_Tree:
                         grandparent.right_child = sibling_node
                     sibling_node.parent = grandparent
                 sibling_node.split_id = parent.split_id
+                sibling_node.weight = parent.weight
                 child_node.prune()
                 del child_node
                 del parent
+                for leaf in self.leaf_nodes:
+                    leaf.center.requires_grad = True
                 print(
                     f"Tree size after pruning: {self.number_nodes}, leaf nodes: {len(self.leaf_nodes)}"
                 )
@@ -769,10 +771,7 @@ class Cluster_Tree:
                     assignments.append(highest_dist_leaf_node.assignments.cpu())
             child_assignments = KMeans(
                 n_clusters=2,
-                init="random",
-                tol=0.0,
                 n_init=20,
-                random_state=random_state,
             ).fit(torch.cat(assignments, dim=0).numpy())
             print(f"Leaf assignments: {len(child_assignments.labels_)}")
             child_weights = np.array(
@@ -889,19 +888,28 @@ class _DeepECT_Module(torch.nn.Module):
 
         train_iterator = iter(trainloader)
 
+        mov_dc_loss = 0.0
+        mov_nc_loss = 0.0
+        mov_rec_loss = 0.0
+        mov_rec_loss_aug = 0.0
+        mov_loss = 0.0
+
+        optimizer.add_param_group({"params": self.cluster_tree.root.left_child.center})
+        optimizer.add_param_group({"params": self.cluster_tree.root.right_child.center})
+
         for e in tqdm(range(max_iterations), desc="Fit", total=max_iterations):
+            optimizer.zero_grad()
             self.cluster_tree.prune_tree(pruning_threshold)
             if (e > 0 and e % grow_interval == 0) or self.cluster_tree.number_nodes < 3:
-                if len(self.cluster_tree.leaf_nodes) >= max_leaf_nodes:
-                    break
-                self.cluster_tree.grow_tree(
-                    trainloader,
-                    autoencoder,
-                    optimizer,
-                    self.augmentation_invariance,
-                    random_state=self.random_state,
-                    device=device,
-                )
+                if len(self.cluster_tree.leaf_nodes) < max_leaf_nodes:
+                    self.cluster_tree.grow_tree(
+                        trainloader,
+                        autoencoder,
+                        optimizer,
+                        self.augmentation_invariance,
+                        random_state=self.random_state,
+                        device=device,
+                    )
 
             # retrieve minibatch (endless)
             try:
@@ -939,10 +947,21 @@ class _DeepECT_Module(torch.nn.Module):
 
             if self.augmentation_invariance:
                 loss = nc_loss + dc_loss + (rec_loss + rec_loss_aug) / 2
+                mov_rec_loss_aug += rec_loss_aug.item()
             else:
                 loss = nc_loss + dc_loss + rec_loss
 
-            optimizer.zero_grad()
+            mov_nc_loss += nc_loss.item()
+            mov_dc_loss += dc_loss.item()
+            mov_rec_loss += rec_loss.item()
+            mov_loss += loss.item()
+
+            if (e <= 10 or e % 100 == 0) and e > 0:
+                logging.info(
+                    f"{e} - moving averages: dc_loss: {mov_dc_loss/e} "
+                    f"nc_loss: {mov_nc_loss/e} rec_loss: {mov_rec_loss/e} {f'rec_loss_aug: {mov_rec_loss_aug/e}' if self.augmentation_invariance else ''} total_loss: {mov_loss/e}"
+                )
+
             loss.backward()
             optimizer.step()
             # adapt centers of split nodes analytically
@@ -1067,9 +1086,8 @@ def _deep_ect(
     # Get initial setting (device, dataloaders, pretrained AE and initial clustering result)
     save_ae_state_dict = not hasattr(autoencoder, "fitted") or not autoencoder.fitted
     set_torch_seed(random_state)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
- 
+    torch.use_deterministic_algorithms(True)
+
     (
         device,
         trainloader,
@@ -1092,7 +1110,7 @@ def _deep_ect(
         embedding_size,
         custom_dataloaders,
         KMeans,
-        {"random_state": random_state, "n_init": 20, "init": "random", "tol": 0.0},
+        {"random_state": random_state, "n_init": 20},
         random_state,
     )
 
@@ -1138,7 +1156,7 @@ class DeepECT:
         pretrain_optimizer_params: dict = None,
         clustering_optimizer_params: dict = None,
         pretrain_epochs: int = 50,
-        max_iterations: int = 50000,
+        max_iterations: int = 40000,
         grow_interval: int = 500,
         pruning_threshold: float = 0.1,
         optimizer_class: torch.optim.Optimizer = torch.optim.Adam,

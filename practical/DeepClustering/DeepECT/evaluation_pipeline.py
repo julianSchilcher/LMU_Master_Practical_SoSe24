@@ -1,38 +1,40 @@
 import datetime
 import math
 import os
-from enum import Enum
 import sys
+from enum import Enum
 
 sys.path.append(os.getcwd())
-import time
-from typing import List, Tuple, Union
-import PIL
+import logging
+import multiprocessing as mp
+from itertools import product
+from typing import List, Union
+
 import numpy as np
 import pandas as pd
+import PIL
 import torch
-from torch.utils.data import TensorDataset, DataLoader
 from clustpy.data import load_fmnist, load_mnist, load_reuters, load_usps
+from clustpy.deep._utils import set_torch_seed
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
 from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
 from clustpy.deep.dec import IDEC
-from clustpy.deep._utils import set_torch_seed
 from clustpy.metrics import unsupervised_clustering_accuracy
 from sklearn.cluster import KMeans
 from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
+from sklearn.preprocessing import minmax_scale
 from sklearn.utils import Bunch
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, TensorDataset
 from torchvision import transforms
-import multiprocessing as mp
-from itertools import product
-from practical.DeepClustering.DeepECT.evaluation.experiments.pre_training.vae.stacked_ae import (
-    stacked_ae,
-)
 
-from practical.DeepClustering.DeepECT.deepect_adjusted import DeepECT
 from practical.DeepClustering.DeepECT.baseline_hierachical.ae_plus import *
 from practical.DeepClustering.DeepECT.baseline_hierachical.methods import (
     idec_hierarchical_clustpy,
+)
+from practical.DeepClustering.DeepECT.deepect import DeepECT as DeepECTOurs
+from practical.DeepClustering.DeepECT.deepect_adjusted import DeepECT as DeepECTPaper
+from practical.DeepClustering.DeepECT.evaluation.experiments.pre_training.vae.stacked_ae import (
+    stacked_ae,
 )
 
 
@@ -43,16 +45,13 @@ class DatasetType(Enum):
     REUTERS = "Reuters"
 
 
-class FlatClusteringMethod(Enum):
-    DEEPECT = "DeepECT"
-    DEEPECT_AUGMENTED = "DeepECT + Augmentation"
+class ClusteringMethod(Enum):
+    DEEPECT_PAPER = "DeepECT (Paper)"
+    DEEPECT_AUGMENTED_PAPER = "DeepECT + Augmentation (Paper)"
+    DEEPECT_OURS = "DeepECT (Ours)"
+    DEEPECT_AUGMENTED_OURS = "DeepECT + Augmentation (Ours)"
     IDEC = "IDEC"
     KMEANS = "KMeans"
-
-
-class HierarchicalClusteringMethod(Enum):
-    DEEPECT = "DeepECT"
-    DEEPECT_AUGMENTED = "DeepECT + Augmentation"
     IDEC_SINGLE = "IDEC + Single"
     IDEC_COMPLETE = "IDEC + Complete"
     AE_BISECTING = "Autoencoder + Bisection"
@@ -121,10 +120,21 @@ def pretraining(
     set_torch_seed(np.random.RandomState(seed))
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-    data = dataset["data"]
-    data = torch.tensor(data, dtype=torch.float32)
+    data = torch.tensor(dataset["data"], dtype=torch.float32)
 
     if not os.path.exists(autoencoder_params_path):
+        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
+        torch.use_deterministic_algorithms(mode=True)
+        # logging config
+        logging.root.handlers = []
+        log_path = f"practical/DeepClustering/DeepECT/pretrained_autoencoders_log/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{seed}.txt"
+        logging.basicConfig(
+            level=logging.INFO,
+            handlers=[
+                logging.FileHandler(log_path),
+                logging.StreamHandler(sys.stdout),
+            ],
+        )
         if autoencoder_type == AutoencoderType.CLUSTPY_STANDARD:
             autoencoder = FeedforwardAutoencoder(
                 layers=[data.shape[1], 500, 500, 2000, embedding_dim]
@@ -153,6 +163,7 @@ def pretraining(
                 data.shape[1],
                 [500, 500, 2000, embedding_dim],
                 weight_initalizer,
+                loss_fn=torch.nn.MSELoss(),
                 activation_fn=lambda x: torch.nn.functional.relu(x),
                 optimizer_fn=lambda parameters: torch.optim.Adam(parameters, lr=0.0001),
             ).to(device)
@@ -202,19 +213,21 @@ class Original_Dataset(Dataset):
         return idx, original_image
 
 
-def flat(
+def fit(
     autoencoder: _AbstractAutoencoder,
     autoencoder_params_path: str,
     dataset_type: DatasetType,
     dataset: Bunch,
     seed: int,
+    autoencoder_type: AutoencoderType,
+    embedding_dim: int,
+    can_use_workers: bool = False,
 ):
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     # Load and preprocess data
     data = dataset["data"]
     labels = dataset["target"]
-    results = []
     max_iterations = 40000
     batch_size = 256
     max_leaf_nodes = 12 if dataset_type == DatasetType.REUTERS else 20
@@ -222,57 +235,87 @@ def flat(
 
     max_clustering_epochs = get_max_epoch_size(data, max_iterations, batch_size)
 
-    dataloaders = (
-        DataLoader(
-            Original_Dataset(data),
-            batch_size=batch_size,
-            shuffle=True,
-            num_workers=5,
-            prefetch_factor=200,
-        ),
-        DataLoader(Original_Dataset(data), batch_size=batch_size, shuffle=False),
-    )
-
-    for method in FlatClusteringMethod:
+    results = []
+    for method in ClusteringMethod:
+        if method == ClusteringMethod.IDEC_SINGLE or (
+            method == ClusteringMethod.AE_COMPLETE and not can_use_workers
+        ):
+            continue
         # Reproducibility
         set_torch_seed(seed)
         # Load the autoencoder parameters
-        autoencoder = autoencoder.load_parameters(autoencoder_params_path)
+        autoencoder = autoencoder.load_parameters(autoencoder_params_path).to(device)
+        # Load dataloaders
+        dataloaders = (
+            DataLoader(
+                Original_Dataset(data),
+                batch_size=batch_size,
+                shuffle=True,
+                num_workers=5 if can_use_workers else 0,
+                prefetch_factor=200 if can_use_workers else None,
+            ),
+            DataLoader(
+                Original_Dataset(data),
+                batch_size=batch_size,
+                shuffle=False,
+                num_workers=5 if can_use_workers else 0,
+                prefetch_factor=200 if can_use_workers else None,
+            ),
+        )
+        # Save path
+        result_path = f"practical/DeepClustering/DeepECT/results/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.pq"
+        if os.path.exists(result_path):
+            results.append(pd.read_parquet(result_path))
+            continue
+        # autoencoder save path
+        autoencoder_save_path = f"practical/DeepClustering/DeepECT/results_autoencoder/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.pth"
 
-        if method == FlatClusteringMethod.KMEANS:
+        # logging config
+        logging.root.handlers = []
+        log_path = f"practical/DeepClustering/DeepECT/results_log/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.txt"
+        logging.basicConfig(
+            level=logging.INFO,
+            handlers=[
+                logging.FileHandler(log_path),
+                logging.StreamHandler(sys.stdout),
+            ],
+        )
+        # if not yet evaluated, fit + get results
+        if method == ClusteringMethod.KMEANS:
             autoencoder.to(device)
             # Encode the data
-            embeddings = (
-                autoencoder.encode(
-                    torch.tensor(data, dtype=torch.float32, device=device)
+            embeddings = []
+            for batch in dataloaders[1]:
+                embeddings.append(
+                    autoencoder.encode(batch[1].to(device)).detach().cpu().numpy()
                 )
-                .detach()
-                .cpu()
-                .numpy()
-            )
             # Perform flat clustering with KMeans
-            kmeans = KMeans(
-                n_clusters=n_clusters,
-                n_init=20,
-            )
+            kmeans = KMeans(n_clusters=n_clusters, n_init=20, random_state=seed)
             print("fitting KMeans...")
-            predicted_labels = kmeans.fit_predict(embeddings)
+            predicted_labels = kmeans.fit_predict(
+                np.concatenate(embeddings, dtype=np.float32)
+            )
             print("finished fitting Kmeans")
 
             # Calculate evaluation metrics
-            results.append(
-                {
-                    "dataset": dataset_type.value,
-                    "method": method.value,
-                    "nmi": calculate_nmi(labels, predicted_labels),
-                    "acc": calculate_acc(labels, predicted_labels),
-                    "ari": calculate_ari(labels, predicted_labels),
-                    "seed": seed,
-                }
+            result_df = pd.DataFrame(
+                [
+                    {
+                        "autoencoder": autoencoder_type.value,
+                        "embedding_dim": embedding_dim,
+                        "dataset": dataset_type.value,
+                        "method": method.value,
+                        "nmi": calculate_nmi(labels, predicted_labels),
+                        "acc": calculate_acc(labels, predicted_labels),
+                        "ari": calculate_ari(labels, predicted_labels),
+                        "seed": seed,
+                    }
+                ]
             )
-        elif method == FlatClusteringMethod.DEEPECT:
+
+        elif method == ClusteringMethod.DEEPECT_OURS:
             autoencoder.to(device)
-            deepect = DeepECT(
+            deepect = DeepECTOurs(
                 max_iterations=max_iterations,
                 autoencoder=autoencoder,
                 clustering_optimizer_params={"lr": 1e-4, "betas": (0.9, 0.999)},
@@ -280,55 +323,55 @@ def flat(
                 random_state=np.random.RandomState(seed),
                 custom_dataloaders=dataloaders,
             )
-            print("fitting DeepECT...")
+            print(f"fitting {method.name}...")
             deepect.fit(data)
-            print("finished DeepECT...")
+            autoencoder = deepect.autoencoder
+            print(f"finished {method.name}...")
             try:
                 # Calculate evaluation metrics
-                results.append(
-                    {
-                        "dataset": dataset_type.value,
-                        "method": method.value,
-                        "nmi": deepect.tree_.flat_nmi(labels, n_clusters),
-                        "acc": deepect.tree_.flat_accuracy(labels, n_clusters),
-                        "ari": deepect.tree_.flat_ari(labels, n_clusters),
-                        "dp": deepect.tree_.dendrogram_purity(labels),
-                        "lp": deepect.tree_.leaf_purity(labels)[0],
-                        "seed": seed,
-                    }
+                result_df = pd.DataFrame(
+                    [
+                        {
+                            "autoencoder": autoencoder_type.value,
+                            "embedding_dim": embedding_dim,
+                            "dataset": dataset_type.value,
+                            "method": method.value,
+                            "nmi": deepect.tree_.flat_nmi(labels, n_clusters),
+                            "acc": deepect.tree_.flat_accuracy(labels, n_clusters),
+                            "ari": deepect.tree_.flat_ari(labels, n_clusters),
+                            "dp": deepect.tree_.dendrogram_purity(labels),
+                            "lp": deepect.tree_.leaf_purity(labels)[0],
+                            "seed": seed,
+                        }
+                    ]
                 )
             except:
-                results.append(
-                    {
-                        "dataset": dataset_type.value,
-                        "method": method.value,
-                        "nmi": np.nan,
-                        "acc": np.nan,
-                        "ari": np.nan,
-                        "dp": np.nan,
-                        "lp": np.nan,
-                        "seed": seed,
-                    }
+                result_df = pd.DataFrame(
+                    [
+                        {
+                            "autoencoder": autoencoder_type.value,
+                            "embedding_dim": embedding_dim,
+                            "dataset": dataset_type.value,
+                            "method": method.value,
+                            "nmi": np.nan,
+                            "acc": np.nan,
+                            "ari": np.nan,
+                            "dp": np.nan,
+                            "lp": np.nan,
+                            "seed": seed,
+                        }
+                    ]
                 )
 
-        elif method == FlatClusteringMethod.DEEPECT_AUGMENTED:
+        elif method == ClusteringMethod.DEEPECT_AUGMENTED_OURS:
             # Perform flat clustering with DeepECT and augmentation
             if dataset_type == DatasetType.REUTERS:
-                # results.append(
-                #     {
-                #         "dataset": dataset_type.value,
-                #         "method": method.value,
-                #         "nmi": "-",
-                #         "acc": "-",
-                #         "ari": "-",
-                #         "seed": "-",
-                #     }
-                # )
                 continue
+            autoencoder.to(device)
 
             custom_dataloaders = get_custom_dataloader_augmentations(data, dataset_type)
 
-            deepect = DeepECT(
+            deepect = DeepECTOurs(
                 max_iterations=max_iterations,
                 autoencoder=autoencoder,
                 clustering_optimizer_params={"lr": 1e-4, "betas": (0.9, 0.999)},
@@ -337,38 +380,158 @@ def flat(
                 augmentation_invariance=True,
                 random_state=np.random.RandomState(seed),
             )
-            print("fitting DeepECT+AUG...")
+            print(f"fitting {method.name}...")
             deepect.fit(data)
-            print("finished DeepECT+AUG...")
+            autoencoder = deepect.autoencoder
+            print(f"finished {method.name}...")
             # Calculate evaluation metrics
             try:
                 # Calculate evaluation metrics
-                results.append(
-                    {
-                        "dataset": dataset_type.value,
-                        "method": method.value,
-                        "nmi": deepect.tree_.flat_nmi(labels, n_clusters),
-                        "acc": deepect.tree_.flat_accuracy(labels, n_clusters),
-                        "ari": deepect.tree_.flat_ari(labels, n_clusters),
-                        "dp": deepect.tree_.dendrogram_purity(labels),
-                        "lp": deepect.tree_.leaf_purity(labels)[0],
-                        "seed": seed,
-                    }
+                result_df = pd.DataFrame(
+                    [
+                        {
+                            "autoencoder": autoencoder_type.value,
+                            "embedding_dim": embedding_dim,
+                            "dataset": dataset_type.value,
+                            "method": method.value,
+                            "nmi": deepect.tree_.flat_nmi(labels, n_clusters),
+                            "acc": deepect.tree_.flat_accuracy(labels, n_clusters),
+                            "ari": deepect.tree_.flat_ari(labels, n_clusters),
+                            "dp": deepect.tree_.dendrogram_purity(labels),
+                            "lp": deepect.tree_.leaf_purity(labels)[0],
+                            "seed": seed,
+                        }
+                    ]
                 )
             except:
-                results.append(
-                    {
-                        "dataset": dataset_type.value,
-                        "method": method.value,
-                        "nmi": np.nan,
-                        "acc": np.nan,
-                        "ari": np.nan,
-                        "dp": np.nan,
-                        "lp": np.nan,
-                        "seed": seed,
-                    }
+                result_df = pd.DataFrame(
+                    [
+                        {
+                            "autoencoder": autoencoder_type.value,
+                            "embedding_dim": embedding_dim,
+                            "dataset": dataset_type.value,
+                            "method": method.value,
+                            "nmi": np.nan,
+                            "acc": np.nan,
+                            "ari": np.nan,
+                            "dp": np.nan,
+                            "lp": np.nan,
+                            "seed": seed,
+                        }
+                    ]
                 )
-        elif method == FlatClusteringMethod.IDEC:
+
+        elif method == ClusteringMethod.DEEPECT_PAPER:
+            autoencoder.to(device)
+            deepect = DeepECTPaper(
+                max_iterations=max_iterations,
+                autoencoder=autoencoder,
+                clustering_optimizer_params={"lr": 1e-4, "betas": (0.9, 0.999)},
+                max_leaf_nodes=max_leaf_nodes,
+                random_state=np.random.RandomState(seed),
+                custom_dataloaders=dataloaders,
+            )
+            print(f"fitting {method.name}...")
+            deepect.fit(data, labels)
+            autoencoder = deepect.autoencoder
+            print(f"finished {method.name}...")
+            try:
+                # Calculate evaluation metrics
+                result_df = pd.DataFrame(
+                    [
+                        {
+                            "autoencoder": autoencoder_type.value,
+                            "embedding_dim": embedding_dim,
+                            "dataset": dataset_type.value,
+                            "method": method.value,
+                            "nmi": deepect.tree_.flat_nmi(labels, n_clusters),
+                            "acc": deepect.tree_.flat_accuracy(labels, n_clusters),
+                            "ari": deepect.tree_.flat_ari(labels, n_clusters),
+                            "dp": deepect.tree_.dendrogram_purity(labels),
+                            "lp": deepect.tree_.leaf_purity(labels)[0],
+                            "seed": seed,
+                        }
+                    ]
+                )
+            except:
+                result_df = pd.DataFrame(
+                    [
+                        {
+                            "autoencoder": autoencoder_type.value,
+                            "embedding_dim": embedding_dim,
+                            "dataset": dataset_type.value,
+                            "method": method.value,
+                            "nmi": np.nan,
+                            "acc": np.nan,
+                            "ari": np.nan,
+                            "dp": np.nan,
+                            "lp": np.nan,
+                            "seed": seed,
+                        }
+                    ]
+                )
+
+        elif method == ClusteringMethod.DEEPECT_AUGMENTED_PAPER:
+            # Perform flat clustering with DeepECT and augmentation
+            if dataset_type == DatasetType.REUTERS:
+                continue
+            autoencoder.to(device)
+
+            custom_dataloaders = get_custom_dataloader_augmentations(
+                data, dataset_type, can_use_workers
+            )
+
+            deepect = DeepECTPaper(
+                max_iterations=max_iterations,
+                autoencoder=autoencoder,
+                clustering_optimizer_params={"lr": 1e-4, "betas": (0.9, 0.999)},
+                max_leaf_nodes=max_leaf_nodes,
+                custom_dataloaders=custom_dataloaders,
+                augmentation_invariance=True,
+                random_state=np.random.RandomState(seed),
+            )
+            print(f"fitting {method.name}...")
+            deepect.fit(data, labels)
+            autoencoder = deepect.autoencoder
+            print(f"finished {method.name}...")
+            # Calculate evaluation metrics
+            try:
+                # Calculate evaluation metrics
+                result_df = pd.DataFrame(
+                    [
+                        {
+                            "autoencoder": autoencoder_type.value,
+                            "embedding_dim": embedding_dim,
+                            "dataset": dataset_type.value,
+                            "method": method.value,
+                            "nmi": deepect.tree_.flat_nmi(labels, n_clusters),
+                            "acc": deepect.tree_.flat_accuracy(labels, n_clusters),
+                            "ari": deepect.tree_.flat_ari(labels, n_clusters),
+                            "dp": deepect.tree_.dendrogram_purity(labels),
+                            "lp": deepect.tree_.leaf_purity(labels)[0],
+                            "seed": seed,
+                        }
+                    ]
+                )
+            except:
+                result_df = pd.DataFrame(
+                    [
+                        {
+                            "autoencoder": autoencoder_type.value,
+                            "embedding_dim": embedding_dim,
+                            "dataset": dataset_type.value,
+                            "method": method.value,
+                            "nmi": np.nan,
+                            "acc": np.nan,
+                            "ari": np.nan,
+                            "dp": np.nan,
+                            "lp": np.nan,
+                            "seed": seed,
+                        }
+                    ]
+                )
+
+        elif method == ClusteringMethod.IDEC:
 
             # Perform flat clustering with IDEC
             idec = IDEC(
@@ -380,27 +543,175 @@ def flat(
                 clustering_epochs=max_clustering_epochs,
                 random_state=seed,
                 initial_clustering_class=KMeans,
-                initial_clustering_params={"n_init": 20},
+                initial_clustering_params={"n_init": 20, "random_state": seed},
                 custom_dataloaders=dataloaders,
             )
             print("fitting IDEC...")
             idec.fit(data)
+            autoencoder = idec.autoencoder
             print("finished fitting IDEC")
 
             # Calculate evaluation metrics
-            results.append(
-                {
-                    "dataset": dataset_type.value,
-                    "method": method.value,
-                    "nmi": calculate_nmi(labels, idec.dec_labels_),
-                    "acc": calculate_acc(labels, idec.dec_labels_),
-                    "ari": calculate_ari(labels, idec.dec_labels_),
-                    "seed": seed,
-                }
+            result_df = pd.DataFrame(
+                [
+                    {
+                        "autoencoder": autoencoder_type.value,
+                        "embedding_dim": embedding_dim,
+                        "dataset": dataset_type.value,
+                        "method": method.value,
+                        "nmi": calculate_nmi(labels, idec.dec_labels_),
+                        "acc": calculate_acc(labels, idec.dec_labels_),
+                        "ari": calculate_ari(labels, idec.dec_labels_),
+                        "seed": seed,
+                    }
+                ]
             )
 
-    df_results = pd.DataFrame(results)
-    return df_results
+        elif method == ClusteringMethod.AE_BISECTING:
+            # Perform hierarchical clustering with Autoencoder and bisection
+            print("fitting ae_bisecting...")
+
+            dendrogram, leaf = ae_bisecting(
+                dataloader=dataloaders[1],
+                labels=labels,
+                ae_module=autoencoder,
+                max_leaf_nodes=max_leaf_nodes,
+                device=device,
+            )
+            print("finished ae_bisecting...")
+            result_df = pd.DataFrame(
+                [
+                    {
+                        "autoencoder": autoencoder_type.value,
+                        "embedding_dim": embedding_dim,
+                        "dataset": dataset_type.value,
+                        "method": method.value,
+                        "dp": dendrogram,
+                        "lp": leaf[0],
+                        "seed": seed,
+                    }
+                ]
+            )
+
+        elif method == ClusteringMethod.IDEC_COMPLETE:
+            autoencoder.to(device)
+            print("fitting idec hierarchical...")
+            (
+                dp_value_single,
+                dp_value_complete,
+                leaf_purity_value_single,
+                leaf_purity_value_complete,
+                autoencoder,
+            ) = idec_hierarchical_clustpy.run_idec_hierarchical(
+                labels,
+                seed,
+                n_clusters,
+                autoencoder,
+                epochs=max_clustering_epochs,
+                batch_size=batch_size,
+                custom_dataloaders=dataloaders,
+            )
+            print("finished idec hierarchical...")
+            result_df = pd.DataFrame(
+                [
+                    {
+                        "autoencoder": autoencoder_type.value,
+                        "embedding_dim": embedding_dim,
+                        "dataset": dataset_type.value,
+                        "method": ClusteringMethod.IDEC_COMPLETE.value,
+                        "dp": dp_value_complete,
+                        "lp": leaf_purity_value_complete,
+                        "seed": seed,
+                    },
+                    {
+                        "autoencoder": autoencoder_type.value,
+                        "embedding_dim": embedding_dim,
+                        "dataset": dataset_type.value,
+                        "method": ClusteringMethod.IDEC_SINGLE.value,
+                        "dp": dp_value_single,
+                        "lp": leaf_purity_value_single,
+                        "seed": seed,
+                    },
+                ]
+            )
+
+        elif method == ClusteringMethod.AE_SINGLE:
+            if data.shape[0] >= 80000:
+                data_shuffled, labels_shuffled = shuffle_dataset(data, labels)
+                data_shuffled = data_shuffled[:80000, :]
+                labels_shuffled = labels_shuffled[:80000]
+            else:
+                data_shuffled, labels_shuffled = data, labels
+            dataloader = DataLoader(
+                Original_Dataset(data_shuffled),
+                batch_size=batch_size,
+                shuffle=False,
+            )
+            # Perform hierarchical clustering with Autoencoder and single
+            print("fitting ae_single...")
+            dendrogram, leaf = ae_single(
+                dataloader=dataloader,
+                labels=labels_shuffled,
+                ae_module=autoencoder,
+                max_leaf_nodes=max_leaf_nodes,
+                n_clusters=n_clusters,
+                device=device,
+            )
+            print("finished ae_single...")
+            result_df = pd.DataFrame(
+                [
+                    {
+                        "autoencoder": autoencoder_type.value,
+                        "embedding_dim": embedding_dim,
+                        "dataset": dataset_type.value,
+                        "method": method.value,
+                        "dp": dendrogram,
+                        "lp": leaf[0],
+                        "seed": seed,
+                    }
+                ]
+            )
+
+        elif method == ClusteringMethod.AE_COMPLETE:
+            if data.shape[0] >= 80000:
+                data_shuffled, labels_shuffled = shuffle_dataset(data, labels)
+                data_shuffled = data_shuffled[:80000, :]
+                labels_shuffled = labels_shuffled[:80000]
+            else:
+                data_shuffled, labels_shuffled = data, labels
+            dataloader = DataLoader(
+                Original_Dataset(data_shuffled),
+                batch_size=batch_size,
+                shuffle=False,
+            )
+            # Perform hierarchical clustering with Autoencoder and complete
+            print("fitting ae_complete...")
+            dendrogram, leaf = ae_complete(
+                dataloader=dataloader,
+                labels=labels_shuffled,
+                ae_module=autoencoder,
+                max_leaf_nodes=max_leaf_nodes,
+                n_clusters=n_clusters,
+                device=device,
+            )
+            print("finished ae_complete...")
+            result_df = pd.DataFrame(
+                [
+                    {
+                        "autoencoder": autoencoder_type.value,
+                        "embedding_dim": embedding_dim,
+                        "dataset": dataset_type.value,
+                        "method": method.value,
+                        "dp": dendrogram,
+                        "lp": leaf[0],
+                        "seed": seed,
+                    }
+                ]
+            )
+        result_df.to_parquet(result_path)
+        results.append(result_df)
+        autoencoder.cpu().save_parameters(autoencoder_save_path)
+    return pd.concat(results, axis=0, ignore_index=True)
 
 
 def shuffle_dataset(data, labels):
@@ -413,187 +724,40 @@ def shuffle_dataset(data, labels):
         return shuffled_x
 
 
-def hierarchical(
-    autoencoder: _AbstractAutoencoder,
-    autoencoder_params_path: str,
-    dataset_type: DatasetType,
-    dataset: Bunch,
-    seed: int,
+def get_custom_dataloader_augmentations(
+    data: np.ndarray, dataset_type: DatasetType, can_use_workers: bool = False
 ):
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-
-    # Load and preprocess data
-    data = dataset["data"]
-    labels = dataset["target"]
-
-    results = []
-    max_leaf_nodes = 12 if dataset_type == DatasetType.REUTERS else 20
-    n_clusters = 4 if dataset_type == DatasetType.REUTERS else 10
-    max_iterations = 40000
-    batch_size = 256
-
-    max_clustering_epochs = get_max_epoch_size(data, max_iterations, batch_size)
-
-    for method in HierarchicalClusteringMethod:
-        # Reproducibility
-        set_torch_seed(seed)
-        # Load the autoencoder parameters
-        autoencoder.load_parameters(autoencoder_params_path)
-        autoencoder.to(device)
-        if method == HierarchicalClusteringMethod.AE_BISECTING:
-            # Perform hierarchical clustering with Autoencoder and bisection
-            print("fitting ae_bisecting...")
-
-            dendrogram, leaf = ae_bisecting(
-                data=data,
-                labels=labels,
-                ae_module=autoencoder,
-                max_leaf_nodes=max_leaf_nodes,
-                n_cluster=n_clusters,
-                seed=seed,
-                device=device,
-            )
-            print("finished ae_bisecting...")
-            results.append(
-                {
-                    "dataset": dataset_type.value,
-                    "method": method.value,
-                    "dp": dendrogram,
-                    "lp": leaf[0],
-                    "seed": seed,
-                }
-            )
-        elif method == HierarchicalClusteringMethod.IDEC_COMPLETE:
-            autoencoder.to(device)
-            dataloaders = (
-                DataLoader(
-                    Original_Dataset(data),
-                    batch_size,
-                    True,
-                    num_workers=5,
-                    prefetch_factor=200,
-                ),
-                DataLoader(Original_Dataset(data), batch_size, False),
-            )
-            print("fitting idec hierarchical...")
-            (
-                dp_value_single,
-                dp_value_complete,
-                leaf_purity_value_single,
-                leaf_purity_value_complete,
-            ) = idec_hierarchical_clustpy.run_idec_hierarchical(
-                data,
-                labels,
-                seed,
-                n_clusters,
-                autoencoder,
-                epochs=max_clustering_epochs,
-                batch_size=batch_size,
-                custom_dataloaders=dataloaders,
-            )
-            print("finished idec hierarchical...")
-            results.append(
-                {
-                    "dataset": dataset_type.value,
-                    "method": HierarchicalClusteringMethod.IDEC_COMPLETE.value,
-                    "dp": dp_value_complete,
-                    "lp": leaf_purity_value_complete,
-                    "seed": seed,
-                }
-            )
-            results.append(
-                {
-                    "dataset": dataset_type.value,
-                    "method": HierarchicalClusteringMethod.IDEC_SINGLE.value,
-                    "dp": dp_value_single,
-                    "lp": leaf_purity_value_single,
-                    "seed": seed,
-                }
-            )
-
-        elif method == HierarchicalClusteringMethod.AE_SINGLE:
-            if data.shape[0] >= 80000:
-                data_shuffled, labels_shuffled = shuffle_dataset(data, labels)
-                data_shuffled = data_shuffled[:80000, :]
-                labels_shuffled = labels_shuffled[:80000]
-            else:
-                data_shuffled, labels_shuffled = data, labels
-            # Perform hierarchical clustering with Autoencoder and single
-            print("fitting ae_single...")
-            dendrogram, leaf = ae_single(
-                data=data_shuffled,
-                labels=labels_shuffled,
-                ae_module=autoencoder,
-                max_leaf_nodes=max_leaf_nodes,
-                n_clusters=n_clusters,
-                seed=seed,
-                device=device,
-            )
-            print("finished ae_single...")
-            results.append(
-                {
-                    "dataset": dataset_type.value,
-                    "method": method.value,
-                    "dp": dendrogram,
-                    "lp": leaf[0],
-                    "seed": seed,
-                }
-            )
-        elif method == HierarchicalClusteringMethod.AE_COMPLETE:
-            if data.shape[0] >= 80000:
-                data_shuffled, labels_shuffled = shuffle_dataset(data, labels)
-                data_shuffled = data_shuffled[:80000, :]
-                labels_shuffled = labels_shuffled[:80000]
-            else:
-                data_shuffled, labels_shuffled = data, labels
-            # Perform hierarchical clustering with Autoencoder and complete
-            print("fitting ae_complete...")
-            dendrogram, leaf = ae_complete(
-                data=data_shuffled,
-                labels=labels_shuffled,
-                ae_module=autoencoder,
-                max_leaf_nodes=max_leaf_nodes,
-                n_clusters=n_clusters,
-                seed=seed,
-                device=device,
-            )
-            print("finished ae_complete...")
-            results.append(
-                {
-                    "dataset": dataset_type.value,
-                    "method": method.value,
-                    "dp": dendrogram,
-                    "lp": leaf[0],
-                    "seed": seed,
-                }
-            )
-
-    df_results = pd.DataFrame(results)
-    return df_results
-
-
-def get_custom_dataloader_augmentations(data: np.ndarray, dataset_type: DatasetType):
-
     degrees = (-15, 15)
     translation = (
         0.14 if dataset_type == DatasetType.USPS else 0.08,
         0.14 if dataset_type == DatasetType.USPS else 0.08,
     )
-    image_min_value = 0.0  # -0.999999 if dataset_type == DatasetType.USPS else 0.0
+    image_min_value = -0.999999 if dataset_type == DatasetType.USPS else 0.0
     image_size = 16 if dataset_type == DatasetType.USPS else 28
+
+    image_max_value = (
+        np.max(data) - image_min_value
+        if dataset_type == DatasetType.USPS
+        else np.max(data)
+    )
+
     augmentation_transform = transforms.Compose(
         [
             transforms.Lambda(lambda x: x - image_min_value),
+            transforms.Lambda(lambda x: x / image_max_value),  # [0,1]
             transforms.Lambda(lambda x: x.reshape(image_size, image_size)),
-            transforms.ToPILImage(),
+            transforms.ToPILImage(),  # [0,255]
             transforms.RandomAffine(
                 degrees=degrees,
                 shear=degrees,
                 translate=translation,
                 interpolation=PIL.Image.BILINEAR,
             ),
-            transforms.ToTensor(),
+            transforms.ToTensor(),  # back to [0,1] again
             transforms.Lambda(lambda x: x.reshape(image_size**2)),
+            transforms.Lambda(
+                lambda x: x * image_max_value
+            ),  # back to original data range
             transforms.Lambda(lambda x: x + image_min_value),
         ]
     )
@@ -613,33 +777,46 @@ def get_custom_dataloader_augmentations(data: np.ndarray, dataset_type: DatasetT
             return idx, original_image, augmented_image
 
     # Create an instance of the datasets
-    augmented_dataset = Augmented_Dataset(data, augmentation_transform)
     original_dataset = Original_Dataset(data)
+    augmented_dataset = Augmented_Dataset(data, augmentation_transform)
 
     # Create the dataloaders
     trainloader = DataLoader(
         augmented_dataset,
         batch_size=256,
         shuffle=True,
-        num_workers=5,
-        prefetch_factor=200,
+        num_workers=5 if can_use_workers else 0,
+        prefetch_factor=200 if can_use_workers else None,
     )
-    testloader = DataLoader(original_dataset, batch_size=256, shuffle=False)
+    testloader = DataLoader(
+        original_dataset,
+        batch_size=256,
+        shuffle=False,
+        num_workers=5 if can_use_workers else 0,
+        prefetch_factor=200 if can_use_workers else None,
+    )
 
     return trainloader, testloader
 
 
 def get_dataset(dataset_type: DatasetType):
     if dataset_type == DatasetType.MNIST:
+        # data from paper, normalized to [0, 5.1]
         dataset = load_mnist()
-        dataset["data"] = np.asarray(dataset["data"] / 255.0, dtype=np.float32)
+        dataset["data"] = np.asarray(dataset["data"] * 0.02, dtype=np.float32)
     elif dataset_type == DatasetType.FASHION_MNIST:
+        # paper also used fashionmnist from pytorch and scales to [0,1]
         dataset = load_fmnist()
         dataset["data"] = np.asarray(dataset["data"] / 255.0, dtype=np.float32)
     elif dataset_type == DatasetType.USPS:
+        # usps data from paper normalized to [~-1,~1]
         dataset = load_usps()
-        dataset["data"] = np.asarray(dataset["data"] / 255.0, dtype=np.float32)
+        dataset["data"] = np.asarray(
+            minmax_scale(dataset["data"], feature_range=(-1, 1)),
+            dtype=np.float32,
+        )
     else:
+        # reuters is loaded the same way in clustpy as in the paper
         dataset = load_reuters()
         dataset["data"] = np.asarray(dataset["data"] * 100.0, dtype=np.float32)
         dataset["target"] = dataset["target"]
@@ -673,65 +850,46 @@ def evaluate(
     seed: int,
     autoencoder_params_path: str = None,
     embedding_dim: int = 10,
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    can_use_workers: bool = False,
+) -> pd.DataFrame:
     start = datetime.datetime.now()
-    hierarchical_results_path = f"practical/DeepClustering/DeepECT/results/{dataset_type.name}_{autoencoder_type.name}_{embedding_dim}_hierarchical_{seed}.pq"
-    flat_results_path = f"practical/DeepClustering/DeepECT/results/{dataset_type.name}_{autoencoder_type.name}_{embedding_dim}_flat_{seed}.pq"
+
     print(
         f"-------------------------------------------Run: {dataset_type.name}_{autoencoder_type.name}_{embedding_dim}_{seed}"
     )
-    if os.path.exists(hierarchical_results_path) and os.path.exists(flat_results_path):
-        hierarchical_results = pd.read_parquet(hierarchical_results_path)
-        flat_results = pd.read_parquet(flat_results_path)
-    else:
-        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
-        torch.use_deterministic_algorithms(mode=True)
-        dataset = get_dataset(dataset_type)
 
-        autoencoder_params_path = get_autoencoder_path(
-            autoencoder_type, autoencoder_params_path, dataset, embedding_dim, seed
-        )
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
+    torch.use_deterministic_algorithms(mode=True)
 
-        autoencoder = pretraining(
-            autoencoder_type=autoencoder_type,
-            autoencoder_params_path=autoencoder_params_path,
-            dataset=dataset,
-            seed=seed,
-            embedding_dim=embedding_dim,
-        )
-        # hierarchical
-        if not os.path.exists(hierarchical_results_path):
-            hierarchical_results = hierarchical(
-                autoencoder=autoencoder,
-                autoencoder_params_path=autoencoder_params_path,
-                dataset_type=dataset_type,
-                dataset=dataset,
-                seed=seed,
-            )
-            hierarchical_results["autoencoder"] = autoencoder_type.value
-            hierarchical_results["embedding_dim"] = embedding_dim
-            hierarchical_results.to_parquet(hierarchical_results_path)
-            print(hierarchical_results)
-        else:
-            hierarchical_results = pd.read_parquet(hierarchical_results_path)
+    dataset = get_dataset(dataset_type)
 
-        # flat
-        flat_results = flat(
-            autoencoder=autoencoder,
-            autoencoder_params_path=autoencoder_params_path,
-            dataset_type=dataset_type,
-            dataset=dataset,
-            seed=seed,
-        )
-        flat_results["autoencoder"] = autoencoder_type.value
-        flat_results["embedding_dim"] = embedding_dim
-        flat_results.to_parquet(flat_results_path)
-        print(flat_results)
+    autoencoder_params_path = get_autoencoder_path(
+        autoencoder_type, autoencoder_params_path, dataset, embedding_dim, seed
+    )
 
+    autoencoder = pretraining(
+        autoencoder_type=autoencoder_type,
+        autoencoder_params_path=autoencoder_params_path,
+        dataset=dataset,
+        seed=seed,
+        embedding_dim=embedding_dim,
+    )
+
+    results = fit(
+        autoencoder=autoencoder,
+        autoencoder_params_path=autoencoder_params_path,
+        dataset_type=dataset_type,
+        dataset=dataset,
+        seed=seed,
+        autoencoder_type=autoencoder_type,
+        embedding_dim=embedding_dim,
+        can_use_workers=can_use_workers,
+    )
+    print(results)
     print(
         f"-------------------------------------------Time needed: {(datetime.datetime.now()-start).total_seconds()/60}min"
     )
-    return flat_results, hierarchical_results
+    return results
 
 
 def evaluate_multiple_seeds(
@@ -741,26 +899,19 @@ def evaluate_multiple_seeds(
     embedding_dims: List[int] = [10],
     autoencoder_params_path: str = None,
 ):
-    all_flat_results = []
-    all_hierarchical_results = []
+    results = []
 
     for seed, embedding_dim in product(seeds, embedding_dims):
-        flat_results, hierarchical_results = evaluate(
+        result = evaluate(
             autoencoder_type=autoencoder_type,
             dataset_type=dataset_type,
             seed=seed,
             embedding_dim=embedding_dim,
             autoencoder_params_path=autoencoder_params_path,
+            can_use_workers=True,
         )
-        all_flat_results.append(flat_results)
-        all_hierarchical_results.append(hierarchical_results)
-
-    combined_flat_results = pd.concat(all_flat_results, ignore_index=True)
-    combined_hierarchical_results = pd.concat(
-        all_hierarchical_results, ignore_index=True
-    )
-
-    return combined_flat_results, combined_hierarchical_results
+        results.append(result)
+    return pd.concat(results, ignore_index=True)
 
 
 def calculate_flat_mean_for_multiple_seeds(results: pd.DataFrame):
@@ -795,6 +946,10 @@ def pretraining_with_data_load(
         autoencoder_type, autoencoder_params_path, dataset, embedding_dim, seed
     )
 
+    print(
+        f"---------------------------------------------{autoencoder_type.name} {dataset_type.name} {seed}"
+    )
+
     autoencoder = pretraining(
         autoencoder_type=autoencoder_type,
         autoencoder_params_path=autoencoder_params_path,
@@ -810,9 +965,6 @@ def pretraining_with_data_load(
 
 
 def pretrain_for_multiple_seeds(seeds: List[int], embedding_dims=[10], worker_num=1):
-    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
-    torch.use_deterministic_algorithms(mode=True)
-
     all_autoencoders = list(
         product(AutoencoderType, [None], DatasetType, seeds, embedding_dims)
     )
@@ -824,21 +976,25 @@ def pretrain_for_multiple_seeds(seeds: List[int], embedding_dims=[10], worker_nu
 if __name__ == "__main__":
     seeds = [21, 42]
     embedding_dims = [10]
-    worker_num = 2
-    pretrain_for_multiple_seeds(
-        seeds, embedding_dims=embedding_dims, worker_num=worker_num
-    )
+    worker_num = 4
+    # pretrain_for_multiple_seeds(
+    #     seeds, embedding_dims=embedding_dims, worker_num=worker_num
+    # )
     all_autoencoders = list(
         product(AutoencoderType, DatasetType, seeds, [None], embedding_dims)
     )
+    with mp.Pool(processes=worker_num) as pool:
+        result = pool.starmap(evaluate, all_autoencoders)
     for ae_type, dataset_type, seed, ae_path, embedding_dim in all_autoencoders:
-        evaluate(ae_type, dataset_type, seed, ae_path, embedding_dim)
-        # Load the dataset and evaluate flat and hierarchical clustering (stacked autoencoder)
+        evaluate(
+            ae_type, dataset_type, seed, ae_path, embedding_dim, can_use_workers=True
+        )
+    #     # Load the dataset and evaluate flat and hierarchical clustering (stacked autoencoder)
 
     # flat_results, hierarchical_results = evaluate(
-    #    autoencoder_type=AutoencoderType.CLUSTPY_STANDARD,
-    #    dataset_type=DatasetType.REUTERS,
-    #    seed=42,
+    #     autoencoder_type=AutoencoderType.CLUSTPY_STANDARD,
+    #     dataset_type=DatasetType.USPS,
+    #     seed=42,
     # )
     # print(flat_results_stack, hierarchical_results_stack)
     # print(flat_results, hierarchical_results)

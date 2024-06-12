@@ -1,22 +1,17 @@
-from practical.DeepClustering.DeepECT.deepect import (
-    Cluster_Node,
-    _DeepECT_Module,
-    DeepECT
-)
+from practical.DeepClustering.DeepECT.deepect import _DeepECT_Module, Cluster_Node
 import numpy as np
 import torch
 import torch.utils.data
-from clustpy.metrics.clustering_metrics import unsupervised_clustering_accuracy
-from clustpy.deep.autoencoders import FeedforwardAutoencoder
-
 from torch.utils.data import Dataset, DataLoader
-from torchvision import datasets, transforms
+from torchvision import transforms
+from clustpy.data import load_mnist
+import PIL
 
 
 def test_Cluster_Node():
     root = Cluster_Node(np.array([0, 0]), "cpu")
-    root.set_childs(None, np.array([-1, -1]), np.array([1, 1]))
-    root.left_child.set_childs(None, np.array([-2, -2]), np.array([-0.5, -0.5]))
+    root.set_childs(None, np.array([-1, -1]), 0.5, np.array([1, 1]), 0.6)
+    root.left_child.set_childs(None, np.array([-2, -2]), 0.7, np.array([-0.5, -0.5]), 0.8)
 
     # check if centers are stored correctly
     assert torch.all(torch.eq(root.center, torch.tensor([0, 0])))
@@ -34,18 +29,19 @@ def test_Cluster_Node():
     assert isinstance(root.left_child.right_child.center, torch.nn.Parameter)
     # centers of inner nodes are just tensors
     assert isinstance(root.left_child.center, torch.Tensor)
+    assert root.left_child.weight.item() ==  torch.tensor(0.5, dtype=torch.float)
+    assert root.left_child.right_child.weight.item() == torch.tensor(0.8, dtype=torch.float)
+    
 
 
 def sample_cluster_tree(get_deep_ect_module=False):
     """
     Helper method for creating a sample cluster tree
     """
-    deep_ect = _DeepECT_Module(np.array([[0, 0], [1, 1]]), "cpu")
+    deep_ect = _DeepECT_Module(np.array([[0, 0], [1, 1]]), np.array([0,1]), "cpu", random_state=np.random.RandomState(42))
     tree = deep_ect.cluster_tree
-    tree.root.left_child.set_childs(
-        None, np.array([-2, -2]), np.array([-0.5, -0.5]), max_id=2
-    )
-    tree.number_nodes += 2
+    tree.root.left_child.set_childs(None, np.array([-2, -2]), 0.7, np.array([-0.5, -0.5]), 0.8, max_id=2, max_split_id=1)
+   
     if get_deep_ect_module:
         return deep_ect
     return tree
@@ -69,10 +65,10 @@ def sample_cluster_tree_with_assignments():
 def test_cluster_tree():
     tree = sample_cluster_tree()
     # we should have 3 leaf nodes in this example
-    assert len(tree.get_all_leaf_nodes()) == 3
+    assert len(tree.leaf_nodes) == 3
 
     # check if the returned nodes are really the leaf nodes by checking the stored center
-    leaf_nodes = tree.get_all_leaf_nodes()
+    leaf_nodes = tree.leaf_nodes
     assert (
         torch.all(
             leaf_nodes[0].center
@@ -92,7 +88,7 @@ def test_cluster_tree():
 def test_cluster_tree_growth():
     tree = sample_cluster_tree()
     optimizer = torch.optim.Adam(
-        [{"params": leaf.center} for leaf in tree.get_all_leaf_nodes()]
+        [{"params": leaf.center} for leaf in tree.leaf_nodes]
     )
     encode = lambda x: x
     autoencoder = type("Autoencoder", (), {"encode": encode})
@@ -101,7 +97,7 @@ def test_cluster_tree_growth():
         torch.utils.data.TensorDataset(torch.tensor([0, 1, 2, 3]), dataset),
         batch_size=2,
     )
-    tree.grow_tree(dataloader, autoencoder, optimizer, "cpu")
+    tree.grow_tree(dataloader, autoencoder, optimizer, False, np.random.RandomState(42), "cpu")
     assert torch.allclose(
         torch.tensor([10.0, 10.0]), tree.root.right_child.right_child.center
     ) or torch.allclose(
@@ -189,19 +185,19 @@ def test_predict():
     encode = lambda x: x
     autoencoder = type("Autoencoder", (), {"encode": encode})
     # predict 3 classes
-    pred, center = tree.predict(3, dataloader, autoencoder)
-    assert unsupervised_clustering_accuracy(np.array([0, 2, 1, 2]), pred) == 1
+    pred_tree = tree.predict(dataloader, autoencoder)
+    assert pred_tree.flat_accuracy(np.array([0, 2, 1, 2]), 3) == 1
     # predict 2 classes
-    pred, center = tree.predict(2, dataloader, autoencoder)
-    assert unsupervised_clustering_accuracy(np.array([0, 1, 0, 1]), pred) == 1
+    pred_tree = tree.predict(dataloader, autoencoder)
+    assert pred_tree.flat_accuracy(np.array([0, 1, 0, 1]), 2) == 1
     # predict 2 classes with batches
     dataset = torch.tensor([[-3, -3], [10, 10], [-0.4, -0.4], [0.4, 0.3]], device="cpu")
     dataloader = torch.utils.data.DataLoader(
         torch.utils.data.TensorDataset(torch.tensor([0, 1, 2, 3]), dataset),
         batch_size=2,
     )
-    pred, center = tree.predict(2, dataloader, autoencoder)
-    assert unsupervised_clustering_accuracy(np.array([0, 1, 0, 1]), pred) == 1
+    pred_tree = tree.predict(dataloader, autoencoder)
+    assert pred_tree.flat_accuracy(np.array([0, 1, 0, 1]), 2) == 1
 
 
 def test_nc_loss():
@@ -319,11 +315,11 @@ def test_dc_loss():
 def test_adaption_inner_nodes():
     tree = sample_cluster_tree_with_assignments()
 
-    tree.adapt_inner_nodes(tree.root, 0.1)
+    tree.adapt_inner_nodes(tree.root)
 
     # calculate adaption manually
     root_weigth = torch.tensor([0.5 * (1 + 2), 0.5 * (1 + 2)])
-    root_left_weight = torch.tensor([0.5 * (1 + 1), 0.5 * (1 + 1)])
+    root_left_weight = torch.tensor([0.5 * (0.7 + 1), 0.5 * (0.8 + 1)])
     new_root_left = (
         root_left_weight[0] * torch.tensor([-2, -2])
         + root_left_weight[1] * torch.tensor([-0.5, -0.5])
@@ -338,16 +334,38 @@ def test_adaption_inner_nodes():
 
 def test_augmentation():
 
-    transform = transforms.Compose([transforms.ToTensor(), transforms.Lambda(lambda x:x*255)])
-    mnist_dataset = datasets.MNIST(root='./data', train=True, download=True, transform=transform)
+    dataset = load_mnist()
+    data = dataset["data"] * 0.02
 
-    augmentation_transform = transforms.Compose([
-        transforms.RandomAffine(degrees=15),
-        transforms.ToTensor(),
-        transforms.Lambda(lambda x:x*255)
-    ])
-        
-    class MNIST(Dataset):
+    degrees = (-15, 15)
+    translation = (0.14, 0.14)
+    image_size = 28
+
+    image_max_value = np.max(data) 
+    image_min_value = np.min(data)
+
+    augmentation_transform = transforms.Compose(
+        [
+            transforms.Lambda(lambda x: x - image_min_value),
+            transforms.Lambda(lambda x: x / image_max_value),  # [0,1]
+            transforms.Lambda(lambda x: x.reshape(image_size, image_size)),
+            transforms.ToPILImage(),  # [0,255]
+            transforms.RandomAffine(
+                degrees=degrees,
+                shear=degrees,
+                translate=translation,
+                interpolation=PIL.Image.BILINEAR,
+            ),
+            transforms.ToTensor(),  # back to [0,1] again
+            transforms.Lambda(lambda x: x.reshape(image_size**2)),
+            transforms.Lambda(
+                lambda x: x * image_max_value
+            ),  # back to original data range
+            transforms.Lambda(lambda x: x + image_min_value),
+        ]
+    )
+
+    class Original_Dataset(Dataset):
         def __init__(self, original_dataset):
             self.original_dataset = original_dataset
 
@@ -355,10 +373,11 @@ def test_augmentation():
             return len(self.original_dataset)
 
         def __getitem__(self, idx):
-            original_image, label = self.original_dataset[idx]
-            return idx, original_image.reshape(28*28)
+            original_image = self.original_dataset[idx]
+            return idx, original_image
 
-    class MNISTWithAugmentation(Dataset):
+    class Augmented_Dataset(Dataset):
+
         def __init__(self, original_dataset, augmentation_transform):
             self.original_dataset = original_dataset
             self.augmentation_transform = augmentation_transform
@@ -367,16 +386,25 @@ def test_augmentation():
             return len(self.original_dataset)
 
         def __getitem__(self, idx):
-            original_image, label = self.original_dataset[idx]
-            augmented_image = self.augmentation_transform(transforms.ToPILImage()(original_image/255))
-            return idx, original_image.reshape(28*28), augmented_image.reshape(28*28)
+            original_image = self.original_dataset[idx]
+            augmented_image = self.augmentation_transform(original_image)
+            return idx, original_image, augmented_image
 
-    # Create an instance of the custom Dataset
-    augmented_mnist_dataset = MNISTWithAugmentation(mnist_dataset, augmentation_transform)
+    # Create an instance of the datasets
+    original_dataset = Original_Dataset(data)
+    augmented_dataset = Augmented_Dataset(data, augmentation_transform)
 
-    # create a DataLoader
-    trainloader = DataLoader(augmented_mnist_dataset, batch_size=256, shuffle=True)
-    testloader = DataLoader(MNIST(mnist_dataset), batch_size=256, shuffle=False)
+    # Create the dataloaders
+    trainloader = DataLoader(
+        augmented_dataset,
+        batch_size=256,
+        shuffle=True
+    )
+    testloader = DataLoader(
+        original_dataset,
+        batch_size=256,
+        shuffle=False
+    )
 
     idx, M, M_aug = next(iter(trainloader))
     _, M_test = next(iter(testloader))
@@ -384,13 +412,7 @@ def test_augmentation():
     assert M.shape[0] == 256 and M.shape[1] == 784
     assert M.shape == M_aug.shape
     assert M_test.shape == M.shape
+    # check if scaling is consistent
+    assert torch.max(M) == torch.max(M_aug)
+    assert torch.min(M) == torch.min(M_aug)
 
-    # run fast version of deepect, acc should be above 0.7 
-    # autoencoder = FeedforwardAutoencoder([784, 500, 500, 2000, 10])
-    # autoencoder.load_state_dict(
-    #     torch.load("practical/DeepClustering/DeepECT/pretrained_AE.pth")
-    # )
-    # autoencoder.fitted = True
-    # deepect = DeepECT(number_classes=10, autoencoder=autoencoder, max_leaf_nodes=20, max_iterations=1000, grow_interval=100, custom_dataloaders=(trainloader, testloader), augmentation_invariance=True)
-    # deepect.fit(mnist_dataset.data.reshape(len(mnist_dataset), 784).numpy())
-    # assert deepect.tree_.flat_accuracy(mnist_dataset.targets.numpy(), n_clusters=10) > 0.7

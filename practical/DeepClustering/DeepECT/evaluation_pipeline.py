@@ -991,5 +991,5 @@ if __name__ == "__main__":
     with mp.Pool(processes=worker_num) as pool:
         result = pool.starmap(evaluate, all_autoencoders)
     # compute autoencoder+complete linkage
-    for ae_type, dataset_type, seed, ae_path, embedding_dim in all_autoencoders:
+    for ae_type, dataset_type, seed, ae_path, embedding_dim, _ in all_autoencoders:
         evaluate(ae_type, dataset_type, seed, ae_path, embedding_dim)

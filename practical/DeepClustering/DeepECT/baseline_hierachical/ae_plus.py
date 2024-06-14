@@ -9,8 +9,8 @@ import os
 
 sys.path.append(os.getcwd())
 
-from practical.DeepClustering.DeepECT.baseline_hierachical.methods.dendrogram_purity import *
-from practical.DeepClustering.DeepECT.baseline_hierachical.methods.bisceting_kmeans import *
+from practical.DeepClustering.DeepECT.baseline_hierachical.utils.dendrogram_purity import *
+from practical.DeepClustering.DeepECT.baseline_hierachical.utils.bisceting_kmeans import *
 from sklearn.cluster import AgglomerativeClustering
 
 

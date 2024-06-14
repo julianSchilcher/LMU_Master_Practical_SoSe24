@@ -5,8 +5,11 @@ import clustpy.metrics
 import numpy as np
 import torch
 from scipy.special import comb
-from sklearn.metrics import (accuracy_score, adjusted_rand_score,
-                             normalized_mutual_info_score)
+from sklearn.metrics import (
+    accuracy_score,
+    adjusted_rand_score,
+    normalized_mutual_info_score,
+)
 
 
 class PredictionClusterNode:
@@ -68,93 +71,6 @@ def weighted_avg_and_std(values, weights):
     # Fast and numerically precise:
     variance = np.average((values - average) ** 2, weights=weights)
     return (average, np.sqrt(variance))
-
-
-def leaf_purity(tree_root: PredictionClusterNode, ground_truth: np.ndarray):
-    values = []
-    weights = []
-
-    def get_leaf_purities(node: PredictionClusterNode):
-        nonlocal values
-        nonlocal weights
-        if node.is_leaf:
-            node_total_dp_count = len(node.assignments)
-            node_per_label_counts = count_values_in_sequence(
-                [ground_truth[id] for id in node.assignments]
-            )
-            if node_total_dp_count > 0:
-                purity_rate = max(node_per_label_counts.values()) / node_total_dp_count
-            else:
-                purity_rate = 1.0
-            values.append(purity_rate)
-            weights.append(node_total_dp_count)
-        else:
-            get_leaf_purities(node.left_child)
-            get_leaf_purities(node.right_child)
-
-    get_leaf_purities(tree_root)
-
-    return weighted_avg_and_std(values, weights)
-
-
-def dendrogram_purity(
-    tree_root: PredictionClusterNode, ground_truth: np.ndarray
-) -> float:
-    total_per_label_frequencies = count_values_in_sequence(ground_truth)
-    total_per_label_pairs_count = {
-        k: comb(v, 2, True) for k, v in total_per_label_frequencies.items()
-    }
-    total_n_of_pairs = sum(total_per_label_pairs_count.values())
-
-    one_div_total_n_of_pairs = 1.0 / total_n_of_pairs
-
-    purity = 0.0
-
-    def calculate_purity(node: PredictionClusterNode) -> Tuple[Dict[Any, int], int]:
-        nonlocal purity
-        if node.is_leaf:
-            node_total_dp_count = len(node.assignments)
-            node_per_label_frequencies = count_values_in_sequence(
-                [ground_truth[id] for id in node.assignments]
-            )
-            node_per_label_pairs_count: Dict[Any, int] = {
-                k: comb(v, 2, True) for k, v in node_per_label_frequencies.items()
-            }
-
-        else:  # it is an inner node
-            left_child_per_label_freq, left_child_total_dp_count = calculate_purity(
-                node.left_child
-            )
-            right_child_per_label_freq, right_child_total_dp_count = calculate_purity(
-                node.right_child
-            )
-            node_total_dp_count = left_child_total_dp_count + right_child_total_dp_count
-            node_per_label_frequencies: Dict[Any, int] = {
-                k: left_child_per_label_freq.get(k, 0)
-                + right_child_per_label_freq.get(k, 0)
-                for k in set(left_child_per_label_freq)
-                | set(right_child_per_label_freq)
-            }
-
-            node_per_label_pairs_count: Dict[Any, int] = {
-                k: left_child_per_label_freq.get(k) * right_child_per_label_freq.get(k)
-                for k in set(left_child_per_label_freq)
-                & set(right_child_per_label_freq)
-            }
-
-        for label, pair_count in node_per_label_pairs_count.items():
-            label_freq = node_per_label_frequencies[label]
-            label_pairs = pair_count
-            purity += (
-                one_div_total_n_of_pairs
-                * label_freq
-                / node_total_dp_count
-                * label_pairs
-            )
-        return node_per_label_frequencies, node_total_dp_count
-
-    calculate_purity(tree_root)
-    return purity
 
 
 class PredictionClusterTree:
@@ -246,10 +162,10 @@ class PredictionClusterTree:
         return predictions
 
     def dendrogram_purity(self, ground_truth: np.ndarray):
-        return dendrogram_purity(self.root, ground_truth)
+        return dendrogram_purity(self, ground_truth)
 
     def leaf_purity(self, ground_truth: np.ndarray):
-        return leaf_purity(self.root, ground_truth)
+        return leaf_purity(self, ground_truth)
 
     def flat_accuracy(self, ground_truth: np.ndarray, n_clusters: int):
         return clustpy.metrics.unsupervised_clustering_accuracy(
@@ -265,3 +181,88 @@ class PredictionClusterTree:
         return adjusted_rand_score(
             ground_truth, self.get_k_cluster_predictions(ground_truth, n_clusters)
         )
+
+
+def leaf_purity(tree: PredictionClusterTree, ground_truth: np.ndarray):
+    values = []
+    weights = []
+
+    def get_leaf_purities(node: PredictionClusterNode):
+        nonlocal values
+        nonlocal weights
+        if node.is_leaf:
+            node_total_dp_count = len(node.assignments)
+            node_per_label_counts = count_values_in_sequence(
+                [ground_truth[id] for id in node.assignments]
+            )
+            if node_total_dp_count > 0:
+                purity_rate = max(node_per_label_counts.values()) / node_total_dp_count
+            else:
+                purity_rate = 1.0
+            values.append(purity_rate)
+            weights.append(node_total_dp_count)
+        else:
+            get_leaf_purities(node.left_child)
+            get_leaf_purities(node.right_child)
+
+    get_leaf_purities(tree.root)
+
+    return weighted_avg_and_std(values, weights)
+
+
+def dendrogram_purity(tree: PredictionClusterTree, ground_truth: np.ndarray) -> float:
+    total_per_label_frequencies = count_values_in_sequence(ground_truth)
+    total_per_label_pairs_count = {
+        k: comb(v, 2, True) for k, v in total_per_label_frequencies.items()
+    }
+    total_n_of_pairs = sum(total_per_label_pairs_count.values())
+
+    one_div_total_n_of_pairs = 1.0 / total_n_of_pairs
+
+    purity = 0.0
+
+    def calculate_purity(node: PredictionClusterNode) -> Tuple[Dict[Any, int], int]:
+        nonlocal purity
+        if node.is_leaf:
+            node_total_dp_count = len(node.assignments)
+            node_per_label_frequencies = count_values_in_sequence(
+                [ground_truth[id] for id in node.assignments]
+            )
+            node_per_label_pairs_count: Dict[Any, int] = {
+                k: comb(v, 2, True) for k, v in node_per_label_frequencies.items()
+            }
+
+        else:  # it is an inner node
+            left_child_per_label_freq, left_child_total_dp_count = calculate_purity(
+                node.left_child
+            )
+            right_child_per_label_freq, right_child_total_dp_count = calculate_purity(
+                node.right_child
+            )
+            node_total_dp_count = left_child_total_dp_count + right_child_total_dp_count
+            node_per_label_frequencies: Dict[Any, int] = {
+                k: left_child_per_label_freq.get(k, 0)
+                + right_child_per_label_freq.get(k, 0)
+                for k in set(left_child_per_label_freq)
+                | set(right_child_per_label_freq)
+            }
+
+            node_per_label_pairs_count: Dict[Any, int] = {
+                k: left_child_per_label_freq.get(k) * right_child_per_label_freq.get(k)
+                for k in set(left_child_per_label_freq)
+                & set(right_child_per_label_freq)
+            }
+
+        for label, pair_count in node_per_label_pairs_count.items():
+            label_freq = node_per_label_frequencies[label]
+            label_pairs = pair_count
+            purity += (
+                one_div_total_n_of_pairs
+                * label_freq
+                / node_total_dp_count
+                * label_pairs
+            )
+        return node_per_label_frequencies, node_total_dp_count
+
+    calculate_purity(tree.root)
+    return purity

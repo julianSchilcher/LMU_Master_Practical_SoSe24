@@ -1,14 +1,15 @@
-import datetime
-import math
 import os
 import sys
-from enum import Enum
+
 
 sys.path.append(os.getcwd())
 import logging
 import multiprocessing as mp
 from itertools import product
 from typing import List, Union
+from enum import Enum
+import datetime
+import math
 
 import numpy as np
 import pandas as pd
@@ -27,15 +28,19 @@ from sklearn.utils import Bunch
 from torch.utils.data import DataLoader, Dataset, TensorDataset
 from torchvision import transforms
 
-from practical.DeepClustering.DeepECT.baseline_hierachical.ae_plus import *
-from practical.DeepClustering.DeepECT.baseline_hierachical.methods import (
-    idec_hierarchical_clustpy,
+from practical.DeepClustering.DeepECT.autoencoders.StackedAutoencoder import (
+    DeepECTStackedAutoencoder,
 )
-from practical.DeepClustering.DeepECT.deepect import DeepECT as DeepECTOurs
-from practical.DeepClustering.DeepECT.deepect_adjusted import DeepECT as DeepECTPaper
-from practical.DeepClustering.DeepECT.evaluation.experiments.pre_training.vae.stacked_ae import (
-    stacked_ae,
+from practical.DeepClustering.DeepECT.baseline_hierachical.ae_plus import (
+    ae_bisecting,
+    ae_complete,
+    ae_single,
 )
+from practical.DeepClustering.DeepECT.baseline_hierachical.idec_hierarchical_clustpy import (
+    run_idec_hierarchical,
+)
+from practical.DeepClustering.DeepECT.deepect_ours import DeepECT as DeepECTOurs
+from practical.DeepClustering.DeepECT.deepect_paper import DeepECT as DeepECTPaper
 
 
 class DatasetType(Enum):
@@ -159,7 +164,7 @@ def pretraining(
                 mask = torch.empty(batch.shape, device=batch.device).bernoulli_(0.8)
                 return batch * mask
 
-            autoencoder = stacked_ae(
+            autoencoder = DeepECTStackedAutoencoder(
                 data.shape[1],
                 [500, 500, 2000, embedding_dim],
                 weight_initalizer,
@@ -187,7 +192,7 @@ def pretraining(
             )
             autoencoder.load_parameters(autoencoder_params_path)
         elif autoencoder_type == AutoencoderType.DEEPECT_STACKED_AE:
-            autoencoder = stacked_ae(
+            autoencoder = DeepECTStackedAutoencoder(
                 data.shape[1],
                 [500, 500, 2000, embedding_dim],
                 torch.nn.init.xavier_normal_,
@@ -432,7 +437,7 @@ def fit(
                 custom_dataloaders=dataloaders,
             )
             print(f"fitting {method.name}...")
-            deepect.fit(data, labels)
+            deepect.fit_predict(data)
             autoencoder = deepect.autoencoder
             print(f"finished {method.name}...")
             try:
@@ -491,7 +496,7 @@ def fit(
                 random_state=np.random.RandomState(seed),
             )
             print(f"fitting {method.name}...")
-            deepect.fit(data, labels)
+            deepect.fit_predict(data, labels)
             autoencoder = deepect.autoencoder
             print(f"finished {method.name}...")
             # Calculate evaluation metrics
@@ -602,7 +607,7 @@ def fit(
                 leaf_purity_value_single,
                 leaf_purity_value_complete,
                 autoencoder,
-            ) = idec_hierarchical_clustpy.run_idec_hierarchical(
+            ) = run_idec_hierarchical(
                 labels,
                 seed,
                 n_clusters,
@@ -850,7 +855,7 @@ def evaluate(
     seed: int,
     autoencoder_params_path: str = None,
     embedding_dim: int = 10,
-    can_use_workers: bool = False,
+    can_use_workers: bool = True,
 ) -> pd.DataFrame:
     start = datetime.datetime.now()
 
@@ -976,29 +981,15 @@ def pretrain_for_multiple_seeds(seeds: List[int], embedding_dims=[10], worker_nu
 if __name__ == "__main__":
     seeds = [21, 42]
     embedding_dims = [10]
-    worker_num = 4
-    # pretrain_for_multiple_seeds(
-    #     seeds, embedding_dims=embedding_dims, worker_num=worker_num
-    # )
+    worker_num = 2
+    pretrain_for_multiple_seeds(
+        seeds, embedding_dims=embedding_dims, worker_num=worker_num
+    )
     all_autoencoders = list(
-        product(AutoencoderType, DatasetType, seeds, [None], embedding_dims)
+        product(AutoencoderType, DatasetType, seeds, [None], embedding_dims, [None])
     )
     with mp.Pool(processes=worker_num) as pool:
         result = pool.starmap(evaluate, all_autoencoders)
+    # compute autoencoder+complete linkage
     for ae_type, dataset_type, seed, ae_path, embedding_dim in all_autoencoders:
-        evaluate(
-            ae_type, dataset_type, seed, ae_path, embedding_dim, can_use_workers=True
-        )
-    #     # Load the dataset and evaluate flat and hierarchical clustering (stacked autoencoder)
-
-    # flat_results, hierarchical_results = evaluate(
-    #     autoencoder_type=AutoencoderType.CLUSTPY_STANDARD,
-    #     dataset_type=DatasetType.USPS,
-    #     seed=42,
-    # )
-    # print(flat_results_stack, hierarchical_results_stack)
-    # print(flat_results, hierarchical_results)
-    # evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.REUTERS, seed=42)
-    # evaluation(init_autoencoder=FeedforwardAutoencoder, dataset_type=DatasetType.FASHION_MNIST, seed=42)
-
-    # combine all results and per experiment, do pivot to aggregate the metrics over the seeds
+        evaluate(ae_type, dataset_type, seed, ae_path, embedding_dim)

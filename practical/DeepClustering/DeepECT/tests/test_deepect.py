@@ -1,4 +1,5 @@
-from practical.DeepClustering.DeepECT.deepect import _DeepECT_Module, Cluster_Node
+from practical.DeepClustering.DeepECT.deepect_paper import _DeepECT_Module
+from practical.DeepClustering.DeepECT.utils import Cluster_Node
 import numpy as np
 import torch
 import torch.utils.data
@@ -11,7 +12,9 @@ import PIL
 def test_Cluster_Node():
     root = Cluster_Node(np.array([0, 0]), "cpu")
     root.set_childs(None, np.array([-1, -1]), 0.5, np.array([1, 1]), 0.6)
-    root.left_child.set_childs(None, np.array([-2, -2]), 0.7, np.array([-0.5, -0.5]), 0.8)
+    root.left_child.set_childs(
+        None, np.array([-2, -2]), 0.7, np.array([-0.5, -0.5]), 0.8
+    )
 
     # check if centers are stored correctly
     assert torch.all(torch.eq(root.center, torch.tensor([0, 0])))
@@ -29,19 +32,33 @@ def test_Cluster_Node():
     assert isinstance(root.left_child.right_child.center, torch.nn.Parameter)
     # centers of inner nodes are just tensors
     assert isinstance(root.left_child.center, torch.Tensor)
-    assert root.left_child.weight.item() ==  torch.tensor(0.5, dtype=torch.float)
-    assert root.left_child.right_child.weight.item() == torch.tensor(0.8, dtype=torch.float)
-    
+    assert root.left_child.weight.item() == torch.tensor(0.5, dtype=torch.float)
+    assert root.left_child.right_child.weight.item() == torch.tensor(
+        0.8, dtype=torch.float
+    )
 
 
 def sample_cluster_tree(get_deep_ect_module=False):
     """
     Helper method for creating a sample cluster tree
     """
-    deep_ect = _DeepECT_Module(np.array([[0, 0], [1, 1]]), np.array([0,1]), "cpu", random_state=np.random.RandomState(42))
+    deep_ect = _DeepECT_Module(
+        np.array([[0, 0], [1, 1]]),
+        np.array([0, 1]),
+        "cpu",
+        random_state=np.random.RandomState(42),
+    )
     tree = deep_ect.cluster_tree
-    tree.root.left_child.set_childs(None, np.array([-2, -2]), 0.7, np.array([-0.5, -0.5]), 0.8, max_id=2, max_split_id=1)
-   
+    tree.root.left_child.set_childs(
+        None,
+        np.array([-2, -2]),
+        0.7,
+        np.array([-0.5, -0.5]),
+        0.8,
+        max_id=2,
+        max_split_id=1,
+    )
+
     if get_deep_ect_module:
         return deep_ect
     return tree
@@ -87,9 +104,7 @@ def test_cluster_tree():
 
 def test_cluster_tree_growth():
     tree = sample_cluster_tree()
-    optimizer = torch.optim.Adam(
-        [{"params": leaf.center} for leaf in tree.leaf_nodes]
-    )
+    optimizer = torch.optim.Adam([{"params": leaf.center} for leaf in tree.leaf_nodes])
     encode = lambda x: x
     autoencoder = type("Autoencoder", (), {"encode": encode})
     dataset = torch.tensor([[-3, -3], [10, 10], [-0.4, -0.4], [0.4, 0.3]], device="cpu")
@@ -97,7 +112,9 @@ def test_cluster_tree_growth():
         torch.utils.data.TensorDataset(torch.tensor([0, 1, 2, 3]), dataset),
         batch_size=2,
     )
-    tree.grow_tree(dataloader, autoencoder, optimizer, False, np.random.RandomState(42), "cpu")
+    tree.grow_tree(
+        dataloader, autoencoder, optimizer, False, np.random.RandomState(42), "cpu"
+    )
     assert torch.allclose(
         torch.tensor([10.0, 10.0]), tree.root.right_child.right_child.center
     ) or torch.allclose(
@@ -332,6 +349,7 @@ def test_adaption_inner_nodes():
     assert torch.all(torch.eq(tree.root.center, new_root))
     assert torch.all(torch.eq(tree.root.left_child.center, new_root_left))
 
+
 def test_augmentation():
 
     dataset = load_mnist()
@@ -341,7 +359,7 @@ def test_augmentation():
     translation = (0.14, 0.14)
     image_size = 28
 
-    image_max_value = np.max(data) 
+    image_max_value = np.max(data)
     image_min_value = np.min(data)
 
     augmentation_transform = transforms.Compose(
@@ -395,16 +413,8 @@ def test_augmentation():
     augmented_dataset = Augmented_Dataset(data, augmentation_transform)
 
     # Create the dataloaders
-    trainloader = DataLoader(
-        augmented_dataset,
-        batch_size=256,
-        shuffle=True
-    )
-    testloader = DataLoader(
-        original_dataset,
-        batch_size=256,
-        shuffle=False
-    )
+    trainloader = DataLoader(augmented_dataset, batch_size=256, shuffle=True)
+    testloader = DataLoader(original_dataset, batch_size=256, shuffle=False)
 
     idx, M, M_aug = next(iter(trainloader))
     _, M_test = next(iter(testloader))
@@ -415,4 +425,3 @@ def test_augmentation():
     # check if scaling is consistent
     assert torch.max(M) == torch.max(M_aug)
     assert torch.min(M) == torch.min(M_aug)
-

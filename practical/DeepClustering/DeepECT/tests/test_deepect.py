@@ -11,9 +11,9 @@ import PIL
 
 def test_Cluster_Node():
     root = Cluster_Node(np.array([0, 0]), "cpu")
-    root.set_childs(None, np.array([-1, -1]), 0.5, np.array([1, 1]), 0.6)
+    root.set_childs(None, np.array([-1, -1]), 0.5, np.array([1, 1]), 0.6, 0, 0)
     root.left_child.set_childs(
-        None, np.array([-2, -2]), 0.7, np.array([-0.5, -0.5]), 0.8
+        None, np.array([-2, -2]), 0.7, np.array([-0.5, -0.5]), 0.8, 2, 1
     )
 
     # check if centers are stored correctly
@@ -44,7 +44,6 @@ def sample_cluster_tree(get_deep_ect_module=False):
     """
     deep_ect = _DeepECT_Module(
         np.array([[0, 0], [1, 1]]),
-        np.array([0, 1]),
         "cpu",
         random_state=np.random.RandomState(42),
     )
@@ -112,9 +111,7 @@ def test_cluster_tree_growth():
         torch.utils.data.TensorDataset(torch.tensor([0, 1, 2, 3]), dataset),
         batch_size=2,
     )
-    tree.grow_tree(
-        dataloader, autoencoder, optimizer, False, np.random.RandomState(42), "cpu"
-    )
+    tree.grow_tree(dataloader, autoencoder, optimizer, "cpu")
     assert torch.allclose(
         torch.tensor([10.0, 10.0]), tree.root.right_child.right_child.center
     ) or torch.allclose(

@@ -4,6 +4,20 @@ from matplotlib import pyplot as plt
 
 
 def parse_log(file_path):
+    """
+    Parse the log file to extract training metrics.
+
+    Parameters
+    ----------
+    file_path : str
+        The path to the log file.
+
+    Returns
+    -------
+    tuple
+        A tuple containing lists of iterations, dc_losses, nc_losses, rec_losses,
+        rec_losses_aug, total_losses, and accuracies.
+    """
     iterations = []
     dc_losses = []
     nc_losses = []
@@ -51,6 +65,14 @@ def parse_log(file_path):
 
 
 def plot_metrics(log_file_path):
+    """
+    Plot training metrics from a log file.
+
+    Parameters
+    ----------
+    log_file_path : str
+        The path to the log file.
+    """
     (
         iterations,
         dc_losses,
@@ -69,7 +91,7 @@ def plot_metrics(log_file_path):
     plt.plot(iterations, dc_losses, label="DC Loss")
     plt.plot(iterations, nc_losses, label="NC Loss")
     plt.plot(iterations, rec_losses, label="Reconstruction Loss")
-    plt.plot(iterations, rec_losses_aug, label="Reconstruction Loss augmented")
+    plt.plot(iterations, rec_losses_aug, label="Reconstruction Loss Augmented")
     plt.plot(iterations, total_losses, label="Total Loss")
     plt.xlabel("Iterations")
     plt.ylabel("Loss")
@@ -88,6 +110,16 @@ def plot_metrics(log_file_path):
 
 
 def plot_comparison(log_file_path1, log_file_path2):
+    """
+    Plot comparison of training metrics from two log files.
+
+    Parameters
+    ----------
+    log_file_path1 : str
+        The path to the first log file.
+    log_file_path2 : str
+        The path to the second log file.
+    """
     (
         iterations1,
         dc_losses1,
@@ -162,7 +194,7 @@ def plot_comparison(log_file_path1, log_file_path2):
     )
     plt.xlabel("Iterations")
     plt.ylabel("Loss")
-    plt.title(f"{title1} Reconstruction Loss")
+    plt.title(f"{title1} Reconstruction Loss Augmented")
     plt.legend()
 
     plt.subplot(5, 2, 8)
@@ -196,6 +228,16 @@ def plot_comparison(log_file_path1, log_file_path2):
 
 
 def plot_accuracy_comparison(log_file_path1, log_file_path2):
+    """
+    Plot comparison of training accuracy from two log files.
+
+    Parameters
+    ----------
+    log_file_path1 : str
+        The path to the first log file.
+    log_file_path2 : str
+        The path to the second log file.
+    """
     iterations1, _, _, _, _, _, accuracies1 = parse_log(log_file_path1)
     iterations2, _, _, _, _, _, accuracies2 = parse_log(log_file_path2)
 

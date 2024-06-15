@@ -1,15 +1,12 @@
+import datetime
+import logging
+import math
+import multiprocessing as mp
 import os
 import sys
-
-
-sys.path.append(os.getcwd())
-import logging
-import multiprocessing as mp
+from enum import Enum
 from itertools import product
 from typing import List, Union
-from enum import Enum
-import datetime
-import math
 
 import numpy as np
 import pandas as pd
@@ -18,7 +15,8 @@ import torch
 from clustpy.data import load_fmnist, load_mnist, load_reuters, load_usps
 from clustpy.deep._utils import set_torch_seed
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
-from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
+from clustpy.deep.autoencoders._abstract_autoencoder import \
+    _AbstractAutoencoder
 from clustpy.deep.dec import IDEC
 from clustpy.metrics import unsupervised_clustering_accuracy
 from sklearn.cluster import KMeans
@@ -28,22 +26,22 @@ from sklearn.utils import Bunch
 from torch.utils.data import DataLoader, Dataset, TensorDataset
 from torchvision import transforms
 
-from practical.DeepClustering.DeepECT.autoencoders.StackedAutoencoder import (
-    DeepECTStackedAutoencoder,
-)
+from practical.DeepClustering.DeepECT.autoencoders.StackedAutoencoder import \
+    DeepECTStackedAutoencoder
 from practical.DeepClustering.DeepECT.baseline_hierachical.ae_plus import (
-    ae_bisecting,
-    ae_complete,
-    ae_single,
-)
-from practical.DeepClustering.DeepECT.baseline_hierachical.idec_hierarchical_clustpy import (
-    run_idec_hierarchical,
-)
-from practical.DeepClustering.DeepECT.deepect_ours import DeepECT as DeepECTOurs
-from practical.DeepClustering.DeepECT.deepect_paper import DeepECT as DeepECTPaper
+    ae_bisecting, ae_complete, ae_single)
+from practical.DeepClustering.DeepECT.baseline_hierachical.idec_hierarchical_clustpy import \
+    run_idec_hierarchical
+from practical.DeepClustering.DeepECT.deepect_ours import \
+    DeepECT as DeepECTOurs
+from practical.DeepClustering.DeepECT.deepect_paper import \
+    DeepECT as DeepECTPaper
 
 
 class DatasetType(Enum):
+    """
+    Enumeration for dataset types.
+    """
     MNIST = "MNIST"
     FASHION_MNIST = "Fashion MNIST"
     USPS = "USPS"
@@ -51,6 +49,9 @@ class DatasetType(Enum):
 
 
 class ClusteringMethod(Enum):
+    """
+    Enumeration for clustering methods.
+    """
     DEEPECT_PAPER = "DeepECT (Paper)"
     DEEPECT_AUGMENTED_PAPER = "DeepECT + Augmentation (Paper)"
     DEEPECT_OURS = "DeepECT (Ours)"
@@ -65,6 +66,9 @@ class ClusteringMethod(Enum):
 
 
 class AutoencoderType(Enum):
+    """
+    Enumeration for autoencoder types.
+    """
     CLUSTPY_STANDARD = "ClustPy FeedForward"
     DEEPECT_STACKED_AE = "Stacked AE from DeepECT"
 
@@ -108,20 +112,73 @@ def calculate_acc(true_labels, predicted_labels):
 
 
 def calculate_ari(true_labels, predicted_labels):
+    """
+    Calculate the Adjusted Rand Index (ARI) between true and predicted labels.
+
+    Parameters
+    ----------
+    true_labels : array-like
+        The true labels of the data points.
+    predicted_labels : array-like
+        The predicted labels of the data points.
+
+    Returns
+    -------
+    ari : float
+        The ARI score.
+    """
     return adjusted_rand_score(true_labels, predicted_labels)
 
 
 def get_max_epoch_size(data, max_iterations, batch_size):
+    """
+    Calculate the maximum epoch size.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        The dataset.
+    max_iterations : int
+        The maximum number of iterations.
+    batch_size : int
+        The batch size.
+
+    Returns
+    -------
+    max_epoch_size : int
+        The maximum epoch size.
+    """
     return math.ceil(max_iterations / (len(data) / batch_size))
 
 
 def pretraining(
     autoencoder_type: AutoencoderType,
-    autoencoder_params_path,
-    dataset,
-    seed,
+    autoencoder_params_path: str,
+    dataset: Bunch,
+    seed: int,
     embedding_dim: int,
 ):
+    """
+    Pretrain an autoencoder.
+
+    Parameters
+    ----------
+    autoencoder_type : AutoencoderType
+        The type of autoencoder.
+    autoencoder_params_path : str
+        The path to save the autoencoder parameters.
+    dataset : Bunch
+        The dataset.
+    seed : int
+        The random seed for reproducibility.
+    embedding_dim : int
+        The dimension of the embedding.
+
+    Returns
+    -------
+    autoencoder : _AbstractAutoencoder
+        The pretrained autoencoder.
+    """
     set_torch_seed(np.random.RandomState(seed))
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
@@ -207,6 +264,21 @@ def pretraining(
 
 
 class Original_Dataset(Dataset):
+    """
+    Dataset class for original dataset.
+
+    Parameters
+    ----------
+    original_dataset : np.ndarray
+        The original dataset.
+
+    Methods
+    -------
+    __len__():
+        Returns the length of the dataset.
+    __getitem__(idx):
+        Returns the item at the given index.
+    """
     def __init__(self, original_dataset):
         self.original_dataset = original_dataset
 
@@ -228,6 +300,33 @@ def fit(
     embedding_dim: int,
     can_use_workers: bool = False,
 ):
+    """
+    Fit the autoencoder and perform clustering.
+
+    Parameters
+    ----------
+    autoencoder : _AbstractAutoencoder
+        The autoencoder to be fitted.
+    autoencoder_params_path : str
+        The path to the autoencoder parameters.
+    dataset_type : DatasetType
+        The type of dataset.
+    dataset : Bunch
+        The dataset.
+    seed : int
+        The random seed for reproducibility.
+    autoencoder_type : AutoencoderType
+        The type of autoencoder.
+    embedding_dim : int
+        The dimension of the embedding.
+    can_use_workers : bool, optional
+        Whether to use multiprocessing, by default False.
+
+    Returns
+    -------
+    pd.DataFrame
+        The results of the clustering.
+    """
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     # Load and preprocess data
@@ -720,6 +819,21 @@ def fit(
 
 
 def shuffle_dataset(data, labels):
+    """
+    Shuffle the dataset.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        The data to be shuffled.
+    labels : np.ndarray
+        The labels to be shuffled.
+
+    Returns
+    -------
+    tuple
+        The shuffled data and labels.
+    """
     shuffled_indices = np.random.permutation(len(data))
     shuffled_x = data[shuffled_indices, :]
     if labels is not None:
@@ -732,6 +846,23 @@ def shuffle_dataset(data, labels):
 def get_custom_dataloader_augmentations(
     data: np.ndarray, dataset_type: DatasetType, can_use_workers: bool = False
 ):
+    """
+    Get custom dataloaders with augmentations.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        The dataset.
+    dataset_type : DatasetType
+        The type of dataset.
+    can_use_workers : bool, optional
+        Whether to use multiprocessing, by default False.
+
+    Returns
+    -------
+    tuple
+        The train and test dataloaders.
+    """
     degrees = (-15, 15)
     translation = (
         0.14 if dataset_type == DatasetType.USPS else 0.08,
@@ -768,7 +899,23 @@ def get_custom_dataloader_augmentations(
     )
 
     class Augmented_Dataset(Dataset):
+        """
+        Dataset class for augmented dataset.
 
+        Parameters
+        ----------
+        original_dataset : np.ndarray
+            The original dataset.
+        augmentation_transform : transforms.Compose
+            The augmentation transform.
+
+        Methods
+        -------
+        __len__():
+            Returns the length of the dataset.
+        __getitem__(idx):
+            Returns the item at the given index.
+        """
         def __init__(self, original_dataset, augmentation_transform):
             self.original_dataset = original_dataset
             self.augmentation_transform = augmentation_transform
@@ -805,6 +952,19 @@ def get_custom_dataloader_augmentations(
 
 
 def get_dataset(dataset_type: DatasetType):
+    """
+    Get the dataset based on the dataset type.
+
+    Parameters
+    ----------
+    dataset_type : DatasetType
+        The type of dataset.
+
+    Returns
+    -------
+    Bunch
+        The dataset.
+    """
     if dataset_type == DatasetType.MNIST:
         # data from paper, normalized to [0, 5.1]
         dataset = load_mnist()
@@ -830,11 +990,32 @@ def get_dataset(dataset_type: DatasetType):
 
 def get_autoencoder_path(
     autoencoder_type: AutoencoderType,
-    autoencoder_params_path: Union[str | None],
+    autoencoder_params_path: Union[str, None],
     dataset: Bunch,
     embedding_dim: int,
     seed: int,
 ):
+    """
+    Get the path to the autoencoder parameters.
+
+    Parameters
+    ----------
+    autoencoder_type : AutoencoderType
+        The type of autoencoder.
+    autoencoder_params_path : str, optional
+        The path to the autoencoder parameters, by default None.
+    dataset : Bunch
+        The dataset.
+    embedding_dim : int
+        The dimension of the embedding.
+    seed : int
+        The random seed for reproducibility.
+
+    Returns
+    -------
+    str
+        The path to the autoencoder parameters.
+    """
     if (
         autoencoder_params_path is None
         and autoencoder_type == AutoencoderType.CLUSTPY_STANDARD
@@ -857,6 +1038,29 @@ def evaluate(
     embedding_dim: int = 10,
     can_use_workers: bool = True,
 ) -> pd.DataFrame:
+    """
+    Evaluate the clustering performance.
+
+    Parameters
+    ----------
+    autoencoder_type : AutoencoderType
+        The type of autoencoder.
+    dataset_type : DatasetType
+        The type of dataset.
+    seed : int
+        The random seed for reproducibility.
+    autoencoder_params_path : str, optional
+        The path to the autoencoder parameters, by default None.
+    embedding_dim : int, optional
+        The dimension of the embedding, by default 10.
+    can_use_workers : bool, optional
+        Whether to use multiprocessing, by default True.
+
+    Returns
+    -------
+    pd.DataFrame
+        The results of the clustering.
+    """
     start = datetime.datetime.now()
 
     print(
@@ -904,6 +1108,27 @@ def evaluate_multiple_seeds(
     embedding_dims: List[int] = [10],
     autoencoder_params_path: str = None,
 ):
+    """
+    Evaluate the clustering performance for multiple seeds.
+
+    Parameters
+    ----------
+    autoencoder_type : AutoencoderType
+        The type of autoencoder.
+    dataset_type : DatasetType
+        The type of dataset.
+    seeds : List[int]
+        The list of random seeds for reproducibility.
+    embedding_dims : List[int], optional
+        The list of embedding dimensions, by default [10].
+    autoencoder_params_path : str, optional
+        The path to the autoencoder parameters, by default None.
+
+    Returns
+    -------
+    pd.DataFrame
+        The results of the clustering.
+    """
     results = []
 
     for seed, embedding_dim in product(seeds, embedding_dims):
@@ -920,6 +1145,19 @@ def evaluate_multiple_seeds(
 
 
 def calculate_flat_mean_for_multiple_seeds(results: pd.DataFrame):
+    """
+    Calculate the mean clustering metrics for flat clustering methods across multiple seeds.
+
+    Parameters
+    ----------
+    results : pd.DataFrame
+        The results of the clustering.
+
+    Returns
+    -------
+    pd.DataFrame
+        The mean clustering metrics.
+    """
     results = (
         results.groupby(["autoencoder", "embedding_dim", "dataset", "method"])
         .agg({"nmi": "mean", "acc": "mean", "ari": "mean"})
@@ -929,6 +1167,19 @@ def calculate_flat_mean_for_multiple_seeds(results: pd.DataFrame):
 
 
 def calculate_hierarchical_mean_for_multiple_seeds(results: pd.DataFrame):
+    """
+    Calculate the mean clustering metrics for hierarchical clustering methods across multiple seeds.
+
+    Parameters
+    ----------
+    results : pd.DataFrame
+        The results of the clustering.
+
+    Returns
+    -------
+    pd.DataFrame
+        The mean clustering metrics.
+    """
     results = (
         results.groupby(["autoencoder", "embedding_dim", "dataset", "method"])
         .agg({"dp": "mean", "lp": "mean"})
@@ -944,6 +1195,22 @@ def pretraining_with_data_load(
     seed: int,
     embedding_dim: int,
 ):
+    """
+    Pretrain the autoencoder with data load.
+
+    Parameters
+    ----------
+    autoencoder_type : AutoencoderType
+        The type of autoencoder.
+    autoencoder_params_path : str
+        The path to save the autoencoder parameters.
+    dataset_type : DatasetType
+        The type of dataset.
+    seed : int
+        The random seed for reproducibility.
+    embedding_dim : int
+        The dimension of the embedding.
+    """
     start = datetime.datetime.now()
     dataset = get_dataset(dataset_type)
 
@@ -970,6 +1237,23 @@ def pretraining_with_data_load(
 
 
 def pretrain_for_multiple_seeds(seeds: List[int], embedding_dims=[10], worker_num=1):
+    """
+    Pretrain the autoencoder for multiple seeds.
+
+    Parameters
+    ----------
+    seeds : List[int]
+        The list of random seeds for reproducibility.
+    embedding_dims : list, optional
+        The list of embedding dimensions, by default [10].
+    worker_num : int, optional
+        The number of workers for multiprocessing, by default 1.
+
+    Returns
+    -------
+    list
+        The result of the pretraining.
+    """
     all_autoencoders = list(
         product(AutoencoderType, [None], DatasetType, seeds, embedding_dims)
     )

@@ -63,13 +63,17 @@ def sample_cluster_tree(get_deep_ect_module=False):
     return tree
 
 
+def encode_requires_grad(batch: torch.Tensor):
+    batch.requires_grad = True
+    return batch
+
+
 def sample_cluster_tree_with_assignments():
     """
     Helper method for creating a sample cluster tree with assignments
     """
     # create mock-autoencoder, which represents just an identity function
-    encode = lambda x: x
-    autoencoder = type("Autoencoder", (), {"encode": encode})
+    autoencoder = type("Autoencoder", (), {"encode": encode_requires_grad})
 
     tree = sample_cluster_tree()
     minibatch = torch.tensor([[-3, -3], [10, 10], [-0.4, -0.4], [0.4, 0.3]])
@@ -321,7 +325,7 @@ def test_dc_loss():
     )
 
     # calculate dc loss of the tree
-    loss = tree.dc_loss(batch_size)
+    loss = tree.dc_loss()
 
     assert torch.all(torch.eq(loss, loss_manually))
 

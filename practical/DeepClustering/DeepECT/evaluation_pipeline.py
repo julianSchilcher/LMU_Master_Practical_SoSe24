@@ -4,6 +4,9 @@ import math
 import multiprocessing as mp
 import os
 import sys
+
+sys.path.append(os.getcwd())
+
 from enum import Enum
 from itertools import product
 from typing import List, Union
@@ -15,8 +18,7 @@ import torch
 from clustpy.data import load_fmnist, load_mnist, load_reuters, load_usps
 from clustpy.deep._utils import set_torch_seed
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
-from clustpy.deep.autoencoders._abstract_autoencoder import \
-    _AbstractAutoencoder
+from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
 from clustpy.deep.dec import IDEC
 from clustpy.metrics import unsupervised_clustering_accuracy
 from sklearn.cluster import KMeans
@@ -26,22 +28,26 @@ from sklearn.utils import Bunch
 from torch.utils.data import DataLoader, Dataset, TensorDataset
 from torchvision import transforms
 
-from practical.DeepClustering.DeepECT.autoencoders.StackedAutoencoder import \
-    DeepECTStackedAutoencoder
+from practical.DeepClustering.DeepECT.autoencoders.StackedAutoencoder import (
+    DeepECTStackedAutoencoder,
+)
 from practical.DeepClustering.DeepECT.baseline_hierachical.ae_plus import (
-    ae_bisecting, ae_complete, ae_single)
-from practical.DeepClustering.DeepECT.baseline_hierachical.idec_hierarchical_clustpy import \
-    run_idec_hierarchical
-from practical.DeepClustering.DeepECT.deepect_ours import \
-    DeepECT as DeepECTOurs
-from practical.DeepClustering.DeepECT.deepect_paper import \
-    DeepECT as DeepECTPaper
+    ae_bisecting,
+    ae_complete,
+    ae_single,
+)
+from practical.DeepClustering.DeepECT.baseline_hierachical.idec_hierarchical_clustpy import (
+    run_idec_hierarchical,
+)
+from practical.DeepClustering.DeepECT.deepect_ours import DeepECT as DeepECTOurs
+from practical.DeepClustering.DeepECT.deepect_paper import DeepECT as DeepECTPaper
 
 
 class DatasetType(Enum):
     """
     Enumeration for dataset types.
     """
+
     MNIST = "MNIST"
     FASHION_MNIST = "Fashion MNIST"
     USPS = "USPS"
@@ -52,6 +58,7 @@ class ClusteringMethod(Enum):
     """
     Enumeration for clustering methods.
     """
+
     DEEPECT_PAPER = "DeepECT (Paper)"
     DEEPECT_AUGMENTED_PAPER = "DeepECT + Augmentation (Paper)"
     DEEPECT_OURS = "DeepECT (Ours)"
@@ -69,6 +76,7 @@ class AutoencoderType(Enum):
     """
     Enumeration for autoencoder types.
     """
+
     CLUSTPY_STANDARD = "ClustPy FeedForward"
     DEEPECT_STACKED_AE = "Stacked AE from DeepECT"
 
@@ -279,6 +287,7 @@ class Original_Dataset(Dataset):
     __getitem__(idx):
         Returns the item at the given index.
     """
+
     def __init__(self, original_dataset):
         self.original_dataset = original_dataset
 
@@ -595,7 +604,7 @@ def fit(
                 random_state=np.random.RandomState(seed),
             )
             print(f"fitting {method.name}...")
-            deepect.fit_predict(data, labels)
+            deepect.fit_predict(data)
             autoencoder = deepect.autoencoder
             print(f"finished {method.name}...")
             # Calculate evaluation metrics
@@ -916,6 +925,7 @@ def get_custom_dataloader_augmentations(
         __getitem__(idx):
             Returns the item at the given index.
         """
+
         def __init__(self, original_dataset, augmentation_transform):
             self.original_dataset = original_dataset
             self.augmentation_transform = augmentation_transform

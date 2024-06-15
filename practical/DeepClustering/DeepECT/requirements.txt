@@ -1,0 +1,7 @@
+git+https://github.com/collinleiber/ClustPy.git
+pandas
+matplotlib
+scikit-learn
+networkx[default]
+torch
+umap-learn

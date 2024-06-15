@@ -4,8 +4,10 @@ import numpy as np
 import torch
 from sklearn.cluster import KMeans
 
-from practical.DeepClustering.DeepECT.metrics import (PredictionClusterNode,
-                                                      PredictionClusterTree)
+from practical.DeepClustering.DeepECT.metrics import (
+    PredictionClusterNode,
+    PredictionClusterTree,
+)
 
 
 class Cluster_Node:
@@ -206,6 +208,7 @@ class Cluster_Tree:
         int
             The total number of nodes.
         """
+
         def count_recursive(node: Cluster_Node):
             if node.is_leaf_node():
                 return 1
@@ -225,6 +228,7 @@ class Cluster_Tree:
         List[Cluster_Node]
             The list of all nodes.
         """
+
         def get_nodes_recursive(node: Cluster_Node):
             result = [node]
             if node.is_leaf_node():
@@ -245,6 +249,7 @@ class Cluster_Tree:
         List[Cluster_Node]
             The list of all leaf nodes.
         """
+
         def get_nodes_recursive(node: Cluster_Node):
             result = []
             if node.is_leaf_node():
@@ -261,44 +266,6 @@ class Cluster_Tree:
         Clears the assignments for all nodes in the tree.
         """
         self.root.clear_assignments()
-
-    def get_all_result_nodes(self, number_classes: int) -> List[Cluster_Node]:
-        """
-        Returns a list of all class node references for the given
-        number of classes. These nodes are the leaf nodes in the tree
-        cut for the given number of classes. The number of returned nodes
-        is equal to the given number of classes.
-
-        Parameters
-        ----------
-        number_classes : int
-            The number of clusters to obtain from the cluster tree.
-
-        Returns
-        -------
-        List[Cluster_Node]
-            References of all nodes representing the given number of clusters.
-        """
-        result_nodes = []
-        max_split_level = sorted(list(set([node.split_id for node in self.nodes])))[
-            number_classes - 1
-        ]
-
-        def get_nodes_at_split_level(node: Cluster_Node):
-            if (
-                node.is_leaf_node() or node.left_child.split_id > max_split_level
-            ) and node.split_id <= max_split_level:
-                result_nodes.append(node)
-                return
-            get_nodes_at_split_level(node.left_child)
-            get_nodes_at_split_level(node.right_child)
-
-        get_nodes_at_split_level(self.root)
-        # consistency check
-        assert (
-            len(result_nodes) == number_classes
-        ), "Number of cluster nodes doesn't correspond to number of classes"
-        return result_nodes
 
     def assign_to_nodes(
         self, minibatch_embedded: torch.Tensor, compute_sum_dist: bool = False
@@ -404,23 +371,19 @@ class Cluster_Tree:
         torch.Tensor
             The nc loss.
         """
-        leafnode_centers = [
-            node.center for node in self.leaf_nodes if node.assignments is not None
-        ]
-        if len(leafnode_centers) == 0:
+        leafnodes = [node for node in self.leaf_nodes if node.assignments is not None]
+        if len(leafnodes) == 0:
             return torch.tensor(
                 0.0, dtype=torch.float, device=self.leaf_nodes[0].device
             )
-        
+
         # reformat list of tensors to one single tensor of shape (#leafnodes, #emb_features)
-        leafnode_center_tensor = torch.stack(leafnode_centers, dim=0)
+        leafnode_center_tensor = torch.stack([node.center for node in leafnodes], dim=0)
 
         # calculate the center of the assignments from the current minibatch for each leaf node
         with torch.no_grad():  # embedded space should not be optimized in this loss
             leafnode_assignments = [
-                (node.assignments, node.assignment_indices)
-                for node in self.leaf_nodes
-                if node.assignments is not None
+                (node.assignments, node.assignment_indices) for node in leafnodes
             ]
 
             def calc_assignment_center(assignment):
@@ -442,16 +405,17 @@ class Cluster_Tree:
         )
 
         # calculate the distance between the current leaf node centers and the center of its assigned embeddings averaged over all leaf nodes
-        distance = torch.sum(
-            (leafnode_center_tensor - leafnode_minibatch_centers_tensor) ** 2, dim=1
-        )
-        distance = torch.sqrt(distance)
-        loss = torch.sum(distance) / len(leafnode_center_tensor)
+        dist = leafnode_center_tensor - leafnode_minibatch_centers_tensor
+        # distance = torch.sum(
+        #     (leafnode_center_tensor - leafnode_minibatch_centers_tensor) ** 2, dim=1
+        # )
+        # distance = torch.sqrt(distance)
+        # loss = torch.sum(distance) / len(leafnode_center_tensor)
+        normed_dist = torch.linalg.vector_norm(dist, dim=1)
+        loss = torch.sum(normed_dist) / len(leafnodes)
         return loss
 
-    def dc_loss(
-        self, batchsize: int, augmented_batch: torch.Tensor = None
-    ) -> torch.Tensor:
+    def dc_loss(self, encoded_augmented_batch: torch.Tensor = None) -> torch.Tensor:
         """
         Calculates the overall dc loss used for improving the embedded space for a better clustering result.
 
@@ -468,22 +432,19 @@ class Cluster_Tree:
             The dc loss.
         """
         sibling_losses = []  # storing losses for each node in the tree
-        self._calculate_sibling_loss(self.root, sibling_losses, augmented_batch)
-        number_nodes = self.number_nodes - 1  # exclude root node
-        # make sure that each node got a loss
-        assert number_nodes == len(sibling_losses)
+        self._calculate_sibling_loss(self.root, sibling_losses, encoded_augmented_batch)
 
         # transform list of losses for each node to a tensor
         sibling_losses = torch.stack(sibling_losses, dim=0)
         # calculate overall dc loss
-        loss = torch.sum(sibling_losses) / (number_nodes * batchsize)
+        loss = torch.mean(sibling_losses)
         return loss
 
     def _calculate_sibling_loss(
         self,
         root: Cluster_Node,
         sibling_loss: List[torch.Tensor],
-        augmented_batch: torch.Tensor,
+        encoded_augmented_batch: torch.Tensor,
     ):
         """
         Recursively calculates the dc loss for each node. The losses are stored in the given list <sibling_loss>.
@@ -501,23 +462,30 @@ class Cluster_Tree:
             return
 
         # Traverse the left subtree
-        self._calculate_sibling_loss(root.left_child, sibling_loss, augmented_batch)
+        self._calculate_sibling_loss(
+            root.left_child, sibling_loss, encoded_augmented_batch
+        )
 
         # Traverse the right subtree
-        self._calculate_sibling_loss(root.right_child, sibling_loss, augmented_batch)
+        self._calculate_sibling_loss(
+            root.right_child, sibling_loss, encoded_augmented_batch
+        )
 
         # Calculate dc loss for siblings if they exist
         if root.left_child and root.right_child:
             loss_left = self._single_sibling_loss(
-                root.left_child, root.right_child, augmented_batch
+                root.left_child, root.right_child, encoded_augmented_batch
             )
             loss_right = self._single_sibling_loss(
-                root.right_child, root.left_child, augmented_batch
+                root.right_child, root.left_child, encoded_augmented_batch
             )
-            sibling_loss.extend([loss_left, loss_right])
+            sibling_loss.extend([loss_left + loss_right])
 
     def _single_sibling_loss(
-        self, node: Cluster_Node, sibling: Cluster_Node, augmented_batch: torch.Tensor
+        self,
+        node: Cluster_Node,
+        sibling_node: Cluster_Node,
+        encoded_augmented_batch: torch.Tensor,
     ) -> torch.Tensor:
         """
         Calculates a single dc loss for the node <node> with respect to its sibling <sibling>.
@@ -538,31 +506,24 @@ class Cluster_Tree:
         """
         if node.assignments is None:
             return torch.tensor(0.0, dtype=torch.float, device=node.device)
-        # calculate direction (norm) vector between <node> and <sibling>
-        sibling_direction = (
-            node.center.detach() - sibling.center.detach()
-        ) / torch.sqrt(torch.sum((node.center.detach() - sibling.center.detach()) ** 2))
-        sibling_direction = sibling_direction[None]  # transform tensor from 1d to 2d
         # project each sample assigned to <node> in the direction of its sibling and sum up the absolute projection values for each sample
-        absolute_projections = torch.abs(
-            torch.matmul(
-                sibling_direction, -(node.assignments - node.center.detach()).T
-            )
+        # calculate projection direction
+        with torch.no_grad():
+            diff = node.center - sibling_node.center
+            projection_dir = (diff / torch.linalg.vector_norm(diff)).T.unsqueeze(0)
+        projected_diff = projection_dir * (
+            node.center.detach().unsqueeze(0) - node.assignments
         )
-        if augmented_batch is not None:
-            absolute_projections_aug = torch.abs(
-                torch.matmul(
-                    sibling_direction,
-                    -(
-                        augmented_batch[node.assignment_indices] - node.center.detach()
-                    ).T,
-                )
+        absolute_projections = torch.abs(projected_diff)
+        if encoded_augmented_batch is not None:
+            projected_augmented_diff = projection_dir * (
+                node.center.detach() - encoded_augmented_batch[node.assignment_indices]
             )
-            absolute_projections = torch.add(
-                absolute_projections, absolute_projections_aug
+            absolute_projections_aug = torch.abs(projected_augmented_diff)
+            return torch.mean(absolute_projections) + torch.mean(
+                absolute_projections_aug
             )
-        loss = torch.sum(absolute_projections)
-        return loss
+        return torch.mean(absolute_projections)
 
     def adapt_inner_nodes(self, root: Cluster_Node):
         """
@@ -632,6 +593,7 @@ class Cluster_Tree:
         bool
             Returns True if pruning occurred, otherwise False.
         """
+
         def prune_node(parent: Cluster_Node, child_attr: str):
             """
             Prunes a node from the tree by replacing it with its child or sibling node.
@@ -831,6 +793,7 @@ def transform_cluster_tree_to_pred_tree(tree: Cluster_Tree) -> PredictionCluster
     PredictionClusterTree
         The transformed prediction cluster tree.
     """
+
     def transform_nodes(node: Cluster_Node):
         pred_node = PredictionClusterNode(
             node.id, node.split_id, node.center.detach().cpu().numpy()

@@ -145,8 +145,7 @@ class _DeepECT_Module(torch.nn.Module):
                         )
                     )
                     dc_loss = self.cluster_tree.dc_loss(
-                        len(M),
-                        augmented_batch=(
+                        encoded_augmented_batch=(
                             embedded_aug if self.augmentation_invariance else None
                         ),
                     )
@@ -512,6 +511,7 @@ class DeepECT:
 
 if __name__ == "__main__":
     from clustpy.deep.autoencoders import FeedforwardAutoencoder
+
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     dataset, labels = load_mnist(return_X_y=True)
     autoencoder = (

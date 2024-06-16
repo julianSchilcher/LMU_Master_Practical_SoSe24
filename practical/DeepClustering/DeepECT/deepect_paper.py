@@ -12,25 +12,22 @@ import torch.utils
 import torch.utils.data
 from clustpy.data.real_torchvision_data import load_mnist
 from clustpy.deep._data_utils import augmentation_invariance_check
-from clustpy.deep._train_utils import get_standard_initial_deep_clustering_setting
+from clustpy.deep._train_utils import \
+    get_standard_initial_deep_clustering_setting
 from clustpy.deep._utils import set_torch_seed
-from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
+from clustpy.deep.autoencoders._abstract_autoencoder import \
+    _AbstractAutoencoder
 from sklearn.cluster import KMeans
 from tqdm import tqdm
 
-from practical.DeepClustering.DeepECT.metrics import (
-    PredictionClusterTree,
-)
+from practical.DeepClustering.DeepECT.metrics import PredictionClusterTree
 from practical.DeepClustering.DeepECT.utils import (
-    Cluster_Tree,
-    transform_cluster_tree_to_pred_tree,
-)
+    Cluster_Tree, transform_cluster_tree_to_pred_tree)
 
 
 class _DeepECT_Module(torch.nn.Module):
     """
     The _DeepECT_Module. Contains most of the algorithm specific procedures like the loss and tree-grow functions.
-
 
     Parameters
     ----------
@@ -78,21 +75,35 @@ class _DeepECT_Module(torch.nn.Module):
         device: Union[torch.device | str],
     ) -> "_DeepECT_Module":
         """
-            Trains the _DeepECT_Module in place.
+        Trains the _DeepECT_Module in place.
 
-            Parameters
-            ----------
-        os.
-                the optimizer for training
-            rec_loss_fn : torch.nn.modules.loss._Loss
-                loss function for the reconstruction
-            cluster_loss_weight : float
-                weight of the clustering loss compared to the reconstruction loss
+        Parameters
+        ----------
+        autoencoder : torch.nn.Module
+            The autoencoder used for training
+        trainloader : torch.utils.data.DataLoader
+            DataLoader for training data
+        testloader : torch.utils.data.DataLoader
+            DataLoader for testing data
+        max_iterations : int
+            Maximum number of iterations for training
+        pruning_threshold : float
+            Threshold for pruning the cluster tree
+        grow_interval : int
+            Interval for growing the cluster tree
+        max_leaf_nodes : int
+            Maximum number of leaf nodes in the cluster tree
+        optimizer : torch.optim.Optimizer
+            Optimizer for training
+        rec_loss_fn : torch.nn.modules.loss._Loss
+            Loss function for reconstruction
+        device : Union[torch.device, str]
+            Device for training (e.g., "cuda" or "cpu")
 
-            Returns
-            -------
-            self : _DeepECT_Module
-                this instance of the _DeepECT_Module
+        Returns
+        -------
+        self : _DeepECT_Module
+            This instance of the _DeepECT_Module
         """
         mov_dc_loss = 0.0
         mov_nc_loss = 0.0
@@ -198,21 +209,16 @@ class _DeepECT_Module(torch.nn.Module):
 
         Parameters
         ----------
-        number_classes : torch.Tensor
-            Number of clusters which should be identified
         dataloader : torch.utils.data.DataLoader
-            Contains the samples which should be predicted
+            DataLoader for the samples to be predicted
         autoencoder: torch.nn.Module
-            Used to calculate the embeddings
+            Autoencoder model for calculating the embeddings
 
         Returns
         -------
-        predictions_numpy : numpy.array
-            The predicted labels
-        centers: numpy.array
-            The centers of the <numb_classes> clusters
+        pred_tree : PredictionClusterTree
+            The prediction cluster tree with assigned samples
         """
-
         # get prediction tree
         pred_tree = transform_cluster_tree_to_pred_tree(self.cluster_tree)
 
@@ -256,41 +262,38 @@ def _deep_ect(
 
     Parameters
     ----------
-    X : np.ndarray / torch.Tensor
-        the given data set. Can be a np.ndarray or a torch.Tensor
+    X : np.ndarray
+        The given data set. Can be a np.ndarray or a torch.Tensor
     batch_size : int
-        size of the data batches
+        Size of the data batches
     pretrain_optimizer_params : dict
-        parameters of the optimizer for the pretraining of the autoencoder,
-        includes the learning rate
+        Parameters of the optimizer for the pretraining of the autoencoder, includes the learning rate
     clustering_optimizer_params : dict
-        parameters of the optimizer for the actual clustering procedure,
-        includes the learning rate
+        Parameters of the optimizer for the actual clustering procedure, includes the learning rate
     pretrain_epochs : int
-        number of epochs for the pretraining of the autoencoder
+        Number of epochs for the pretraining of the autoencoder
     max_iterations : int
-        number of iterations for the actual clustering procedure.
-    pruning_treshold : float
-        the treshold for pruning the tree
+        Number of iterations for the actual clustering procedure
+    pruning_threshold : float
+        The threshold for pruning the tree
+    grow_interval : int
+        Interval for growing the tree
     optimizer_class : torch.optim.Optimizer
-        the optimizer
+        The optimizer class
     rec_loss_fn : torch.nn.modules.loss._Loss
-        loss function for the reconstruction
+        Loss function for the reconstruction
     autoencoder : torch.nn.Module
-        the input autoencoder. If None a new FeedforwardAutoencoder will be
-        created
+        The input autoencoder
     embedding_size : int
-        size of the embedding within the autoencoder
+        Size of the embedding within the autoencoder
     custom_dataloaders : tuple
-        tuple consisting of a trainloader (random order) at the first and a
-        test loader (non-random order) at the second position.
-        If None, the default dataloaders will be used
+        Tuple consisting of a trainloader (random order) at the first and a test loader (non-random order) at the second position
     augmentation_invariance : bool
-        If True, augmented samples provided in custom_dataloaders[0] will be
-        used to learn cluster assignments that are invariant to the
-        augmentation transformations
+        If True, augmented samples provided in custom_dataloaders[0] will be used to learn cluster assignments that are invariant to the augmentation transformations
     random_state : np.random.RandomState
-        use a fixed random state to get a repeatable solution
+        Use a fixed random state to get a repeatable solution
+    autoencoder_save_param_path : str
+        Path to save the autoencoder parameters
 
     Returns
     -------
@@ -366,6 +369,53 @@ def _deep_ect(
 
 
 class DeepECT:
+    """
+    The Deep Embedded Cluster Tree (DeepECT) algorithm.
+    First, an autoencoder (AE) will be trained (will be skipped if input autoencoder is given).
+    Afterward, a cluster tree will be grown and the AE will be optimized using the DeepECT loss function.
+
+    Parameters
+    ----------
+    batch_size : int
+        Size of the data batches (default: 256)
+    pretrain_optimizer_params : dict
+        Parameters of the optimizer for the pretraining of the autoencoder, includes the learning rate (default: {"lr": 1e-3})
+    clustering_optimizer_params : dict
+        Parameters of the optimizer for the actual clustering procedure, includes the learning rate (default: {"lr": 1e-4})
+    pretrain_epochs : int
+        Number of epochs for the pretraining of the autoencoder (default: 50)
+    max_iterations : int
+        Number of iterations for the actual clustering procedure (default: 50000)
+    grow_interval : int
+        Interval for growing the tree (default: 500)
+    pruning_threshold : float
+        The threshold for pruning the tree (default: 0.1)
+    optimizer_class : torch.optim.Optimizer
+        The optimizer class (default: torch.optim.Adam)
+    rec_loss_fn : torch.nn.modules.loss._Loss
+        Loss function for the reconstruction (default: torch.nn.MSELoss())
+    autoencoder : torch.nn.Module
+        The input autoencoder. If None, a new FeedforwardAutoencoder will be created (default: None)
+    embedding_size : int
+        Size of the embedding within the autoencoder (default: 10)
+    max_leaf_nodes : int
+        Maximum number of leaf nodes in the cluster tree (default: 20)
+    custom_dataloaders : tuple
+        Tuple consisting of a trainloader (random order) at the first and a test loader (non-random order) at the second position. If None, the default dataloaders will be used (default: None)
+    augmentation_invariance : bool
+        If True, augmented samples provided in custom_dataloaders[0] will be used to learn cluster assignments that are invariant to the augmentation transformations (default: False)
+    random_state : np.random.RandomState
+        Use a fixed random state to get a repeatable solution. Can also be of type int (default: None)
+    autoencoder_param_path : str
+        Path to save the autoencoder parameters (default: None)
+
+    Attributes
+    ----------
+    tree_ : PredictionClusterTree
+        The prediction cluster tree after training
+    autoencoder : torch.nn.Module
+        The final autoencoder
+    """
 
     def __init__(
         self,
@@ -386,62 +436,6 @@ class DeepECT:
         random_state: np.random.RandomState = np.random.RandomState(42),
         autoencoder_param_path: str = None,
     ):
-        """
-        The Deep Embedded Cluster Tree (DeepECT) algorithm.
-        First, an autoencoder (AE) will be trained (will be skipped if
-        input autoencoder is given). Afterward, a cluter tree will be grown
-        and the AE will be optimized using the DeepECT loss function.
-
-        Parameters
-        ----------
-        standard: bool
-            choose autoencoder
-        batch_size : int
-            size of the data batches (default: 256)
-        pretrain_optimizer_params : dict
-            parameters of the optimizer for the pretraining of the autoencoder,
-            includes the learning rate (default: {"lr": 1e-3})
-        clustering_optimizer_params : dict
-            parameters of the optimizer for the actual clustering procedure,
-            includes the learning rate (default: {"lr": 1e-4})
-        pretrain_epochs : int
-            number of epochs for the pretraining of the autoencoder (default: 50)
-        max_iterations : int
-            number of iteratins for the actual clustering procedure (default: 50000)
-        optimizer_class : torch.optim.Optimizer
-            the optimizer class (default: torch.optim.Adam)
-        rec_loss_fn : torch.nn.modules.loss._Loss
-            loss function for the reconstruction (default: torch.nn.MSELoss())
-        autoencoder : torch.nn.Module
-            the input autoencoder. If None a new FeedforwardAutoencoder will be
-            created (default: None)
-        embedding_size : int
-            size of the embedding within the autoencoder (default: 10)
-        custom_dataloaders : tuple
-            tuple consisting of a trainloader (random order) at the first and
-            a test loader (non-random order) at the second position.
-            If None, the default dataloaders will be used (default: None)
-        augmentation_invariance : bool
-            If True, augmented samples provided in custom_dataloaders[0] will be
-            used to learn cluster assignments that are invariant to the
-            augmentation transformations (default: False)
-        random_state : np.random.RandomState
-            use a fixed random state to get a repeatable solution. Can also
-            be of type int (default: None)
-
-        Attributes
-        ----------
-        labels_ : np.ndarray
-            The final labels (obtained by a final KMeans execution)
-        cluster_centers_ : np.ndarray
-            The final cluster centers (obtained by a final KMeans execution)
-        DeepECT_labels_ : np.ndarray
-            The final DeepECT labels
-        DeepECT_cluster_centers_ : np.ndarray
-            The final DeepECT cluster centers
-        autoencoder : torch.nn.Module
-            The final autoencoder
-        """
         self.batch_size = batch_size
         self.pretrain_optimizer_params = (
             {"lr": 1e-3}
@@ -475,12 +469,12 @@ class DeepECT:
         Parameters
         ----------
         X : np.ndarray
-            the given data set as a 2d-array of shape (#samples, #features)
+            The given data set as a 2D-array of shape (#samples, #features)
 
         Returns
         -------
         self : DeepECT
-            this instance of the DeepECT algorithm
+            This instance of the DeepECT algorithm
         """
         augmentation_invariance_check(
             self.augmentation_invariance, self.custom_dataloaders

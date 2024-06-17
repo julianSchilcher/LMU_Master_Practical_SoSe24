@@ -12,17 +12,17 @@ import torch.utils
 import torch.utils.data
 from clustpy.data.real_torchvision_data import load_mnist
 from clustpy.deep._data_utils import augmentation_invariance_check
-from clustpy.deep._train_utils import \
-    get_standard_initial_deep_clustering_setting
+from clustpy.deep._train_utils import get_standard_initial_deep_clustering_setting
 from clustpy.deep._utils import set_torch_seed
-from clustpy.deep.autoencoders._abstract_autoencoder import \
-    _AbstractAutoencoder
+from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
 from sklearn.cluster import KMeans
 from tqdm import tqdm
 
 from practical.DeepClustering.DeepECT.metrics import PredictionClusterTree
 from practical.DeepClustering.DeepECT.utils import (
-    Cluster_Tree, transform_cluster_tree_to_pred_tree)
+    Cluster_Tree,
+    transform_cluster_tree_to_pred_tree,
+)
 
 
 class _DeepECT_Module(torch.nn.Module):
@@ -156,6 +156,7 @@ class _DeepECT_Module(torch.nn.Module):
                         )
                     )
                     dc_loss = self.cluster_tree.dc_loss(
+                        len(M),
                         encoded_augmented_batch=(
                             embedded_aug if self.augmentation_invariance else None
                         ),

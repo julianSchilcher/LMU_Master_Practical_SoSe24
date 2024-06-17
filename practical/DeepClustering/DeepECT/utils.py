@@ -1,8 +1,13 @@
-from typing import List, Union
+from typing import List, Tuple, Union
 
 import numpy as np
 import torch
 from sklearn.cluster import KMeans
+
+import os
+import sys
+
+sys.path.append(os.getcwd())
 
 from practical.DeepClustering.DeepECT.metrics import (
     PredictionClusterNode,
@@ -405,17 +410,15 @@ class Cluster_Tree:
         )
 
         # calculate the distance between the current leaf node centers and the center of its assigned embeddings averaged over all leaf nodes
-        dist = leafnode_center_tensor - leafnode_minibatch_centers_tensor
-        # distance = torch.sum(
-        #     (leafnode_center_tensor - leafnode_minibatch_centers_tensor) ** 2, dim=1
-        # )
-        # distance = torch.sqrt(distance)
-        # loss = torch.sum(distance) / len(leafnode_center_tensor)
-        normed_dist = torch.linalg.vector_norm(dist, dim=1)
-        loss = torch.sum(normed_dist) / len(leafnodes)
+        normed_dist = torch.linalg.vector_norm(
+            leafnode_center_tensor - leafnode_minibatch_centers_tensor, dim=1
+        )
+        loss = torch.sum(normed_dist) / len(self.leaf_nodes)
         return loss
 
-    def dc_loss(self, encoded_augmented_batch: torch.Tensor = None) -> torch.Tensor:
+    def dc_loss(
+        self, batch_size: int, encoded_augmented_batch: torch.Tensor = None
+    ) -> torch.Tensor:
         """
         Calculates the overall dc loss used for improving the embedded space for a better clustering result.
 
@@ -432,18 +435,33 @@ class Cluster_Tree:
             The dc loss.
         """
         sibling_losses = []  # storing losses for each node in the tree
-        self._calculate_sibling_loss(self.root, sibling_losses, encoded_augmented_batch)
+        sibling_aug_losses = []
+        self._calculate_sibling_loss(
+            self.root,
+            sibling_losses,
+            sibling_aug_losses,
+            encoded_augmented_batch,
+        )
 
         # transform list of losses for each node to a tensor
-        sibling_losses = torch.stack(sibling_losses, dim=0)
         # calculate overall dc loss
-        loss = torch.mean(sibling_losses)
+        if encoded_augmented_batch is None:
+            loss = (
+                torch.stack(sibling_losses, dim=0)
+                .sum()
+                .div(len(sibling_losses) * batch_size)
+            )
+        else:
+            loss = torch.stack(sibling_losses, dim=0).sum().div(
+                len(sibling_losses) * batch_size
+            ) + torch.stack(sibling_aug_losses, dim=0).sum().div(batch_size)
         return loss
 
     def _calculate_sibling_loss(
         self,
         root: Cluster_Node,
         sibling_loss: List[torch.Tensor],
+        sibling_aug_loss: List[torch.Tensor],
         encoded_augmented_batch: torch.Tensor,
     ):
         """
@@ -463,30 +481,38 @@ class Cluster_Tree:
 
         # Traverse the left subtree
         self._calculate_sibling_loss(
-            root.left_child, sibling_loss, encoded_augmented_batch
+            root.left_child,
+            sibling_loss,
+            sibling_aug_loss,
+            encoded_augmented_batch,
         )
 
         # Traverse the right subtree
         self._calculate_sibling_loss(
-            root.right_child, sibling_loss, encoded_augmented_batch
+            root.right_child,
+            sibling_loss,
+            sibling_aug_loss,
+            encoded_augmented_batch,
         )
 
         # Calculate dc loss for siblings if they exist
         if root.left_child and root.right_child:
-            loss_left = self._single_sibling_loss(
+            loss_left, loss_aug_left = self._single_sibling_loss(
                 root.left_child, root.right_child, encoded_augmented_batch
             )
-            loss_right = self._single_sibling_loss(
+            loss_right, loss_aug_right = self._single_sibling_loss(
                 root.right_child, root.left_child, encoded_augmented_batch
             )
-            sibling_loss.extend([loss_left + loss_right])
+            sibling_loss.extend([loss_left, loss_right])
+            if encoded_augmented_batch is not None:
+                sibling_aug_loss.extend([loss_aug_left, loss_aug_right])
 
     def _single_sibling_loss(
         self,
         node: Cluster_Node,
         sibling_node: Cluster_Node,
-        encoded_augmented_batch: torch.Tensor,
-    ) -> torch.Tensor:
+        encoded_augmented_batch: Union[torch.Tensor | None],
+    ) -> Tuple[torch.Tensor, Union[torch.Tensor, None]]:
         """
         Calculates a single dc loss for the node <node> with respect to its sibling <sibling>.
 
@@ -505,25 +531,28 @@ class Cluster_Tree:
             The dc loss for <node>.
         """
         if node.assignments is None:
-            return torch.tensor(0.0, dtype=torch.float, device=node.device)
-        # project each sample assigned to <node> in the direction of its sibling and sum up the absolute projection values for each sample
-        # calculate projection direction
+            if encoded_augmented_batch is None:
+                return torch.tensor(0.0, dtype=torch.float, device=node.device), None
+            else:
+                return torch.tensor(
+                    0.0, dtype=torch.float, device=node.device
+                ), torch.tensor(0.0, dtype=torch.float, device=node.device)
         with torch.no_grad():
+            # calculate projection direction
             diff = node.center - sibling_node.center
-            projection_dir = (diff / torch.linalg.vector_norm(diff)).T.unsqueeze(0)
-        projected_diff = projection_dir * (
-            node.center.detach().unsqueeze(0) - node.assignments
-        )
-        absolute_projections = torch.abs(projected_diff)
+            projection_dir = (diff / torch.linalg.vector_norm(diff)).unsqueeze(1)
+        # project each sample assigned to <node> in the direction of its sibling and sum up the absolute projection values for each sample
+        fixed_center_tensor = node.center.detach().unsqueeze(0).data
+        projected_diff = (fixed_center_tensor - node.assignments).matmul(projection_dir)
+        absolute_projections = torch.abs(projected_diff).sum(1)
+
         if encoded_augmented_batch is not None:
-            projected_augmented_diff = projection_dir * (
-                node.center.detach() - encoded_augmented_batch[node.assignment_indices]
-            )
-            absolute_projections_aug = torch.abs(projected_augmented_diff)
-            return torch.mean(absolute_projections) + torch.mean(
-                absolute_projections_aug
-            )
-        return torch.mean(absolute_projections)
+            projected_augmented_diff = (
+                fixed_center_tensor - encoded_augmented_batch[node.assignment_indices]
+            ).matmul(projection_dir)
+            absolute_projections_aug = torch.abs(projected_augmented_diff).sum(1)
+            return torch.sum(absolute_projections), torch.sum(absolute_projections_aug)
+        return torch.sum(absolute_projections), None
 
     def adapt_inner_nodes(self, root: Cluster_Node):
         """

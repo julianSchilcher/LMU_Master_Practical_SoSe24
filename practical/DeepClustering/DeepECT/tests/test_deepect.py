@@ -325,7 +325,7 @@ def test_dc_loss():
     )
 
     # calculate dc loss of the tree
-    loss = tree.dc_loss()
+    loss = tree.dc_loss(batch_size)
 
     assert torch.all(torch.eq(loss, loss_manually))
 

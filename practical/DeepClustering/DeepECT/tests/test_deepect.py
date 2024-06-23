@@ -1,5 +1,4 @@
-from practical.DeepClustering.DeepECT.deepect_paper import _DeepECT_Module
-from practical.DeepClustering.DeepECT.utils import Cluster_Node
+from practical.DeepClustering.DeepECT.deepect_ours import _DeepECT_Module, Cluster_Node
 import numpy as np
 import torch
 import torch.utils.data
@@ -44,6 +43,7 @@ def sample_cluster_tree(get_deep_ect_module=False):
     """
     deep_ect = _DeepECT_Module(
         np.array([[0, 0], [1, 1]]),
+        np.array([0, 1]),
         "cpu",
         random_state=np.random.RandomState(42),
     )

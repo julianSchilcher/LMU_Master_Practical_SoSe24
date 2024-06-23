@@ -1,0 +1,65 @@
+
+class Tree:
+	self.left: Node
+	self.right: Node
+	...
+
+class Node:
+	data: tensor of shape [N,M] or [N,] (store embedded data itself or just index of data ?)
+	projection_axis: index # stores the index of projection_axis which is stored in _HierarchicalDipModule
+	assigned_points_moving_average: float
+
+# initialise tree
+root.axis = initProjectionAxis(dataset/batch)
+root.left = new Node()
+root.right = new Node()
+
+for iteration in max_iterations:
+	
+	# prune tree if necessary (similar to deepect)
+	for node in tree:
+		if node.pruning_indicator < pruning_threshold:
+			replace node.parent with the sibling of node
+
+	# grow the tree
+	if iter % tree_grow_interval == 0 and iter != 0: 
+		assign_data_to_tree(embedd(dataset/batch))
+		max_dip = - inf
+		node_to_split = None
+		node_axis = None
+		for node in leaf nodes:
+			axis = initProjectionAxis(node.data)
+			dip = dip(node.data, axis)
+			if dip > max_dip and dip > unimodal_treshhold:
+				# do not set axis on node bec. we can find a better one (other nodes should stay leaf nodes)
+				max_dip = dip
+				node_axis = axis
+				node_to_split = node
+		if max_dip = -inf:
+			stop algorithm since every leafnode is unimodal
+		node_to_split.axis = node_axis
+		# initialise new leaf nodes
+		node_to_split.left = new Node() 
+		node_to_split.right = new Node()
+	
+	# improve embedded space
+	root.data = embedd(dataset/batch)
+	Loss = 0
+	def improve_node(n):
+		if n.axis = None: # aka leaf node
+			return
+		n.axis = adjust_axis(n) # not too big changes of axis, this would may result in instability -> Maybe do not change it at all since the embedded space mostly changes with respect to the axis
+		data_left_subcluster, data_right_subcluster = predict(n.data, n.axis)
+		L_uni = 1/2*(hierarchical_dip_module(data_left_subcluster, axis) + hierarchical_dip_module(data_right_subcluster, axis))
+		L_multi = - hierarchical_dip_module(n.data, axis)
+		L += lambda(n.split_level)*L_uni + L_multi # maybe weight uniform less at early splits to preserve subclusters
+		root.left.data = data_left_subcluster
+		root.left.set_pruning_indicator(len(data_left_subcluster)) # e.g. exponential moving average over number of assigned samples
+		root.right.data = data_right_subcluster
+		root.left.set_pruning_indicator(len(data_right_subcluster))
+		improve_node(n.left)
+		improve_node(n.right)
+	improve_node(root)
+	L = L/#inner_nodes + lambda*L_rec
+	L.optimize()
+	

@@ -10,3 +10,9 @@ Ideas:
     1. What is the dip value threshold that indicates a unimodal distribution?
 3. Scaling of autoencoder reconstruction loss
 4. Adjusting the projection axis: learning rate (0, 1e-8 to 1e-4)
+
+Hyperparameter Optimization:
+1. Use Nevergrad + Ray Tune 
+    1. TwoPointsDE + ScrHammerlySearch
+        1. Chaining?
+2. Setup Tensorflow Board logging

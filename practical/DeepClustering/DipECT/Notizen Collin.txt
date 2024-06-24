@@ -1,0 +1,17 @@
+
+idea: unimodality loss only for leaf nodes, so set the weight to Zero if it becomes an inner node
+
+Keep in mind: Gradient is weighted with dip value (see _DipGradient module in clustpy, Maybe for us not benefitable)
+
+try 95% as treshold for unimodality (use p-value for it)
+
+Augmentation in DipStyle: concatenation original & augmented for calc dip value (see DipEncoder)
+
+
+Vortrag 15 min DeepECT, 15 min DipECT 
+
+DeepECT nur sehr kurz über Hintergrund/Idee, welche Probleme hatten wir und wie haben wir sie gelöst, pro Person slide wie viel man beigetragen hat
+Bei dipECT mehr auf Hintergrund/Funktionsweise eingehen da selbst gemacht
+
+
+

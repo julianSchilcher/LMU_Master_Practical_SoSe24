@@ -516,7 +516,6 @@ class Cluster_Tree:
         self.assign_to_tree(torch.from_numpy(X_embedd))
 
         if consider_num_assignments_for_growing:
-            print("inside")
             total_assignments = sum([len(node.assignments) for node in self.leaf_nodes if node.assignments is not None])
         
         max_dip = - np.inf
@@ -601,11 +600,11 @@ class Cluster_Tree:
         projection_axis_optimizer.step()
     
     def _calc_unimodal_loss_weight(self, node: Cluster_Node, method: str):
-        
+        max_depth_balanced_tree = np.log2(self.max_leaf_nodes)
         if method == "linear":
-            return (1/self.max_leaf_nodes) * node.split_level
+            return (1/max_depth_balanced_tree) * node.split_level
         elif method == "exponential":
-            return np.exp2(node.split_level - self.max_leaf_nodes)
+            return np.exp2(node.split_level - max_depth_balanced_tree)
 
 
 
@@ -690,7 +689,7 @@ class _DipECT_Module(torch.nn.Module):
         autoencoder: torch.nn.Module,
         trainloader: torch.utils.data.DataLoader,
         testloader: torch.utils.data.DataLoader,
-        max_iterations: int,
+        max_epochs: int,
         pruning_threshold: float,
         grow_interval: int,
         consider_num_assignments_for_growing: bool,
@@ -740,19 +739,20 @@ class _DipECT_Module(torch.nn.Module):
         mov_rec_loss_aug = 0.0
         mov_loss = 0.0
 
-        with tqdm(
-            range(max_iterations), desc="Fit", total=max_iterations
-        ) as progress_bar:
-            while True:
-                for batch in trainloader:
-                    optimizer.zero_grad()
-                    if progress_bar.n > max_iterations:
-                        break
-                    if (
-                        progress_bar.n > 0 and progress_bar.n % grow_interval == 0
-                    ) or self.cluster_tree.number_nodes < 3:
+        
+        for epoch in range(max_epochs):
+
+            with tqdm(trainloader, unit="batch") as tepoch:
+
+                if (epoch > 0 and epoch % grow_interval == 0) or self.cluster_tree.number_nodes < 3:
                         if len(self.cluster_tree.leaf_nodes) < max_leaf_nodes:
                             self.cluster_tree.grow_tree(testloader, autoencoder, projection_axis_optimizer, unimodal_treshhold, consider_num_assignments_for_growing)
+
+                for batch in tepoch:
+                    
+                    tepoch.set_description(f"Epoch {epoch}/{max_epochs}")
+
+                    optimizer.zero_grad()
 
                     if self.augmentation_invariance:
                         idxs, M, M_aug = batch
@@ -777,7 +777,7 @@ class _DipECT_Module(torch.nn.Module):
                     #     cluster_loss = torch.tensor([0.0], dtype=torch.float, device=device)
 
                     if reconstruction_loss_weight is None:
-                        reconstruction_loss_weight = 1 / (1* rec_loss.detach()) # /(4* rec_loss.detach())
+                        reconstruction_loss_weight = 1 / rec_loss.detach() # /(4* rec_loss.detach())
 
                     if self.augmentation_invariance:
                         # loss = cluster_loss + rec_loss + rec_loss_aug
@@ -790,23 +790,19 @@ class _DipECT_Module(torch.nn.Module):
                     mov_rec_loss += rec_loss.item()
                     mov_loss += loss.item()
 
-                    if (
-                        progress_bar.n <= 10 or progress_bar.n % 100 == 0
-                    ) and progress_bar.n > 0:
-                        logging.info(
-                            f"{progress_bar.n} - moving averages: rec_loss: {mov_rec_loss/progress_bar.n} "
-                            f"{f'rec_loss_aug: {mov_rec_loss_aug/progress_bar.n}' if self.augmentation_invariance else ''} "
-                            f"total_loss: {mov_loss/progress_bar.n}"
-                        )
 
                     loss.backward()
                     optimizer.step()
-                    progress_bar.update()
+                
 
-                    assert (self.cluster_tree.number_nodes - len(self.cluster_tree.leaf_nodes)) == len(projection_axis_optimizer.param_groups)
-                else:
-                    continue
-                break
+            # logging.info(
+            #     f"{epoch} - moving averages: rec_loss: {mov_rec_loss/progress_bar.n} "
+            #     f"{f'rec_loss_aug: {mov_rec_loss_aug/progress_bar.n}' if self.augmentation_invariance else ''} "
+            #     f"total_loss: {mov_loss/progress_bar.n}"
+            # )
+            
+            assert (self.cluster_tree.number_nodes - len(self.cluster_tree.leaf_nodes)) == len(projection_axis_optimizer.param_groups)
+
         return self
 
     def predict(
@@ -855,7 +851,7 @@ def _dipect(
     clustering_optimizer_params: dict,
     projection_axis_optimizer_params: dict,
     pretrain_epochs: int,
-    max_iterations: int,
+    max_epochs: int,
     pruning_threshold: float,
     grow_interval: int,
     consider_num_assignments_for_growing: bool,
@@ -990,7 +986,7 @@ def _dipect(
         autoencoder.to(device),
         trainloader,
         testloader,
-        max_iterations,
+        max_epochs,
         pruning_threshold,
         grow_interval,
         consider_num_assignments_for_growing,
@@ -1067,8 +1063,8 @@ class DipECT:
         clustering_optimizer_params: dict = None,
         projection_axis_optimizer_params: dict = None,
         pretrain_epochs: int = 50,
-        max_iterations: int = 40000,
-        grow_interval: int = 500,
+        max_epochs: int = 30,
+        grow_interval: int = 2,
         consider_num_assignments_for_growing: bool = False,
         pruning_threshold: float = 0.1,
         optimizer_class: torch.optim.Optimizer = torch.optim.Adam,
@@ -1101,7 +1097,7 @@ class DipECT:
             else projection_axis_optimizer_params
         )
         self.pretrain_epochs = pretrain_epochs
-        self.max_iterations = max_iterations
+        self.max_epochs = max_epochs
         self.grow_interval = grow_interval
         self.consider_num_assignments_for_growing = consider_num_assignments_for_growing
         self.pruning_threshold = pruning_threshold
@@ -1143,7 +1139,7 @@ class DipECT:
             self.clustering_optimizer_params,
             self.projection_axis_optimizer_params,
             self.pretrain_epochs,
-            self.max_iterations,
+            self.max_epochs,
             self.pruning_threshold,
             self.grow_interval,
             self.consider_num_assignments_for_growing,

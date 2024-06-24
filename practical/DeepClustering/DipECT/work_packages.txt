@@ -1,0 +1,18 @@
+1. Hyperparameter Optimization (Robin)
+2. Pruning (Niklas)
+3. Growing the tree / losses (Julian)
+
+
+Ideas:
+1. Scaling of Unimodal loss for higher split_nodes above leaf nodes (setting to 0, divide by level in tree (height), no scaling)
+    1. How do we deal with a node, that has a leaf node on one side + a split node on the other side? (setting to zero)
+2. Growing the tree
+    1. What is the dip value threshold that indicates a unimodal distribution?
+3. Scaling of autoencoder reconstruction loss
+4. Adjusting the projection axis: learning rate (0, 1e-8 to 1e-4)
+
+Hyperparameter Optimization:
+1. Use Nevergrad + Ray Tune 
+    1. TwoPointsDE + ScrHammerlySearch
+        1. Chaining?
+2. Setup Tensorflow Board logging

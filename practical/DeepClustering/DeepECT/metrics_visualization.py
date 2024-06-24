@@ -14,7 +14,7 @@ from practical.DeepClustering.DeepECT.evaluation_pipeline import (
     DatasetType,
     calculate_flat_mean_for_multiple_seeds,
     calculate_hierarchical_mean_for_multiple_seeds,
-    evaluate_multiple_seeds,
+    load_precomputed_results,
     pretraining,
 )
 
@@ -389,12 +389,12 @@ def visualize_peformance_AE(
 def load_results():
     seeds = [21, 42]
     # MNIST
-    mnist_multiple_seeds_clustpy_ae = evaluate_multiple_seeds(
+    mnist_multiple_seeds_clustpy_ae = load_precomputed_results(
         autoencoder_type=AutoencoderType.CLUSTPY_STANDARD,
         dataset_type=DatasetType.MNIST,
         seeds=seeds,
     )
-    mnist_multiple_seeds_stacked_ae = evaluate_multiple_seeds(
+    mnist_multiple_seeds_stacked_ae = load_precomputed_results(
         autoencoder_type=AutoencoderType.DEEPECT_STACKED_AE,
         dataset_type=DatasetType.MNIST,
         seeds=seeds,
@@ -414,13 +414,13 @@ def load_results():
     )
 
     # USPS
-    usps_multiple_seeds_clustpy_ae = evaluate_multiple_seeds(
+    usps_multiple_seeds_clustpy_ae = load_precomputed_results(
         autoencoder_type=AutoencoderType.CLUSTPY_STANDARD,
         dataset_type=DatasetType.USPS,
         seeds=seeds,
     )
 
-    usps_multiple_seeds_stacked_ae = evaluate_multiple_seeds(
+    usps_multiple_seeds_stacked_ae = load_precomputed_results(
         autoencoder_type=AutoencoderType.DEEPECT_STACKED_AE,
         dataset_type=DatasetType.USPS,
         seeds=seeds,
@@ -440,13 +440,13 @@ def load_results():
     )
 
     # FashionMNIST
-    fashion_multiple_seeds_clustpy_ae = evaluate_multiple_seeds(
+    fashion_multiple_seeds_clustpy_ae = load_precomputed_results(
         autoencoder_type=AutoencoderType.CLUSTPY_STANDARD,
         dataset_type=DatasetType.FASHION_MNIST,
         seeds=seeds,
     )
 
-    fashion_multiple_seeds_stacked_ae = evaluate_multiple_seeds(
+    fashion_multiple_seeds_stacked_ae = load_precomputed_results(
         autoencoder_type=AutoencoderType.DEEPECT_STACKED_AE,
         dataset_type=DatasetType.FASHION_MNIST,
         seeds=seeds,
@@ -466,13 +466,13 @@ def load_results():
     )
 
     # Reuters
-    reuters_multiple_seeds_clustpy_ae = evaluate_multiple_seeds(
+    reuters_multiple_seeds_clustpy_ae = load_precomputed_results(
         autoencoder_type=AutoencoderType.CLUSTPY_STANDARD,
         dataset_type=DatasetType.REUTERS,
         seeds=seeds,
     )
 
-    reuters_multiple_seeds_stacked_ae = evaluate_multiple_seeds(
+    reuters_multiple_seeds_stacked_ae = load_precomputed_results(
         autoencoder_type=AutoencoderType.DEEPECT_STACKED_AE,
         dataset_type=DatasetType.REUTERS,
         seeds=seeds,

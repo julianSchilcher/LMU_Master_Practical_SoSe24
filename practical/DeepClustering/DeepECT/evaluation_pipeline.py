@@ -4,6 +4,7 @@ import math
 import multiprocessing as mp
 import os
 import sys
+import pathlib
 
 sys.path.append(os.getcwd())
 
@@ -161,7 +162,7 @@ def get_max_epoch_size(data, max_iterations, batch_size):
 
 def pretraining(
     autoencoder_type: AutoencoderType,
-    autoencoder_params_path: str,
+    autoencoder_params_path: pathlib.Path,
     dataset: Bunch,
     seed: int,
     embedding_dim: int,
@@ -192,12 +193,12 @@ def pretraining(
 
     data = torch.tensor(dataset["data"], dtype=torch.float32)
 
-    if not os.path.exists(autoencoder_params_path):
+    if not autoencoder_params_path.exists():
         os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
         torch.use_deterministic_algorithms(mode=True)
         # logging config
         logging.root.handlers = []
-        log_path = f"practical/DeepClustering/DeepECT/pretrained_autoencoders_log/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{seed}.txt"
+        log_path = pathlib.Path(f"practical/DeepClustering/DeepECT/pretrained_autoencoders_log/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{seed}.txt")
         logging.basicConfig(
             level=logging.INFO,
             handlers=[
@@ -350,6 +351,12 @@ def fit(
 
     results = []
     for method in ClusteringMethod:
+        # Save path
+        result_path = pathlib.Path(f"practical/DeepClustering/DeepECT/results/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.pq")
+        if os.path.exists(result_path):
+            results.append(pd.read_parquet(result_path))
+            continue
+
         if method == ClusteringMethod.IDEC_SINGLE or (
             method == ClusteringMethod.AE_COMPLETE and not can_use_workers
         ):
@@ -375,17 +382,13 @@ def fit(
                 prefetch_factor=200 if can_use_workers else None,
             ),
         )
-        # Save path
-        result_path = f"practical/DeepClustering/DeepECT/results/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.pq"
-        if os.path.exists(result_path):
-            results.append(pd.read_parquet(result_path))
-            continue
+        
         # autoencoder save path
-        autoencoder_save_path = f"practical/DeepClustering/DeepECT/results_autoencoder/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.pth"
+        autoencoder_save_path = pathlib.Path(f"practical/DeepClustering/DeepECT/results_autoencoder/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.pth")
 
         # logging config
         logging.root.handlers = []
-        log_path = f"practical/DeepClustering/DeepECT/results_log/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.txt"
+        log_path = pathlib.Path(f"practical/DeepClustering/DeepECT/results_log/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.txt")
         logging.basicConfig(
             level=logging.INFO,
             handlers=[
@@ -1004,7 +1007,7 @@ def get_autoencoder_path(
     dataset: Bunch,
     embedding_dim: int,
     seed: int,
-):
+) -> pathlib.Path:
     """
     Get the path to the autoencoder parameters.
 
@@ -1030,13 +1033,16 @@ def get_autoencoder_path(
         autoencoder_params_path is None
         and autoencoder_type == AutoencoderType.CLUSTPY_STANDARD
     ):
-        autoencoder_params_path = f"practical/DeepClustering/DeepECT/pretrained_autoencoders/{dataset['dataset_name']}_autoencoder_{embedding_dim}_pretrained_{seed}.pth"
+        params_path = pathlib.Path(f"practical/DeepClustering/DeepECT/pretrained_autoencoders/{dataset['dataset_name']}_autoencoder_{embedding_dim}_pretrained_{seed}.pth")
     elif (
         autoencoder_params_path is None
         and autoencoder_type == AutoencoderType.DEEPECT_STACKED_AE
     ):
-        autoencoder_params_path = f"practical/DeepClustering/DeepECT/pretrained_autoencoders/{dataset['dataset_name']}_stacked_ae_{embedding_dim}_pretrained_{seed}.pth"
-    return autoencoder_params_path
+        params_path = pathlib.Path(f"practical/DeepClustering/DeepECT/pretrained_autoencoders/{dataset['dataset_name']}_stacked_ae_{embedding_dim}_pretrained_{seed}.pth")
+    
+    else: 
+        params_path = pathlib.Path(autoencoder_params_path)
+    return params_path.resolve()
 
 
 # Example usage
@@ -1270,6 +1276,17 @@ def pretrain_for_multiple_seeds(seeds: List[int], embedding_dims=[10], worker_nu
     with mp.Pool(processes=worker_num) as pool:
         result = pool.starmap(pretraining_with_data_load, all_autoencoders)
     return result
+
+def load_precomputed_results(dataset_type: DatasetType, autoencoder_type: AutoencoderType, seeds: List[int], embedding_dims: List[int] = [10]):
+    results = []
+    dataset = get_dataset(dataset_type)
+    for method, seed, embedding_dim in product(ClusteringMethod, seeds, embedding_dims):
+        # Save path
+        result_path = pathlib.Path(f"practical/DeepClustering/DeepECT/results/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.pq")
+        if os.path.exists(result_path):
+            results.append(pd.read_parquet(result_path))
+            continue
+    return pd.concat(results, axis=0, ignore_index=True)
 
 
 if __name__ == "__main__":

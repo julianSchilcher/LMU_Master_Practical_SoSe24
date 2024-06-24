@@ -13,7 +13,7 @@ from clustpy.deep._data_utils import get_dataloader, augmentation_invariance_che
 from clustpy.deep._utils import detect_device, encode_batchwise, set_torch_seed
 from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
 from clustpy.deep._train_utils import get_trained_autoencoder
-from clustpy.utils import dip_test
+from clustpy.utils import dip_test, dip_pval
 from sklearn.cluster import KMeans
 
 from practical.DeepClustering.DeepECT.metrics import (PredictionClusterTree,PredictionClusterNode)
@@ -204,6 +204,7 @@ class Cluster_Tree:
         autoencoder: torch.nn.Module,
         projection_axis_optimizer: torch.optim.Optimizer,
         device: torch.device,
+        max_leaf_nodes: int
     ) -> "Cluster_Tree":
         """
         Constructor for the Cluster_Tree class.
@@ -218,6 +219,7 @@ class Cluster_Tree:
         """
         # initialise cluster tree
         self.device = device
+        self.max_leaf_nodes = max_leaf_nodes
         self.root = Cluster_Node(device)
         embedded_data = encode_batchwise(trainloader, autoencoder, self.device)
         axis, number_left_assignments, number_right_assignments = self.get_inital_projection_axis(embedded_data)
@@ -296,12 +298,8 @@ class Cluster_Tree:
         kmeans_centers = kmeans.cluster_centers_
         labels = kmeans.labels_
         axis = kmeans_centers[1] - kmeans_centers[0]
-        # identify which cluster is better alligned with the projection axis, i.e. which has the higher projection score to return the initial assignment size correctly
-        projections = embedded_data @ axis.reshape(-1,1)
-        projections_0_mean = np.mean(projections[labels==0])
-        projections_1_mean = np.mean(projections[labels==1])
-        higher_projection_cluster = 1 if projections_1_mean > projections_0_mean else 0
-        return kmeans_centers[0] - kmeans_centers[1], np.sum(labels == (higher_projection_cluster ^ 1)), np.sum(labels == higher_projection_cluster)
+        # higher projection by cluster 1 since axis points to cluster 1
+        return kmeans_centers[0] - kmeans_centers[1], np.sum(labels == 0), np.sum(labels == 1)
     
 
     def clear_node_assignments(self):
@@ -480,7 +478,8 @@ class Cluster_Tree:
         dataloader: torch.utils.data.DataLoader,
         autoencoder: torch.nn.Module,
         projection_axis_optimizer: torch.optim.Optimizer,
-        unimodal_treshhold: float
+        unimodal_treshhold: float,
+        consider_num_assignments_for_growing: bool = False,
     ) -> bool:
         """
         Grows the tree at the leaf node with the highest squared distance
@@ -516,24 +515,42 @@ class Cluster_Tree:
         X_embedd = encode_batchwise(dataloader, autoencoder, self.device)
         self.assign_to_tree(torch.from_numpy(X_embedd))
 
+        if consider_num_assignments_for_growing:
+            print("inside")
+            total_assignments = sum([len(node.assignments) for node in self.leaf_nodes if node.assignments is not None])
+        
         max_dip = - np.inf
         best_node_to_split = None
         best_node_axis = None
         best_node_number_assign_lower_projection_cluster = None
         best_node_number_assign_higher_projection_cluster = None
         for node in self.leaf_nodes:
+            if node.assignments is None:
+                continue
             node_data = node.assignments.numpy()
             if len(node_data) < 2:
                 continue
+            print("#assignments: ", len(node.assignments))
             axis, number_assign_lower_projection_cluster, number_assign_higher_projection_cluster = self.get_inital_projection_axis(node_data)
             projections = np.matmul(node_data, axis)
             dip_value = dip_test(projections, just_dip=True, is_data_sorted=False)
-            if dip_value > max_dip and dip_value > unimodal_treshhold:
-                max_dip = dip_value
+            pvalue = dip_pval(dip_value, len(node.assignments))
+            # großerdip wert, kleiner p wert -> Wahrsch. für unimodalität
+
+            # the more samples, the smaller the dip value, consider this:
+            if consider_num_assignments_for_growing:
+                criteria = dip_value + 0.5*len(node.assignments)/(4*total_assignments)
+            else:
+                criteria = dip_value
+
+            if criteria > max_dip and dip_value > unimodal_treshhold: # pwert hier
+                max_dip = criteria
                 best_node_axis = axis
                 best_node_to_split = node
                 best_node_number_assign_lower_projection_cluster = number_assign_lower_projection_cluster
                 best_node_number_assign_higher_projection_cluster = number_assign_higher_projection_cluster
+        
+        print("#assignments best node: ", len(best_node_to_split.assignments))
         if max_dip == -np.inf:
             return True # stop algorithm
         else:
@@ -541,12 +558,12 @@ class Cluster_Tree:
             best_node_to_split.expand_tree(best_node_axis, projection_axis_optimizer, best_node_number_assign_higher_projection_cluster, best_node_number_assign_lower_projection_cluster, max([leaf.id for leaf in self.leaf_nodes]), max([node.split_id for node in self.nodes]))
             return False
     
-    def improve_space(self, embedded_data: torch.Tensor, projection_axis_optimizer: torch.optim.Optimizer):
+    def improve_space(self, embedded_data: torch.Tensor, projection_axis_optimizer: torch.optim.Optimizer, unimodal_loss_increase_method: str):
         self.assign_to_tree(embedded_data, set_pruning_incidator=True)
-        loss = self._improve_space_recursive(self.root, projection_axis_optimizer, 0)
+        loss = self._improve_space_recursive(self.root, projection_axis_optimizer, 0, unimodal_loss_increase_method)
         return loss
 
-    def _improve_space_recursive(self, node: Cluster_Node, projection_axis_optimizer: torch.optim.Optimizer, loss: torch.Tensor):
+    def _improve_space_recursive(self, node: Cluster_Node, projection_axis_optimizer: torch.optim.Optimizer, loss: torch.Tensor, unimodal_loss_increase_method: str):
         if node.is_leaf_node():
             return loss
 
@@ -558,16 +575,17 @@ class Cluster_Tree:
         lower_projection_child_improvement = node.lower_projection_child.assignments is not None and node.lower_projection_child.assignments.numel() > 1
 
         if higher_projection_child_improvement and lower_projection_child_improvement:
+            unimodal_loss_weight = self._calc_unimodal_loss_weight(node, unimodal_loss_increase_method)
             L_unimodal = (_Dip_Gradient.apply(node.higher_projection_child.assignments, axis) + _Dip_Gradient.apply(node.lower_projection_child.assignments, axis))/2
             L_multimodal = _Dip_Gradient.apply(node.assignments, axis)
-            loss = loss + L_unimodal - L_multimodal
+            loss = loss + unimodal_loss_weight*L_unimodal - L_multimodal
         
         if higher_projection_child_improvement:
-            loss_higher_projection_child = self._improve_space_recursive(node.higher_projection_child, projection_axis_optimizer, loss)
+            loss_higher_projection_child = self._improve_space_recursive(node.higher_projection_child, projection_axis_optimizer, loss, unimodal_loss_increase_method)
         else:
             loss_higher_projection_child = 0
         if lower_projection_child_improvement:
-            loss_lower_projection_child = self._improve_space_recursive(node.lower_projection_child, projection_axis_optimizer, loss)
+            loss_lower_projection_child = self._improve_space_recursive(node.lower_projection_child, projection_axis_optimizer, loss, unimodal_loss_increase_method)
         else:
             loss_lower_projection_child = 0
 
@@ -578,9 +596,16 @@ class Cluster_Tree:
         projection_axis_optimizer.zero_grad()
         # data gradients should not be stored
         data = node.assignments.detach().clone()
-        dip_value = _Dip_Gradient.apply(data, node.projection_axis)
-        dip_value.backward()
+        loss = -_Dip_Gradient.apply(data, node.projection_axis)
+        loss.backward()
         projection_axis_optimizer.step()
+    
+    def _calc_unimodal_loss_weight(self, node: Cluster_Node, method: str):
+        
+        if method == "linear":
+            return (1/self.max_leaf_nodes) * node.split_level
+        elif method == "exponential":
+            return np.exp2(node.split_level - self.max_leaf_nodes)
 
 
 
@@ -642,6 +667,7 @@ class _DipECT_Module(torch.nn.Module):
         projection_axis_optimizer: torch.optim.Optimizer,
         device: torch.device,
         random_state: np.random.RandomState,
+        max_leaf_nodes: int,
         augmentation_invariance: bool = False,
     ):
         super().__init__()
@@ -655,7 +681,8 @@ class _DipECT_Module(torch.nn.Module):
             trainloader,
             autoencoder,
             projection_axis_optimizer,
-            device
+            device,
+            max_leaf_nodes
         )
 
     def fit(
@@ -666,6 +693,8 @@ class _DipECT_Module(torch.nn.Module):
         max_iterations: int,
         pruning_threshold: float,
         grow_interval: int,
+        consider_num_assignments_for_growing: bool,
+        unimodal_loss_increase_method: str,
         max_leaf_nodes: int,
         reconstruction_loss_weight: float,
         unimodal_treshhold: float,
@@ -723,7 +752,7 @@ class _DipECT_Module(torch.nn.Module):
                         progress_bar.n > 0 and progress_bar.n % grow_interval == 0
                     ) or self.cluster_tree.number_nodes < 3:
                         if len(self.cluster_tree.leaf_nodes) < max_leaf_nodes:
-                            self.cluster_tree.grow_tree(testloader, autoencoder, projection_axis_optimizer, unimodal_treshhold)
+                            self.cluster_tree.grow_tree(testloader, autoencoder, projection_axis_optimizer, unimodal_treshhold, consider_num_assignments_for_growing)
 
                     if self.augmentation_invariance:
                         idxs, M, M_aug = batch
@@ -740,7 +769,7 @@ class _DipECT_Module(torch.nn.Module):
                     #     )
 
                     # calculate cluster loss
-                    cluster_loss = self.cluster_tree.improve_space(embedded, projection_axis_optimizer)
+                    cluster_loss = self.cluster_tree.improve_space(embedded, projection_axis_optimizer, unimodal_loss_increase_method)
 
                     self.cluster_tree.clear_node_assignments()
 
@@ -764,8 +793,6 @@ class _DipECT_Module(torch.nn.Module):
                     if (
                         progress_bar.n <= 10 or progress_bar.n % 100 == 0
                     ) and progress_bar.n > 0:
-                        print(mov_loss/progress_bar.n)
-                        print(cluster_loss.item())
                         logging.info(
                             f"{progress_bar.n} - moving averages: rec_loss: {mov_rec_loss/progress_bar.n} "
                             f"{f'rec_loss_aug: {mov_rec_loss_aug/progress_bar.n}' if self.augmentation_invariance else ''} "
@@ -831,10 +858,12 @@ def _dipect(
     max_iterations: int,
     pruning_threshold: float,
     grow_interval: int,
+    consider_num_assignments_for_growing: bool,
     optimizer_class: torch.optim.Optimizer,
     rec_loss_fn: torch.nn.modules.loss._Loss,
     autoencoder: _AbstractAutoencoder,
     embedding_size: int,
+    unimodal_loss_increase_method: str,
     max_leaf_nodes: int,
     reconstruction_loss_weight: float,
     unimodal_treshhold: float,
@@ -952,6 +981,7 @@ def _dipect(
         projection_axis_optimizer,
         device,
         random_state,
+        max_leaf_nodes,
         augmentation_invariance,
     ).to(device)
 
@@ -963,6 +993,8 @@ def _dipect(
         max_iterations,
         pruning_threshold,
         grow_interval,
+        consider_num_assignments_for_growing,
+        unimodal_loss_increase_method, 
         max_leaf_nodes,
         reconstruction_loss_weight,
         unimodal_treshhold,
@@ -1037,11 +1069,13 @@ class DipECT:
         pretrain_epochs: int = 50,
         max_iterations: int = 40000,
         grow_interval: int = 500,
+        consider_num_assignments_for_growing: bool = False,
         pruning_threshold: float = 0.1,
         optimizer_class: torch.optim.Optimizer = torch.optim.Adam,
         rec_loss_fn: torch.nn.modules.loss._Loss = torch.nn.MSELoss(),
         autoencoder: _AbstractAutoencoder = None,
         embedding_size: int = 10,
+        unimodal_loss_increase_method: str = "linear",
         max_leaf_nodes: int = 20,
         reconstruction_loss_weight: float = None,
         unimodal_treshhold: float = 0.0,
@@ -1069,11 +1103,13 @@ class DipECT:
         self.pretrain_epochs = pretrain_epochs
         self.max_iterations = max_iterations
         self.grow_interval = grow_interval
+        self.consider_num_assignments_for_growing = consider_num_assignments_for_growing
         self.pruning_threshold = pruning_threshold
         self.optimizer_class = optimizer_class
         self.rec_loss_fn = rec_loss_fn
         self.autoencoder = autoencoder
         self.embedding_size = embedding_size
+        self.unimodal_loss_increase_method = unimodal_loss_increase_method
         self.custom_dataloaders = custom_dataloaders
         self.augmentation_invariance = augmentation_invariance
         self.max_leaf_nodes = max_leaf_nodes
@@ -1110,10 +1146,12 @@ class DipECT:
             self.max_iterations,
             self.pruning_threshold,
             self.grow_interval,
+            self.consider_num_assignments_for_growing,
             self.optimizer_class,
             self.rec_loss_fn,
             self.autoencoder,
             self.embedding_size,
+            self.unimodal_loss_increase_method,
             self.max_leaf_nodes,
             self.reconstruction_loss_weight,
             self.unimodal_treshhold,

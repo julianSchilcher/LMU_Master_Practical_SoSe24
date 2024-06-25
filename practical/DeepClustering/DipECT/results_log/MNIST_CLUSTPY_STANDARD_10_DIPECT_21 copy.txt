@@ -1,0 +1,6 @@
+INFO:root:epoch: 1 - moving averages: mov_rec_loss: 114.76096665859222 mov_loss: 18.61392456293106  total_loss: 18.61392456293106
+INFO:root:epoch: 2 - moving averages: mov_rec_loss: 95.22792437672615 mov_loss: -2.076994240283966  total_loss: -2.076994240283966
+INFO:root:epoch: 3 - moving averages: mov_rec_loss: 89.37304519613583 mov_loss: -42.03945063551267  total_loss: -42.03945063551267
+INFO:root:epoch: 4 - moving averages: mov_rec_loss: 86.37806329131126 mov_loss: -68.73139840364456  total_loss: -68.73139840364456
+INFO:root:epoch: 5 - moving averages: mov_rec_loss: 85.51916595101356 mov_loss: -104.34885783195496  total_loss: -104.34885783195496
+INFO:root:epoch: 6 - moving averages: mov_rec_loss: 85.16193610429764 mov_loss: -132.73297052582106  total_loss: -132.73297052582106

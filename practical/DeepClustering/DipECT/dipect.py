@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 
@@ -703,6 +704,7 @@ class _DipECT_Module(torch.nn.Module):
         projection_axis_optimizer: torch.optim.Optimizer,
         rec_loss_fn: torch.nn.modules.loss._Loss,
         device: Union[torch.device | str],
+        logging_active: bool,
     ) -> "_DipECT_Module":
         """
         Trains the _DeepECT_Module in place.
@@ -796,7 +798,12 @@ class _DipECT_Module(torch.nn.Module):
 
                     loss.backward()
                     optimizer.step()
-                
+            if logging_active:
+                log_epoch_nr = epoch + 1 # to avoid division by zero 
+                logging.info(
+                  f"epoch: {log_epoch_nr} - moving averages: mov_rec_loss: {mov_rec_loss/log_epoch_nr} "
+                  f"mov_loss: {mov_loss/log_epoch_nr} {f'rec_loss_aug: {mov_rec_loss_aug/log_epoch_nr}' if self.augmentation_invariance else ''} total_loss: {mov_loss/log_epoch_nr}"
+                )
 
             # logging.info(
             #     f"{epoch} - moving averages: rec_loss: {mov_rec_loss/progress_bar.n} "
@@ -869,6 +876,7 @@ def _dipect(
     custom_dataloaders: tuple,
     augmentation_invariance: bool,
     random_state: np.random.RandomState,
+    logging_active: bool,
     autoencoder_save_param_path: str = "pretrained_ae.pth",
 ):
     """
@@ -1001,6 +1009,7 @@ def _dipect(
         projection_axis_optimizer,
         rec_loss_fn,
         device,
+        logging_active
     )
     # Get labels
     deepect_tree: PredictionClusterTree = dipect_module.predict(
@@ -1082,6 +1091,7 @@ class DipECT:
         augmentation_invariance: bool = False,
         random_state: np.random.RandomState = np.random.RandomState(42),
         autoencoder_param_path: str = None,
+        logging_active: bool = False,
     ):
         self.batch_size = batch_size
         self.pretrain_optimizer_params = (
@@ -1116,6 +1126,7 @@ class DipECT:
         self.unimodal_treshhold = unimodal_treshhold
         self.random_state = random_state
         self.autoencoder_param_path = autoencoder_param_path
+        self.logging_active = logging_active
 
     def fit_predict(self, X: np.ndarray) -> "DipECT":
         """
@@ -1157,6 +1168,7 @@ class DipECT:
             self.custom_dataloaders,
             self.augmentation_invariance,
             self.random_state,
+            self.logging_active,
             self.autoencoder_param_path,
         )
         self.tree_ = tree

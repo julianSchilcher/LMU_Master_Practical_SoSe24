@@ -10,8 +10,10 @@ import torch.utils.data
 import umap
 from clustpy.deep._data_utils import get_dataloader
 from clustpy.deep._utils import encode_batchwise
+from clustpy.deep.dipencoder import dip_test
 from matplotlib import pyplot as plt
 from matplotlib.offsetbox import AnnotationBbox, OffsetImage
+from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.utils import Bunch
 
@@ -864,14 +866,45 @@ def build_and_visualize_splitindex_tree(root):
 
 
 def visualize_axis_for_2_clusters(X1, X2, y1, y2):
+    def get_inital_projection_axis(X_embedd):
+        """
+        Returns the inital projection axis for the data in the given trainloader. Furthermore, the size of the higher projection cluster and the lower projection cluster will be returned (e.g to initialise pruning indicator).
+        """
+        # init projection axis on full dataset
+        kmeans = KMeans(n_clusters=2, n_init=10).fit(X_embedd)
+        kmeans_centers = kmeans.cluster_centers_
+        labels = kmeans.labels_
+        axis = kmeans_centers[0] - kmeans_centers[1]        
+        return axis, kmeans_centers[0], kmeans_centers[1]
+        
+    def predict_subclusters(data, axis):
+        projections = data @ axis
+        sorted_indices = projections.argsort()
+        dip_value, modal_interval, modal_triangle = dip_test(projections[sorted_indices], is_data_sorted=True, just_dip=False)
+        index_lower, index_upper = modal_interval
+        index_tri1, index_tri2, index_tri3 = modal_triangle
+        if projections[sorted_indices[index_tri2]] > projections[sorted_indices[index_upper]]:
+                treshhold =  (projections[sorted_indices[index_tri2]] + projections[sorted_indices[index_upper]])/2
+        else:
+                treshhold =  (projections[sorted_indices[index_tri2]] + projections[sorted_indices[index_lower]])/2
+        labels = np.zeros(len(data))
+        labels[projections >= treshhold] = 1
+        labels[sorted_indices[index_tri2]] = 2
+        labels[sorted_indices[index_lower]] = 3
+        labels[sorted_indices[index_upper]] = 3
+        return labels
 
     # Combine the datasets
     X = np.vstack((X1, X2))
     y = np.hstack((y1, y2 + 1))  # Adjust labels for the second cluster
 
-    axis, c1, c2 = Cluster_Tree.get_inital_projection_axis(X)
+    dataloader = get_dataloader(X, 50 )
+    encode = lambda x: x
+    autoencoder = type("Autoencoder", (), {"encode": encode})
 
-    labels = Cluster_Tree.predict_subclusters(X, axis)
+    axis, c1, c2 = get_inital_projection_axis(X)
+
+    labels = predict_subclusters(X, axis)
 
 
     # Create a scatter plot
@@ -888,6 +921,8 @@ def visualize_axis_for_2_clusters(X1, X2, y1, y2):
 
     # Show plot
     plt.show()
+
+
 
 
 def visualize_axis_after_tree_growth(X):

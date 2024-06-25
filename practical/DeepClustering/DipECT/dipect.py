@@ -1,22 +1,27 @@
 import os
 import sys
+
 sys.path.append(os.getcwd())
 
 from typing import List, Union
-import logging
+
 import numpy as np
 import torch
 import torch.utils.data
-from tqdm import tqdm
-from clustpy.deep.dipencoder import _Dip_Gradient
-from clustpy.deep._data_utils import get_dataloader, augmentation_invariance_check
-from clustpy.deep._utils import detect_device, encode_batchwise, set_torch_seed
-from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
+from clustpy.deep._data_utils import (augmentation_invariance_check,
+                                      get_dataloader)
 from clustpy.deep._train_utils import get_trained_autoencoder
-from clustpy.utils import dip_test, dip_pval
+from clustpy.deep._utils import detect_device, encode_batchwise, set_torch_seed
+from clustpy.deep.autoencoders._abstract_autoencoder import \
+    _AbstractAutoencoder
+from clustpy.deep.dipencoder import _Dip_Gradient
+from clustpy.utils import dip_pval, dip_test
 from sklearn.cluster import KMeans
+from tqdm import tqdm
 
-from practical.DeepClustering.DeepECT.metrics import (PredictionClusterTree,PredictionClusterNode)
+from practical.DeepClustering.DeepECT.metrics import (PredictionClusterNode,
+                                                      PredictionClusterTree)
+
 
 # replaces the dip module
 class Cluster_Node: 
@@ -100,14 +105,6 @@ class Cluster_Node:
         """
         return self.higher_projection_child is None and self.lower_projection_child is None
 
-    # def from_leaf_to_inner(self):
-    #     """
-    #     Converts a leaf node to an inner node. Weights for its children are initialized, and the centers are not trainable anymore.
-    #     """
-    #     self.center.requires_grad = False
-    #     self.assignments = None
-    #     self.sum_squared_dist = None
-
     def prune(self):
         """
         Prunes the tree by removing all nodes below this node.
@@ -116,7 +113,12 @@ class Cluster_Node:
             self.higher_projection_child.prune()
         if self.lower_projection_child is not None:
             self.lower_projection_child.prune()
-        self.from_leaf_to_inner()
+
+        if(not self.is_leaf_node()):
+            self.projection_axis.requires_grad = False
+        self.assignments = None
+        self.assignment_indices = None
+        self.sum_squared_dist = None
 
     def expand_tree(
         self,
@@ -153,7 +155,6 @@ class Cluster_Node:
         if projection_axis_optimizer is not None:
             # self.add_projection_axis_to_optimizer(optimizer, self.projection_axis) # using just one otptimizer
             projection_axis_optimizer.add_param_group({"params": self.projection_axis})
-
         self.higher_projection_child = Cluster_Node(
             self.device,
             max_id + 1,
@@ -368,12 +369,12 @@ class Cluster_Tree:
 
     def prune_tree(self, pruning_threshold: float):
         """
-        Prunes the tree by removing nodes with weights below the pruning threshold.
+        Prunes the tree by removing nodes with pruning indicators below the pruning threshold.
 
         Parameters
         ----------
         pruning_threshold : float
-            The threshold value for pruning. Nodes with weights below this threshold will be removed.
+            The threshold value for pruning. Nodes with pruning indicators below this threshold will be removed.
 
         Returns
         -------
@@ -396,36 +397,38 @@ class Cluster_Tree:
             -------
             None
             """
-            raise NotImplementedError()
-            # child_node: Cluster_Node = getattr(parent, child_attr)
-            # sibling_attr = (
-            #     "left_child" if child_attr == "right_child" else "right_child"
-            # )
-            # sibling_node: Cluster_Node = getattr(parent, sibling_attr)
+            child_node: Cluster_Node = getattr(parent, child_attr)
+            sibling_attr = (
+                "higher_projection_child" if child_attr == "lower_projection_child" else "lower_projection_child"
+            )
+            sibling_node: Cluster_Node = getattr(parent, sibling_attr)
 
-            # if sibling_node is None:
-            #     raise ValueError(sibling_node)
-            # else:
-            #     if parent == self.root:
-            #         self.root = sibling_node
-            #         self.root.parent = None
-            #     else:
-            #         grandparent = parent.parent
-            #         if grandparent.left_child == parent:
-            #             grandparent.left_child = sibling_node
-            #         else:
-            #             grandparent.right_child = sibling_node
-            #         sibling_node.parent = grandparent
-            #     sibling_node.split_id = parent.split_id
-            #     sibling_node.weight = parent.weight
-            #     child_node.prune()
-            #     del child_node
-            #     del parent
-            #     for leaf in self.leaf_nodes:
-            #         leaf.center.requires_grad = True
-            #     print(
-            #         f"Tree size after pruning: {self.number_nodes}, leaf nodes: {len(self.leaf_nodes)}"
-            #    )
+            if sibling_node is None:
+                raise ValueError(sibling_node)
+            else:
+                if parent == self.root:
+                    self.root = sibling_node
+                    self.root.parent = None
+                else:
+                    grandparent = parent.parent
+                    if grandparent.lower_projection_child == parent:
+                        grandparent.lower_projection_child = sibling_node
+                    else:
+                        grandparent.higher_projection_child = sibling_node
+                    sibling_node.parent = grandparent
+                sibling_node.split_id = parent.split_id
+                sibling_node.assignments = parent.assignments
+                sibling_node.assignment_indices = parent.assignment_indices
+                sibling_node.pruning_indicator = parent.pruning_indicator
+                sibling_node.split_level = parent.split_level
+
+                child_node.prune()
+                del child_node
+                del parent
+
+                print(
+                    f"Tree size after pruning: {self.number_nodes}, leaf nodes: {len(self.leaf_nodes)}"
+               )
 
         def prune_recursive(node: Cluster_Node) -> bool:
             """
@@ -441,37 +444,36 @@ class Cluster_Tree:
             bool
                 Returns True if pruning occurred, otherwise False.
             """
-            raise NotImplementedError()
-        #     result = False
-        #     if node.left_child:
-        #         result = prune_recursive(node.left_child)
-        #     if node.right_child:
-        #         result = prune_recursive(node.right_child)
+            result = False
+            if node.higher_projection_child is not None:
+                result = prune_recursive(node.higher_projection_child)
+            if node.lower_projection_child is not None:
+                result = prune_recursive(node.lower_projection_child)
 
-        #     if node.weight < pruning_threshold:
-        #         if node.parent is not None:
-        #             if node.parent.left_child == node:
-        #                 prune_node(node.parent, "left_child")
-        #                 result = True
-        #             else:
-        #                 prune_node(node.parent, "right_child")
-        #                 result = True
-        #         else:
-        #             if (
-        #                 self.root.left_child
-        #                 and self.root.left_child.weight < pruning_threshold
-        #             ):
-        #                 prune_node(self.root, "left_child")
-        #                 result = True
-        #             elif (
-        #                 self.root.right_child
-        #                 and self.root.right_child.weight < pruning_threshold
-        #             ):
-        #                 prune_node(self.root, "right_child")
-        #                 result = True
-        #     return result
+            if node.pruning_indicator < pruning_threshold:
+                if node.parent is not None:
+                    if node.parent.higher_projection_child == node:
+                        prune_node(node.parent, "higher_projection_child")
+                        result = True
+                    else:
+                        prune_node(node.parent, "lower_projection_child")
+                        result = True
+                else:
+                    if (
+                        self.root.higher_projection_child
+                        and self.root.higher_projection_child.pruning_indicator < pruning_threshold
+                    ):
+                        prune_node(self.root, "higher_projection_child")
+                        result = True
+                    elif (
+                        self.root.lower_projection_child
+                        and self.root.lower_projection_child.pruning_indicator < pruning_threshold
+                    ):
+                        prune_node(self.root, "higher_projection_child")
+                        result = True
+            return result
 
-        # return prune_recursive(self.root)
+        return prune_recursive(self.root)
 
     def grow_tree(
         self,
@@ -743,6 +745,7 @@ class _DipECT_Module(torch.nn.Module):
         for epoch in range(max_epochs):
 
             with tqdm(trainloader, unit="batch") as tepoch:
+                self.cluster_tree.prune_tree(pruning_threshold)
 
                 if (epoch > 0 and epoch % grow_interval == 0) or self.cluster_tree.number_nodes < 3:
                         if len(self.cluster_tree.leaf_nodes) < max_leaf_nodes:
@@ -801,7 +804,7 @@ class _DipECT_Module(torch.nn.Module):
             #     f"total_loss: {mov_loss/progress_bar.n}"
             # )
             
-            assert (self.cluster_tree.number_nodes - len(self.cluster_tree.leaf_nodes)) == len(projection_axis_optimizer.param_groups)
+            # assert (self.cluster_tree.number_nodes - len(self.cluster_tree.leaf_nodes)) == len(projection_axis_optimizer.param_groups)
 
         return self
 

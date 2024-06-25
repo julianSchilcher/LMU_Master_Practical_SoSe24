@@ -11,7 +11,7 @@ Ideas:
 3. Scaling of autoencoder reconstruction loss
 4. Adjusting the projection axis: learning rate (0, 1e-8 to 1e-4)
 
-Hyperparameter Optimization:
+Hyperparameter Optimization: https://browse.arxiv.org/pdf/2107.05847v3
 1. Use Nevergrad + Ray Tune 
     1. TwoPointsDE + ScrHammerlySearch
         1. Chaining?

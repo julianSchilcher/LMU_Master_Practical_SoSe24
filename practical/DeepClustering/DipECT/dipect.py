@@ -609,6 +609,10 @@ class Cluster_Tree:
             return (1/max_depth_balanced_tree) * node.split_level
         elif method == "exponential":
             return np.exp2(node.split_level - max_depth_balanced_tree)
+        elif method == "noUnimodalLoss":
+            return 0
+        elif method == "justLeafs":
+            return 1.0 if node.is_leaf_node() else 0 # turn unimodal loss off after it gets an inner node
 
 
 

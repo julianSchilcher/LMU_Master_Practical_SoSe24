@@ -564,12 +564,12 @@ class Cluster_Tree:
             best_node_to_split.expand_tree(best_node_axis, projection_axis_optimizer, best_node_number_assign_higher_projection_cluster, best_node_number_assign_lower_projection_cluster, max([leaf.id for leaf in self.leaf_nodes]), max([node.split_id for node in self.nodes]))
             return False
     
-    def improve_space(self, embedded_data: torch.Tensor, projection_axis_optimizer: torch.optim.Optimizer, unimodal_loss_increase_method: str):
+    def improve_space(self, embedded_data: torch.Tensor, embedded_augmented_data: Union[torch.Tensor | None], projection_axis_optimizer: torch.optim.Optimizer, unimodal_loss_increase_method: str):
         self.assign_to_tree(embedded_data, set_pruning_incidator=True)
-        loss = self._improve_space_recursive(self.root, projection_axis_optimizer, 0, unimodal_loss_increase_method)
+        loss = self._improve_space_recursive(self.root, projection_axis_optimizer, 0, unimodal_loss_increase_method, embedded_augmented_data)
         return loss
 
-    def _improve_space_recursive(self, node: Cluster_Node, projection_axis_optimizer: torch.optim.Optimizer, loss: torch.Tensor, unimodal_loss_increase_method: str):
+    def _improve_space_recursive(self, node: Cluster_Node, projection_axis_optimizer: torch.optim.Optimizer, loss: torch.Tensor, unimodal_loss_increase_method: str, embedded_augmented_data: Union[torch.Tensor | None]):
         if node.is_leaf_node():
             return loss
 
@@ -582,16 +582,23 @@ class Cluster_Tree:
 
         if higher_projection_child_improvement and lower_projection_child_improvement:
             unimodal_loss_weight = self._calc_unimodal_loss_weight(node, unimodal_loss_increase_method)
-            L_unimodal = (_Dip_Gradient.apply(node.higher_projection_child.assignments, axis) + _Dip_Gradient.apply(node.lower_projection_child.assignments, axis))/2
-            L_multimodal = _Dip_Gradient.apply(node.assignments, axis)
-            loss = loss + unimodal_loss_weight*L_unimodal - L_multimodal
+            if embedded_augmented_data  is not None:
+                higher_projection_cluster = torch.cat((node.higher_projection_child.assignments, embedded_augmented_data[node.higher_projection_child.assignment_indices]), dim=0)
+                lower_projection_cluster = torch.cat((node.lower_projection_child.assignments, embedded_augmented_data[node.lower_projection_child.assignment_indices]), dim=0)
+            else:
+                higher_projection_cluster = node.higher_projection_child.assignments
+                lower_projection_cluster = node.lower_projection_child.assignments
+            
+            L_unimodal = (unimodal_loss_weight[0]*_Dip_Gradient.apply(higher_projection_cluster, axis) + unimodal_loss_weight[1]*_Dip_Gradient.apply(lower_projection_cluster, axis))/2
+            L_multimodal = _Dip_Gradient.apply(torch.cat((higher_projection_cluster, lower_projection_cluster), dim=0), axis)
+            loss = loss + L_unimodal - L_multimodal
         
         if higher_projection_child_improvement:
-            loss_higher_projection_child = self._improve_space_recursive(node.higher_projection_child, projection_axis_optimizer, loss, unimodal_loss_increase_method)
+            loss_higher_projection_child = self._improve_space_recursive(node.higher_projection_child, projection_axis_optimizer, loss, unimodal_loss_increase_method, embedded_augmented_data)
         else:
             loss_higher_projection_child = 0
         if lower_projection_child_improvement:
-            loss_lower_projection_child = self._improve_space_recursive(node.lower_projection_child, projection_axis_optimizer, loss, unimodal_loss_increase_method)
+            loss_lower_projection_child = self._improve_space_recursive(node.lower_projection_child, projection_axis_optimizer, loss, unimodal_loss_increase_method, embedded_augmented_data)
         else:
             loss_lower_projection_child = 0
 
@@ -609,13 +616,17 @@ class Cluster_Tree:
     def _calc_unimodal_loss_weight(self, node: Cluster_Node, method: str):
         max_depth_balanced_tree = np.log2(self.max_leaf_nodes)
         if method == "linear":
-            return (1/max_depth_balanced_tree) * node.split_level
+            weight = (1/(max_depth_balanced_tree - 1)) * node.split_level
+            return (weight, weight)
         elif method == "exponential":
-            return np.exp2(node.split_level - max_depth_balanced_tree)
+            weight = np.exp2(node.split_level - max_depth_balanced_tree - 1)
+            return (weight, weight)
         elif method == "noUnimodalLoss":
-            return 0
+            return (0, 0)
         elif method == "justLeafs":
-            return 1.0 if node.is_leaf_node() else 0 # turn unimodal loss off after it gets an inner node
+            # turn unimodal loss off for split nodes
+            f = lambda node: 1.0 if node.is_leaf_node() else 0
+            return (f(node.higher_projection_child), f(node.lower_projection_child))
 
 
 
@@ -783,13 +794,13 @@ class _DipECT_Module(torch.nn.Module):
                     rec_loss, embedded, reconstructed = autoencoder.loss(
                         [idxs, M], rec_loss_fn, self.device
                     )
-                    # if self.augmentation_invariance:
-                    #     rec_loss_aug, embedded_aug, reconstructed_aug = (
-                    #         autoencoder.loss([idxs, M_aug], rec_loss_fn, self.device)
-                    #     )
+                    if self.augmentation_invariance:
+                        rec_loss_aug, embedded_aug, reconstructed_aug = (
+                            autoencoder.loss([idxs, M_aug], rec_loss_fn, self.device)
+                        )
 
                     # calculate cluster loss
-                    cluster_loss = self.cluster_tree.improve_space(embedded, projection_axis_optimizer, unimodal_loss_increase_method)
+                    cluster_loss = self.cluster_tree.improve_space(embedded, embedded_aug if self.augmentation_invariance else None, projection_axis_optimizer, unimodal_loss_increase_method)
 
                     self.cluster_tree.clear_node_assignments()
 
@@ -800,9 +811,8 @@ class _DipECT_Module(torch.nn.Module):
                         reconstruction_loss_weight = 1 / rec_loss.detach() # /(4* rec_loss.detach())
 
                     if self.augmentation_invariance:
-                        # loss = cluster_loss + rec_loss + rec_loss_aug
-                        # mov_rec_loss_aug += rec_loss_aug.item()
-                        pass
+                        loss = cluster_loss + reconstruction_loss_weight*0.5*(rec_loss + rec_loss_aug)
+                        mov_rec_loss_aug += rec_loss_aug.item()
                     else:
                         loss = cluster_loss  + rec_loss*reconstruction_loss_weight
                         
@@ -983,7 +993,8 @@ def _dipect(
     optimizer = optimizer_class(
         list(autoencoder.parameters()), **clustering_optimizer_params
     )
-
+    
+    # workaround to get an empty optimizer
     dummy_param = torch.nn.Parameter(torch.empty(0))
     projection_axis_optimizer = optimizer_class([dummy_param], **projection_axis_optimizer_params)
     projection_axis_optimizer.param_groups = []

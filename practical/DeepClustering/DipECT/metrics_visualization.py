@@ -781,7 +781,8 @@ def build_and_visualize_tree(root, autoencoder, data):
     # Draw the images at the nodes
     for node in G.nodes:
         image = np.mean(autoencoder.decode(embedded_data[node.assigned_indices]).detach().numpy(), axis=0)
-        # image = autoencoder.decode(center).detach().numpy()
+        if np.max(image) <= 1: # scale back to range [0,255] if necessary
+            image = image*255 
         image = image.reshape(28,28)
         
         # if dataset_type == DatasetType.USPS:

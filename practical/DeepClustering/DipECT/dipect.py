@@ -482,7 +482,7 @@ class Cluster_Tree:
         autoencoder: torch.nn.Module,
         projection_axis_optimizer: torch.optim.Optimizer,
         unimodal_treshhold: float,
-        consider_num_assignments_for_growing: bool = False,
+        use_pvalue: bool = False,
     ) -> bool:
         """
         Grows the tree at the leaf node with the highest squared distance
@@ -517,11 +517,13 @@ class Cluster_Tree:
         """
         X_embedd = encode_batchwise(dataloader, autoencoder, self.device)
         self.assign_to_tree(torch.from_numpy(X_embedd))
-
-        if consider_num_assignments_for_growing:
+  
+        if use_pvalue:
+            best_value = np.inf
+        else:
+            best_value = -np.inf
             total_assignments = sum([len(node.assignments) for node in self.leaf_nodes if node.assignments is not None])
-        
-        max_dip = - np.inf
+
         best_node_to_split = None
         best_node_axis = None
         best_node_number_assign_lower_projection_cluster = None
@@ -536,27 +538,29 @@ class Cluster_Tree:
             axis, number_assign_lower_projection_cluster, number_assign_higher_projection_cluster = self.get_inital_projection_axis(node_data)
             projections = np.matmul(node_data, axis)
             dip_value = dip_test(projections, just_dip=True, is_data_sorted=False)
+            # pvalue gives the probability for unimodality (smaller dip value, higher p value)
             pvalue = dip_pval(dip_value, len(node.assignments))
-            # großerdip wert, kleiner p wert -> Wahrsch. für unimodalität
+            
 
             # the more samples, the smaller the dip value, consider this:
-            if consider_num_assignments_for_growing:
-                criteria = dip_value + 0.5*len(node.assignments)/(4*total_assignments)
+            if use_pvalue:
+                current_value = pvalue
+                better = current_value < best_value
             else:
-                criteria = dip_value
+                current_value = dip_value + 0.5*len(node.assignments)/(4*total_assignments)
+                better = current_value > best_value
 
-            if criteria > max_dip and dip_value > unimodal_treshhold: # pwert hier
-                max_dip = criteria
+            if better and pvalue < unimodal_treshhold: 
+                best_value = current_value
                 best_node_axis = axis
                 best_node_to_split = node
                 best_node_number_assign_lower_projection_cluster = number_assign_lower_projection_cluster
                 best_node_number_assign_higher_projection_cluster = number_assign_higher_projection_cluster
-        
-        print("#assignments best node: ", len(best_node_to_split.assignments))
-        if max_dip == -np.inf:
+                    
+        if np.abs(best_value) == np.inf:
             return True # stop algorithm
         else:
-        
+            print("#assignments best node: ", len(best_node_to_split.assignments))
             best_node_to_split.expand_tree(best_node_axis, projection_axis_optimizer, best_node_number_assign_higher_projection_cluster, best_node_number_assign_lower_projection_cluster, max([leaf.id for leaf in self.leaf_nodes]), max([node.split_id for node in self.nodes]))
             return False
     
@@ -608,6 +612,10 @@ class Cluster_Tree:
             return (1/max_depth_balanced_tree) * node.split_level
         elif method == "exponential":
             return np.exp2(node.split_level - max_depth_balanced_tree)
+        elif method == "noUnimodalLoss":
+            return 0
+        elif method == "justLeafs":
+            return 1.0 if node.is_leaf_node() else 0 # turn unimodal loss off after it gets an inner node
 
 
 
@@ -695,7 +703,7 @@ class _DipECT_Module(torch.nn.Module):
         max_epochs: int,
         pruning_threshold: float,
         grow_interval: int,
-        consider_num_assignments_for_growing: bool,
+        use_pvalue: bool,
         unimodal_loss_increase_method: str,
         max_leaf_nodes: int,
         reconstruction_loss_weight: float,
@@ -743,7 +751,10 @@ class _DipECT_Module(torch.nn.Module):
         mov_rec_loss_aug = 0.0
         mov_loss = 0.0
 
-        
+        # stop_algorithm = False
+        # refinement_epochs = 2
+        # refinement_counter = 0
+
         for epoch in range(max_epochs):
 
             with tqdm(trainloader, unit="batch") as tepoch:
@@ -751,7 +762,11 @@ class _DipECT_Module(torch.nn.Module):
 
                 if (epoch > 0 and epoch % grow_interval == 0) or self.cluster_tree.number_nodes < 3:
                         if len(self.cluster_tree.leaf_nodes) < max_leaf_nodes:
-                            self.cluster_tree.grow_tree(testloader, autoencoder, projection_axis_optimizer, unimodal_treshhold, consider_num_assignments_for_growing)
+                            stop_algorithm = self.cluster_tree.grow_tree(testloader, autoencoder, projection_axis_optimizer, unimodal_treshhold, use_pvalue)
+                            if stop_algorithm:
+                                print("Stopped algorithm earlier since unimodality treshhold is reached")
+                                break
+
 
                 for batch in tepoch:
                     
@@ -805,13 +820,6 @@ class _DipECT_Module(torch.nn.Module):
                   f"mov_loss: {mov_loss/log_epoch_nr} {f'rec_loss_aug: {mov_rec_loss_aug/log_epoch_nr}' if self.augmentation_invariance else ''} total_loss: {mov_loss/log_epoch_nr}"
                 )
 
-            # logging.info(
-            #     f"{epoch} - moving averages: rec_loss: {mov_rec_loss/progress_bar.n} "
-            #     f"{f'rec_loss_aug: {mov_rec_loss_aug/progress_bar.n}' if self.augmentation_invariance else ''} "
-            #     f"total_loss: {mov_loss/progress_bar.n}"
-            # )
-            
-            # assert (self.cluster_tree.number_nodes - len(self.cluster_tree.leaf_nodes)) == len(projection_axis_optimizer.param_groups)
 
         return self
 
@@ -864,7 +872,7 @@ def _dipect(
     max_epochs: int,
     pruning_threshold: float,
     grow_interval: int,
-    consider_num_assignments_for_growing: bool,
+    use_pvalue: bool,
     optimizer_class: torch.optim.Optimizer,
     rec_loss_fn: torch.nn.modules.loss._Loss,
     autoencoder: _AbstractAutoencoder,
@@ -877,7 +885,7 @@ def _dipect(
     augmentation_invariance: bool,
     random_state: np.random.RandomState,
     logging_active: bool,
-    autoencoder_save_param_path: str = "pretrained_ae.pth",
+    autoencoder_save_param_path: str,
 ):
     """
     Start the actual DeepECT clustering procedure on the input data set.
@@ -1000,7 +1008,7 @@ def _dipect(
         max_epochs,
         pruning_threshold,
         grow_interval,
-        consider_num_assignments_for_growing,
+        use_pvalue,
         unimodal_loss_increase_method, 
         max_leaf_nodes,
         reconstruction_loss_weight,
@@ -1075,9 +1083,9 @@ class DipECT:
         clustering_optimizer_params: dict = None,
         projection_axis_optimizer_params: dict = None,
         pretrain_epochs: int = 50,
-        max_epochs: int = 30,
+        max_epochs: int = 40,
         grow_interval: int = 2,
-        consider_num_assignments_for_growing: bool = False,
+        use_pvalue: bool = False,
         pruning_threshold: float = 0.1,
         optimizer_class: torch.optim.Optimizer = torch.optim.Adam,
         rec_loss_fn: torch.nn.modules.loss._Loss = torch.nn.MSELoss(),
@@ -1086,12 +1094,12 @@ class DipECT:
         unimodal_loss_increase_method: str = "linear",
         max_leaf_nodes: int = 20,
         reconstruction_loss_weight: float = None,
-        unimodal_treshhold: float = 0.0,
+        unimodal_treshhold: float = 0.95,
         custom_dataloaders: tuple = None,
         augmentation_invariance: bool = False,
         random_state: np.random.RandomState = np.random.RandomState(42),
-        autoencoder_param_path: str = None,
         logging_active: bool = False,
+        autoencoder_param_path: str = "pretrained_ae.pth",
     ):
         self.batch_size = batch_size
         self.pretrain_optimizer_params = (
@@ -1112,7 +1120,7 @@ class DipECT:
         self.pretrain_epochs = pretrain_epochs
         self.max_epochs = max_epochs
         self.grow_interval = grow_interval
-        self.consider_num_assignments_for_growing = consider_num_assignments_for_growing
+        self.use_pvalue = use_pvalue
         self.pruning_threshold = pruning_threshold
         self.optimizer_class = optimizer_class
         self.rec_loss_fn = rec_loss_fn
@@ -1156,7 +1164,7 @@ class DipECT:
             self.max_epochs,
             self.pruning_threshold,
             self.grow_interval,
-            self.consider_num_assignments_for_growing,
+            self.use_pvalue,
             self.optimizer_class,
             self.rec_loss_fn,
             self.autoencoder,

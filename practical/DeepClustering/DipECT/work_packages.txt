@@ -36,6 +36,7 @@ Metrics to track with tensorboard (Setup Tensorflow Board logging):
 Tree growth: Y splits per x epochs
 
 Strategy:
+4 days
 1. First, get best base architecture (using base parameters for learning rates) - understanding tree construction, loss construction + loss scaling (only for dip losses)
     1. Pruning strategy: (string) Moving Average or Epoch Assessment
     2. Pruning Threshold: (float) (Moving Average: 0.1; Epoch Assessment: int(dataset_size*0.001))
@@ -55,6 +56,7 @@ Strategy:
     16. Axis Learning rate: (float) fast (1e-4), slow (1e-8), None (0.0)
     17. Axis Learning application: (string) Leaf nodes, All nodes
 
+3 days
 2. Optimize architecture for base parameters (batch size, learning rate, loss scaling)
     1. Using resampling here?
     2. Early stopping: (string) No or After Tree cannot grow anymore (unimodality reached)

@@ -13,6 +13,57 @@ Ideas:
 
 Hyperparameter Optimization: https://browse.arxiv.org/pdf/2107.05847v3
 1. Use Nevergrad + Ray Tune 
-    1. TwoPointsDE + ScrHammerlySearch
+    1. PCABO + TwoPointsDE + ScrHammerslySearch
         1. Chaining?
-2. Setup Tensorflow Board logging
+2. Use Resampling -> cross-validation (only for supervised models)
+    1. Use training set to train + validate on test set (inner loop) + and test on combined train+test set
+    -> We want to optimize the models capability to produce clean dendrograms given class labels
+
+Seed = 128
+n_epochs = 60
+batch_size = 256
+
+Metrics to track with tensorboard (Setup Tensorflow Board logging):
+1. Dendrogram purity (optimize on)
+2. Leaf purity
+3. Number of nodes (per batch)
+4. Total loss (per batch)
+5. All sub losses (Unimodal + Multimodal + reconstruction) (per batch)
+7. All Losses per epoch
+6. Flat metrics (NMI, ARI, ACC)
+
+Tree growth: Y splits per x epochs
+
+Strategy:
+4 days
+1. First, get best base architecture (using base parameters for learning rates) - understanding tree construction, loss construction + loss scaling (only for dip losses)
+    1. Pruning strategy: (string) Moving Average or Epoch Assessment
+    2. Pruning Threshold: (float) (Moving Average: 0.1; Epoch Assessment: int(dataset_size*0.001))
+    3. Pruning Factor: (float) (0.5 default; how fast the moving average decreases)
+    4. Tree growth frequency: (float) (Per x epoch: 2.0 -> calculated on batch numbers if 0 -> grow each batch)
+    5. Tree growth amount: (int) (Y splits: 1 default; e.g. 20 (grow the tree iteratively as much as possible up to 20 splits))
+    6. Tree growth threshold type: (string) max leaf nodes or unimodality reached
+    7. Tree growth threshold: (int) max leaf nodes (20 default); (float) unimodality reached -> unimodality threshold (0.95 default)
+    8. Unimodal loss application: (string) Leafnodes, All nodes, None
+    9. Unimodal loss scaling factor: (string) node height (tree depth), node splits, None
+    10. Unimodal loss scaling direction (influences factor calculation): (string) ascending (tree depth -> the deeper, the higher the loss factor), descending ((tree depth -> the deeper, the lower the loss factor))
+    11. Unimodal loss scaling function (scales factor): (string) linear, exponential, log
+    11.1 Unimodal loss normalization: (float) -1 if no normalization, else a fixed value of (np.log2(self.max_leaf_nodes) - 1) otherwise we run into danger that the unimodal loss gets far too high
+    12. Multimodal loss application: (string) All nodes, Leaf nodes, None
+    13. Multimodal loss scaling factor: (string) node height (tree depth), node splits, None
+    14. Multimodal loss scaling direction (influences factor calculation): (string) ascending (tree depth -> the deeper, the higher the loss factor), descending ((tree depth -> the deeper, the lower the loss factor))
+    15. Multimodal loss scaling function (scales factor): (string) linear, exponential, log
+    15.1 Mulitmodal loss normalization: (float) -1 if no normalization, else a fixed value of (np.log2(self.max_leaf_nodes) - 1) otherwise we run into danger that the unimodal loss gets far too high
+    16. Axis Learning rate: (float) fast (1e-4), slow (1e-8), None (0.0)
+    17. Axis Learning application: (string) Leaf nodes, All nodes
+
+3 days
+2. Optimize architecture for base parameters (batch size, learning rate, loss scaling)
+    1. Using resampling here?
+    2. Early stopping: (string) No or After Tree cannot grow anymore (unimodality reached)
+    3. reconstruction loss scaling (float|None)
+    4. reconstruction learning rate (float)
+    5. batch size (int)
+    6. n_epochs (int)
+    7. All other parameters from above with narrower search space (decision after first run)
+

@@ -39,7 +39,7 @@ Strategy:
     2. Pruning Threshold: scalar (Moving Average: 0.1; Epoch Assessment: int(dataset_size*0.001))
     3. Pruning Factor: scalar (0.5 default; how fast the moving average decreases)
     3. Tree growth: Y splits per x epochs
-    4. Tree growth frequency: scalar (Per x epoch: 2.0 -> calculated on batch numbers if 0 -> directly at the start)
+    4. Tree growth frequency: scalar (Per x epoch: 2.0 -> calculated on batch numbers if 0 -> grow each batch)
     5. Tree growth amount: int (Y splits: 1 default; e.g. 20 (grow the tree iteratively as much as possible up to 20 splits))
     6. Tree growth threshold type: max leaf nodes or unimodality reached
     7. Tree growth threshold: max leaf nodes (20 default); unimodality reached -> unimodality threshold (0.95 default)

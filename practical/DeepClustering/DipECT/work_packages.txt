@@ -12,11 +12,10 @@ Ideas:
 4. Adjusting the projection axis: learning rate (0, 1e-8 to 1e-4)
 
 Hyperparameter Optimization: https://browse.arxiv.org/pdf/2107.05847v3
-1. Use Bayes Optim -> AxSearch + RayTune
-2. Use Nevergrad + Ray Tune 
+1. Use Nevergrad + Ray Tune 
     1. PCABO + TwoPointsDE + ScrHammerslySearch
         1. Chaining?
-3. Use Resampling -> cross-validation (only for supervised models)
+2. Use Resampling -> cross-validation (only for supervised models)
     1. Use training set to train + validate on test set (inner loop) + and test on combined train+test set
     -> We want to optimize the models capability to produce clean dendrograms given class labels
 

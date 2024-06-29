@@ -477,7 +477,9 @@ class Cluster_Tree:
         dataloader: torch.utils.data.DataLoader,
         autoencoder: torch.nn.Module,
         projection_axis_optimizer: torch.optim.Optimizer,
-        unimodal_treshhold: float,
+        max_leaf_nodes: int,
+        unimodality_treshhold: float,
+        number_of_grow_steps: int = 1,
         use_pvalue: bool = False,
     ) -> bool:
         """
@@ -511,73 +513,89 @@ class Cluster_Tree:
         ----------
         Returns True if the algorithm should be stopped (uniform criteria met) or False otherwise
         """
-        X_embedd = encode_batchwise(dataloader, autoencoder, self.device)
-        self.assign_to_tree(torch.from_numpy(X_embedd))
-  
-        if use_pvalue:
-            best_value = np.inf
-        else:
-            best_value = -np.inf
-            total_assignments = sum([len(node.assignments) for node in self.leaf_nodes if node.assignments is not None])
 
-        best_node_to_split = None
-        best_node_axis = None
-        best_node_number_assign_lower_projection_cluster = None
-        best_node_number_assign_higher_projection_cluster = None
-        for node in self.leaf_nodes:
-            if node.assignments is None:
-                continue
-            node_data = node.assignments.numpy()
-            if len(node_data) < 2:
-                continue
-            print("#assignments: ", len(node.assignments))
-            axis, number_assign_lower_projection_cluster, number_assign_higher_projection_cluster = self.get_inital_projection_axis(node_data)
-            projections = np.matmul(node_data, axis)
-            dip_value = dip_test(projections, just_dip=True, is_data_sorted=False)
-            # pvalue gives the probability for unimodality (smaller dip value, higher p value)
-            pvalue = dip_pval(dip_value, len(node.assignments))
-            
+        # do not grow further if treshhold was already reached
+        if  len(self.leaf_nodes) >= max_leaf_nodes:
+            return True 
 
-            # the more samples, the smaller the dip value, consider this:
-            if use_pvalue:
-                current_value = pvalue
-                better = current_value < best_value
-            else:
-                current_value = dip_value + 0.5*len(node.assignments)/(4*total_assignments)
-                better = current_value > best_value
-
-            if better and pvalue < unimodal_treshhold: 
-                best_value = current_value
-                best_node_axis = axis
-                best_node_to_split = node
-                best_node_number_assign_lower_projection_cluster = number_assign_lower_projection_cluster
-                best_node_number_assign_higher_projection_cluster = number_assign_higher_projection_cluster
-                    
-        if np.abs(best_value) == np.inf:
-            return True # stop algorithm
-        else:
-            print("#assignments best node: ", len(best_node_to_split.assignments))
-            best_node_to_split.expand_tree(best_node_axis, projection_axis_optimizer, best_node_number_assign_higher_projection_cluster, best_node_number_assign_lower_projection_cluster, max([leaf.id for leaf in self.leaf_nodes]), max([node.split_id for node in self.nodes]))
-            return False
+        for i in range(number_of_grow_steps):
+            X_embedd = encode_batchwise(dataloader, autoencoder, self.device)
+            self.assign_to_tree(torch.from_numpy(X_embedd))
     
-    def improve_space(self, embedded_data: torch.Tensor, embedded_augmented_data: Union[torch.Tensor | None], projection_axis_optimizer: torch.optim.Optimizer, unimodal_loss_increase_method: Union[str, float]):
+            if use_pvalue:
+                best_value = np.inf
+            else:
+                best_value = -np.inf
+                total_assignments = sum([len(node.assignments) for node in self.leaf_nodes if node.assignments is not None])
+
+            best_node_to_split = None
+            best_node_axis = None
+            best_node_number_assign_lower_projection_cluster = None
+            best_node_number_assign_higher_projection_cluster = None
+            for node in self.leaf_nodes:
+                if node.assignments is None:
+                    continue
+                node_data = node.assignments.numpy()
+                if len(node_data) < 2:
+                    continue
+                axis, number_assign_lower_projection_cluster, number_assign_higher_projection_cluster = self.get_inital_projection_axis(node_data)
+                projections = np.matmul(node_data, axis)
+                dip_value = dip_test(projections, just_dip=True, is_data_sorted=False)
+                # pvalue gives the probability for unimodality (smaller dip value, higher p value)
+                pvalue = dip_pval(dip_value, len(node.assignments))
+
+                # the more samples, the smaller the dip value, consider this:
+                if use_pvalue:
+                    current_value = pvalue
+                    better = current_value < best_value
+                else:
+                    current_value = dip_value + 0.5*len(node.assignments)/(4*total_assignments)
+                    better = current_value > best_value
+
+                if pvalue > unimodality_treshhold:
+                    continue
+                if better: 
+                    best_value = current_value
+                    best_node_axis = axis
+                    best_node_to_split = node
+                    best_node_number_assign_lower_projection_cluster = number_assign_lower_projection_cluster
+                    best_node_number_assign_higher_projection_cluster = number_assign_higher_projection_cluster
+                        
+            if np.abs(best_value) == np.inf: # unimodality threshold reached
+                return True 
+
+            # split the identified node and add child nodes
+            print("split node with #assignments: ", len(best_node_to_split.assignments))
+            best_node_to_split.expand_tree(best_node_axis, projection_axis_optimizer, best_node_number_assign_higher_projection_cluster, best_node_number_assign_lower_projection_cluster, max([leaf.id for leaf in self.leaf_nodes]), max([node.split_id for node in self.nodes]))
+            # check if max leafnode threshold reached
+            if len(self.leaf_nodes) >= max_leaf_nodes: 
+                return True
+            self.clear_node_assignments()
+        return False
+    
+    def improve_space(self, embedded_data: torch.Tensor, embedded_augmented_data: Union[torch.Tensor | None], projection_axis_optimizer: torch.optim.Optimizer, unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight, projection_axis_learning):
         self.assign_to_tree(embedded_data, set_pruning_incidator=True)
-        loss = self._improve_space_recursive(self.root, projection_axis_optimizer, 0, unimodal_loss_increase_method, embedded_augmented_data)
+        loss = self._improve_space_recursive(self.root, projection_axis_optimizer, 0, embedded_augmented_data, unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight, projection_axis_learning)
         return loss
 
-    def _improve_space_recursive(self, node: Cluster_Node, projection_axis_optimizer: torch.optim.Optimizer, loss: torch.Tensor, unimodal_loss_increase_method: Union[str, float], embedded_augmented_data: Union[torch.Tensor | None]):
+    def _improve_space_recursive(self, node: Cluster_Node, projection_axis_optimizer: torch.optim.Optimizer, loss: torch.Tensor, embedded_augmented_data: Union[torch.Tensor | None], unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight, projection_axis_learning):
         if node.is_leaf_node():
             return loss
-
-        self._adjust_axis(node, projection_axis_optimizer)
+        
+        if projection_axis_learning is not None:
+            if (projection_axis_learning == "leaf_nodes" and node.higher_projection_child.is_leaf_node() and node.lower_projection_child.is_leaf_node()) or projection_axis_learning == "all": 
+                self._adjust_axis(node, projection_axis_optimizer)
 
         axis = node.projection_axis.detach().clone()
         
         higher_projection_child_improvement = node.higher_projection_child.assignments is not None and node.higher_projection_child.assignments.numel() > 1
         lower_projection_child_improvement = node.lower_projection_child.assignments is not None and node.lower_projection_child.assignments.numel() > 1
 
+
         if higher_projection_child_improvement and lower_projection_child_improvement:
-            unimodal_loss_weight = self._calc_unimodal_loss_weight(node, unimodal_loss_increase_method)
+            calc_uni_loss_weight = self._calc_loss_weight(node, unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization)
+            calc_muli_loss_weight = self._calc_loss_weight(node, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight, loss_weight_function_normalization, multimodal=True)[0]
+        
             if embedded_augmented_data  is not None:
                 higher_projection_cluster = torch.cat((node.higher_projection_child.assignments, embedded_augmented_data[node.higher_projection_child.assignment_indices]), dim=0)
                 lower_projection_cluster = torch.cat((node.lower_projection_child.assignments, embedded_augmented_data[node.lower_projection_child.assignment_indices]), dim=0)
@@ -585,16 +603,16 @@ class Cluster_Tree:
                 higher_projection_cluster = node.higher_projection_child.assignments
                 lower_projection_cluster = node.lower_projection_child.assignments
             
-            L_unimodal = (unimodal_loss_weight[0]*_Dip_Gradient.apply(higher_projection_cluster, axis) + unimodal_loss_weight[1]*_Dip_Gradient.apply(lower_projection_cluster, axis))/2
-            L_multimodal = _Dip_Gradient.apply(torch.cat((higher_projection_cluster, lower_projection_cluster), dim=0), axis)
+            L_unimodal = (calc_uni_loss_weight[0]*_Dip_Gradient.apply(higher_projection_cluster, axis) + calc_uni_loss_weight[1]*_Dip_Gradient.apply(lower_projection_cluster, axis))/2
+            L_multimodal = calc_muli_loss_weight*_Dip_Gradient.apply(torch.cat((higher_projection_cluster, lower_projection_cluster), dim=0), axis)
             loss = loss + L_unimodal - L_multimodal
         
         if higher_projection_child_improvement:
-            loss_higher_projection_child = self._improve_space_recursive(node.higher_projection_child, projection_axis_optimizer, loss, unimodal_loss_increase_method, embedded_augmented_data)
+            loss_higher_projection_child = self._improve_space_recursive(node.higher_projection_child, projection_axis_optimizer, loss, embedded_augmented_data, unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight, projection_axis_learning)
         else:
             loss_higher_projection_child = 0
         if lower_projection_child_improvement:
-            loss_lower_projection_child = self._improve_space_recursive(node.lower_projection_child, projection_axis_optimizer, loss, unimodal_loss_increase_method, embedded_augmented_data)
+            loss_lower_projection_child = self._improve_space_recursive(node.lower_projection_child, projection_axis_optimizer, loss, embedded_augmented_data, unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight, projection_axis_learning)
         else:
             loss_lower_projection_child = 0
 
@@ -609,31 +627,59 @@ class Cluster_Tree:
         loss.backward()
         projection_axis_optimizer.step()
     
-    def _calc_unimodal_loss_weight(self, node: Cluster_Node, method: Union[str, float]):
-        max_depth_balanced_tree = np.log2(self.max_leaf_nodes)
+    def _calc_loss_weight(self, node: Cluster_Node, loss_application: str, loss_node_criteria_method: str, loss_weight_scale_function: str, loss_weight_direction: str, loss_weight: float, weight_normalization: float, multimodal: bool = False):
 
-        if isinstance(method, str):
-            if method == "linear":
-                weight = (1/(max_depth_balanced_tree - 1)) * node.split_level
-                return (weight, weight)
-            elif method == "exponential":
-                weight = np.exp2(node.split_level - max_depth_balanced_tree - 1)
-                return (weight, weight)
-            elif method == "noUnimodalLoss":
-                return (0, 0)
-            elif method == "justLeafs":
-                # turn unimodal loss off for split nodes
-                f = lambda node: 1.0 if node.is_leaf_node() else 0
-                return (f(node.higher_projection_child), f(node.lower_projection_child))
-        elif isinstance(method, float) or isinstance(method, int):
-            return (method, method)
+        if loss_application == None:
+            return (0,0)
+            
+        node_criteria = self._get_node_criteria(node, loss_node_criteria_method)
+        
+        if loss_weight_scale_function == "linear":
+            weights = self._linear(loss_weight_direction, node_criteria, weight_normalization, loss_weight)
+        elif loss_weight_scale_function == "exponential":
+            weights = self._exponential(loss_weight_direction, node_criteria, weight_normalization, loss_weight)
+        elif loss_weight_scale_function == None:
+            weights = (loss_weight, loss_weight)
         else:
             raise ValueError(f"method for calculating the unimodal loss weight not supported. Make sure it is a string indicating the method (e.g. linear) or directly pass the weight as a float")
+        
+        if loss_application == "leaf_nodes" and not multimodal:
+            if not node.higher_projection_child.is_leaf_node():
+                weights = (0, weights[1])
+            if not node.lower_projection_child.is_leaf_node():
+                weights = (weights[0], 0)
+        return weights
+        
+    def _linear(self, direction, node_criteria, normalization, unimodal_loss_weight):
+        if normalization == -1:
+            normalization = 1
+        if direction == "ascending":
+            weight = (unimodal_loss_weight/normalization) * node_criteria
+        elif direction == "descending":
+            weight = abs(unimodal_loss_weight - node_criteria)
+        else:
+            raise ValueError(f"unimodal loss direction {direction} not suppored")
+        return (weight, weight)
+    
+    def _exponential(self, direction, node_criteria, normalization, unimodal_loss_weight):
+        if normalization == -1:
+            normalization = 0
+        if direction == "ascending":
+            weight = np.exp2(node_criteria - normalization)*unimodal_loss_weight
+        elif direction == "descending":
+            weight = np.exp2(-node_criteria)*unimodal_loss_weight
+        else:
+            raise ValueError(f"unimodal loss direction {direction} not suppored")
+        return (weight, weight)
 
+    def _get_node_criteria(self, node, node_criteria_method):
+        if node_criteria_method == "time_of_split":
+            return sorted([node.split_id for node in self.nodes]).index(node.split_id)
+        if node_criteria_method == "tree_depth":
+            return node.split_level
 
 
         
-
 
 def transform_cluster_tree_to_pred_tree(tree: Cluster_Tree) -> PredictionClusterTree:
     """
@@ -717,16 +763,29 @@ class _DipECT_Module(torch.nn.Module):
         pruning_threshold: float,
         grow_interval: float,
         use_pvalue: bool,
-        unimodal_loss_increase_method: Union[str, float],
         max_leaf_nodes: int,
         reconstruction_loss_weight: float,
-        unimodal_treshhold: float,
+        unimodality_treshhold: float,
+        number_of_grow_steps: int,
+        early_stopping: bool,
         refinement_epochs: int,
         optimizer: torch.optim.Optimizer,
         projection_axis_optimizer: torch.optim.Optimizer,
         rec_loss_fn: torch.nn.modules.loss._Loss,
         device: Union[torch.device | str],
         logging_active: bool,
+        unimodal_loss_application, 
+        unimoal_loss_node_criteria_method, 
+        unimodal_loss_weight_function, 
+        unimodal_loss_weight_direction, 
+        unimodal_loss_weight, 
+        loss_weight_function_normalization,
+        mulitmodal_loss_application, 
+        mulitmodal_loss_node_criteria_method, 
+        mulitmodal_loss_weight_function, 
+        mulitmodal_loss_weight_direction, 
+        multimodal_loss_weight, 
+        projection_axis_learning
     ) -> "_DipECT_Module":
         """
         Trains the _DeepECT_Module in place.
@@ -765,7 +824,7 @@ class _DipECT_Module(torch.nn.Module):
         mov_rec_loss_aug = 0.0
         mov_loss = 0.0
 
-        stop_algorithm = False
+        growing_treshhold_reached = False
         refinement_counter = 0
         iterations_until_grow = int(len(trainloader)*grow_interval)
         iteration = 0
@@ -773,12 +832,11 @@ class _DipECT_Module(torch.nn.Module):
         
         # if grow_interval is 0, generate the whole tree before training
         if iterations_until_grow == 0:
-            while len(self.cluster_tree.leaf_nodes) < max_leaf_nodes and not stop_algorithm:
-                stop_algorithm = self.cluster_tree.grow_tree(testloader, autoencoder, projection_axis_optimizer, unimodal_treshhold, use_pvalue)
+            while not growing_treshhold_reached:
+                growing_treshhold_reached = self.cluster_tree.grow_tree(testloader, autoencoder, projection_axis_optimizer, max_leaf_nodes, unimodality_treshhold, use_pvalue=use_pvalue)
             tree_is_grown = True
-            stop_algorithm = False # if it turns out that its befenefitical to grow the tree in advance change it later to stop algorithm also for this method
-
-
+            growing_treshhold_reached = False # prevent from immediatly ending training
+        
         for epoch in range(max_epochs):
 
             with tqdm(trainloader, unit="batch") as tepoch:
@@ -786,13 +844,11 @@ class _DipECT_Module(torch.nn.Module):
                         
                 for batch in tepoch:
 
-                    if iteration % iterations_until_grow == 0 and iteration > 0 and not tree_is_grown:
-                        if len(self.cluster_tree.leaf_nodes) < max_leaf_nodes:
-                            print(f"grow tree after iteration {iteration}")
-                            stop_algorithm = self.cluster_tree.grow_tree(testloader, autoencoder, projection_axis_optimizer, unimodal_treshhold, use_pvalue)
-                            if stop_algorithm:
-                                print("Stopped algorithm earlier since unimodality treshhold is reached. Eventually refinement epochs starting...")
-                                break
+                    if not tree_is_grown and iteration % iterations_until_grow == 0 and iteration > 0:
+                        growing_treshhold_reached = self.cluster_tree.grow_tree(testloader, autoencoder, projection_axis_optimizer, max_leaf_nodes, unimodality_treshhold, number_of_grow_steps, use_pvalue)
+                        if growing_treshhold_reached and early_stopping:
+                            print("Stopped algorithm earlier since unimodality treshhold is reached. Eventually refinement epochs starting...")
+                            break
 
                     
                     tepoch.set_description(f"Epoch {epoch+1}/{max_epochs}")
@@ -815,7 +871,7 @@ class _DipECT_Module(torch.nn.Module):
                         )
 
                     # calculate cluster loss
-                    cluster_loss = self.cluster_tree.improve_space(embedded, embedded_aug if self.augmentation_invariance else None, projection_axis_optimizer, unimodal_loss_increase_method)
+                    cluster_loss = self.cluster_tree.improve_space(embedded, embedded_aug if self.augmentation_invariance else None, projection_axis_optimizer, unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight, projection_axis_learning)
                     cluster_loss = cluster_loss/(self.cluster_tree.number_nodes - len(self.cluster_tree.leaf_nodes))
 
                     self.cluster_tree.clear_node_assignments()
@@ -836,7 +892,7 @@ class _DipECT_Module(torch.nn.Module):
                     optimizer.step()
                     iteration += 1
                 
-            if stop_algorithm:
+            if growing_treshhold_reached and early_stopping:
                 refinement_counter += 1
                 if refinement_counter > refinement_epochs:
                     break
@@ -904,16 +960,29 @@ def _dipect(
     rec_loss_fn: torch.nn.modules.loss._Loss,
     autoencoder: _AbstractAutoencoder,
     embedding_size: int,
-    unimodal_loss_increase_method: Union[str, float],
     max_leaf_nodes: int,
     reconstruction_loss_weight: float,
-    unimodal_treshhold: float,
+    unimodality_treshhold: float,
+    number_of_grow_steps: int,
+    early_stopping: bool,
     refinement_epochs: int,
     custom_dataloaders: tuple,
     augmentation_invariance: bool,
     random_state: np.random.RandomState,
     logging_active: bool,
     autoencoder_save_param_path: str,
+    unimodal_loss_application, 
+    unimoal_loss_node_criteria_method, 
+    unimodal_loss_weight_function, 
+    unimodal_loss_weight_direction, 
+    unimodal_loss_weight, 
+    loss_weight_function_normalization,
+    mulitmodal_loss_application, 
+    mulitmodal_loss_node_criteria_method, 
+    mulitmodal_loss_weight_function, 
+    mulitmodal_loss_weight_direction, 
+    multimodal_loss_weight,
+    projection_axis_learning
 ):
     """
     Start the actual DeepECT clustering procedure on the input data set.
@@ -977,32 +1046,6 @@ def _dipect(
     autoencoder = get_trained_autoencoder(trainloader, pretrain_optimizer_params, pretrain_epochs, device,
                                           optimizer_class, rec_loss_fn, embedding_size, autoencoder)
 
-    # (
-    #     device,
-    #     trainloader,
-    #     testloader,
-    #     autoencoder,
-    #     _,
-    #     _,
-    #     _,
-    #     init_leafnode_centers,
-    #     _,
-    # ) = get_standard_initial_deep_clustering_setting(
-    #     X,
-    #     2,
-    #     batch_size,
-    #     pretrain_optimizer_params,
-    #     pretrain_epochs,
-    #     optimizer_class,
-    #     rec_loss_fn,
-    #     autoencoder,
-    #     embedding_size,
-    #     custom_dataloaders,
-    #     KMeans,
-    #     {"n_init": 20, "random_state": random_state},
-    #     random_state,
-    # )
-
     print(device)
     if save_ae_state_dict:
         autoencoder.save_parameters(autoencoder_save_param_path)
@@ -1038,16 +1081,29 @@ def _dipect(
         pruning_threshold,
         grow_interval,
         use_pvalue,
-        unimodal_loss_increase_method, 
         max_leaf_nodes,
         reconstruction_loss_weight,
-        unimodal_treshhold,
+        unimodality_treshhold,
+        number_of_grow_steps,
+        early_stopping,
         refinement_epochs,
         optimizer,
         projection_axis_optimizer,
         rec_loss_fn,
         device,
-        logging_active
+        logging_active,
+        unimodal_loss_application, 
+        unimoal_loss_node_criteria_method, 
+        unimodal_loss_weight_function, 
+        unimodal_loss_weight_direction, 
+        unimodal_loss_weight, 
+        loss_weight_function_normalization,
+        mulitmodal_loss_application, 
+        mulitmodal_loss_node_criteria_method, 
+        mulitmodal_loss_weight_function, 
+        mulitmodal_loss_weight_direction, 
+        multimodal_loss_weight,
+        projection_axis_learning
     )
     # Get labels
     deepect_tree: PredictionClusterTree = dipect_module.predict(
@@ -1111,7 +1167,9 @@ class DipECT:
         batch_size: int = 256,
         pretrain_optimizer_params: dict = None,
         clustering_optimizer_params: dict = None,
-        projection_axis_optimizer_params: dict = None,
+        # projection_axis_optimizer_params: dict = None,
+        projection_axis_learning_rate: float = 1e-5,
+        projection_axis_learning: str = "all", # None, "all", "leaf_nodes"
         pretrain_epochs: int = 50,
         max_epochs: int = 40,
         grow_interval: float = 2.0,
@@ -1121,16 +1179,28 @@ class DipECT:
         rec_loss_fn: torch.nn.modules.loss._Loss = torch.nn.MSELoss(),
         autoencoder: _AbstractAutoencoder = None,
         embedding_size: int = 10,
-        unimodal_loss_increase_method: Union[str, float] = "linear",
         max_leaf_nodes: int = 20,
         reconstruction_loss_weight: float = None,
-        unimodal_treshhold: float = 0.95,
+        unimodality_treshhold: float = 1.0,
+        number_of_grow_steps: int = 1,
+        early_stopping: bool = False,
         refinement_epochs: int = 0,
         custom_dataloaders: tuple = None,
         augmentation_invariance: bool = False,
         random_state: np.random.RandomState = np.random.RandomState(42),
         logging_active: bool = False,
         autoencoder_param_path: str = "pretrained_ae.pth",
+        unimodal_loss_application: str = "leaf_nodes", # None, "leaf_nodes", "all"
+        unimoal_loss_node_criteria_method: str = "tree_depth", # "tree_depth"., "time_of_split"
+        unimodal_loss_weight_function: str = "linear", # "linear", "exponential", None
+        unimodal_loss_weight_direction: str = "ascending", # "ascending", '"descending"
+        unimodal_loss_weight: float = 1.0, 
+        loss_weight_function_normalization = -1, # -1 (no normalization), else normalization term ((np.log2(self.max_leaf_nodes) - 1) works good)
+        mulitmodal_loss_application: str = "all", 
+        mulitmodal_loss_node_criteria_method: str = "tree_depth", 
+        mulitmodal_loss_weight_function: str = None, 
+        mulitmodal_loss_weight_direction: str = "ascending", 
+        multimodal_loss_weight: float = 1.0
     ):
         self.batch_size = batch_size
         self.pretrain_optimizer_params = (
@@ -1143,11 +1213,12 @@ class DipECT:
             if clustering_optimizer_params is None
             else clustering_optimizer_params
         )
-        self.projection_axis_optimizer_params = (
-            {"lr": 1e-5}
-            if projection_axis_optimizer_params is None
-            else projection_axis_optimizer_params
-        )
+        # self.projection_axis_optimizer_params = (
+        #     {"lr": 1e-5}
+        #     if projection_axis_optimizer_params is None
+        #     else projection_axis_optimizer_params
+        # )
+        self.projection_axis_optimizer_params = ({"lr": projection_axis_learning_rate} )
         self.pretrain_epochs = pretrain_epochs
         self.max_epochs = max_epochs
         self.grow_interval = grow_interval
@@ -1157,16 +1228,29 @@ class DipECT:
         self.rec_loss_fn = rec_loss_fn
         self.autoencoder = autoencoder
         self.embedding_size = embedding_size
-        self.unimodal_loss_increase_method = unimodal_loss_increase_method
         self.custom_dataloaders = custom_dataloaders
         self.augmentation_invariance = augmentation_invariance
         self.max_leaf_nodes = max_leaf_nodes
         self.reconstruction_loss_weight = reconstruction_loss_weight
-        self.unimodal_treshhold = unimodal_treshhold
+        self.unimodality_treshhold = unimodality_treshhold
+        self.number_of_grow_steps = number_of_grow_steps
+        self.early_stopping = early_stopping
         self.refinement_epochs = refinement_epochs
         self.random_state = random_state
         self.autoencoder_param_path = autoencoder_param_path
         self.logging_active = logging_active
+        self.unimodal_loss_application = unimodal_loss_application
+        self.unimoal_loss_node_criteria_method = unimoal_loss_node_criteria_method 
+        self.unimodal_loss_weight_function =  unimodal_loss_weight_function
+        self.unimodal_loss_weight_direction = unimodal_loss_weight_direction
+        self.unimodal_loss_weight = unimodal_loss_weight
+        self.loss_weight_function_normalization = loss_weight_function_normalization
+        self.mulitmodal_loss_application =  mulitmodal_loss_application
+        self.mulitmodal_loss_node_criteria_method = mulitmodal_loss_node_criteria_method
+        self.mulitmodal_loss_weight_function = mulitmodal_loss_weight_function
+        self.mulitmodal_loss_weight_direction = mulitmodal_loss_weight_direction
+        self.multimodal_loss_weight = multimodal_loss_weight
+        self.projection_axis_learning = projection_axis_learning
 
     def fit_predict(self, X: np.ndarray) -> "DipECT":
         """
@@ -1201,16 +1285,29 @@ class DipECT:
             self.rec_loss_fn,
             self.autoencoder,
             self.embedding_size,
-            self.unimodal_loss_increase_method,
             self.max_leaf_nodes,
             self.reconstruction_loss_weight,
-            self.unimodal_treshhold,
+            self.unimodality_treshhold,
+            self.number_of_grow_steps,
+            self.early_stopping,
             self.refinement_epochs,
             self.custom_dataloaders,
             self.augmentation_invariance,
             self.random_state,
             self.logging_active,
             self.autoencoder_param_path,
+            self.unimodal_loss_application, 
+            self.unimoal_loss_node_criteria_method, 
+            self.unimodal_loss_weight_function, 
+            self.unimodal_loss_weight_direction, 
+            self.unimodal_loss_weight, 
+            self.loss_weight_function_normalization,
+            self.mulitmodal_loss_application, 
+            self.mulitmodal_loss_node_criteria_method, 
+            self.mulitmodal_loss_weight_function, 
+            self.mulitmodal_loss_weight_direction, 
+            self.multimodal_loss_weight, 
+            self.projection_axis_learning
         )
         self.tree_ = tree
         self.autoencoder = autoencoder

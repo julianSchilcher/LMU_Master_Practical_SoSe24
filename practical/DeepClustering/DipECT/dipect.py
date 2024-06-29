@@ -573,25 +573,28 @@ class Cluster_Tree:
             self.clear_node_assignments()
         return False
     
-    def improve_space(self, embedded_data: torch.Tensor, embedded_augmented_data: Union[torch.Tensor | None], projection_axis_optimizer: torch.optim.Optimizer, unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight):
+    def improve_space(self, embedded_data: torch.Tensor, embedded_augmented_data: Union[torch.Tensor | None], projection_axis_optimizer: torch.optim.Optimizer, unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight, projection_axis_learning):
         self.assign_to_tree(embedded_data, set_pruning_incidator=True)
-        loss = self._improve_space_recursive(self.root, projection_axis_optimizer, 0, embedded_augmented_data, unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight)
+        loss = self._improve_space_recursive(self.root, projection_axis_optimizer, 0, embedded_augmented_data, unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight, projection_axis_learning)
         return loss
 
-    def _improve_space_recursive(self, node: Cluster_Node, projection_axis_optimizer: torch.optim.Optimizer, loss: torch.Tensor, embedded_augmented_data: Union[torch.Tensor | None], unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight):
+    def _improve_space_recursive(self, node: Cluster_Node, projection_axis_optimizer: torch.optim.Optimizer, loss: torch.Tensor, embedded_augmented_data: Union[torch.Tensor | None], unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight, projection_axis_learning):
         if node.is_leaf_node():
             return loss
-
-        self._adjust_axis(node, projection_axis_optimizer)
+        
+        if projection_axis_learning: 
+            self._adjust_axis(node, projection_axis_optimizer)
 
         axis = node.projection_axis.detach().clone()
         
         higher_projection_child_improvement = node.higher_projection_child.assignments is not None and node.higher_projection_child.assignments.numel() > 1
         lower_projection_child_improvement = node.lower_projection_child.assignments is not None and node.lower_projection_child.assignments.numel() > 1
 
+
         if higher_projection_child_improvement and lower_projection_child_improvement:
-            unimodal_loss_weight = self._calc_loss_weight(node, unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization)
-            mulimodal_loss_weight = self._calc_loss_weight(node, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight, loss_weight_function_normalization, multimodal=True)[0]
+            calc_uni_loss_weight = self._calc_loss_weight(node, unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization)
+            calc_muli_loss_weight = self._calc_loss_weight(node, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight, loss_weight_function_normalization, multimodal=True)[0]
+        
             if embedded_augmented_data  is not None:
                 higher_projection_cluster = torch.cat((node.higher_projection_child.assignments, embedded_augmented_data[node.higher_projection_child.assignment_indices]), dim=0)
                 lower_projection_cluster = torch.cat((node.lower_projection_child.assignments, embedded_augmented_data[node.lower_projection_child.assignment_indices]), dim=0)
@@ -599,16 +602,16 @@ class Cluster_Tree:
                 higher_projection_cluster = node.higher_projection_child.assignments
                 lower_projection_cluster = node.lower_projection_child.assignments
             
-            L_unimodal = (unimodal_loss_weight[0]*_Dip_Gradient.apply(higher_projection_cluster, axis) + unimodal_loss_weight[1]*_Dip_Gradient.apply(lower_projection_cluster, axis))/2
-            L_multimodal = mulimodal_loss_weight*_Dip_Gradient.apply(torch.cat((higher_projection_cluster, lower_projection_cluster), dim=0), axis)
+            L_unimodal = (calc_uni_loss_weight[0]*_Dip_Gradient.apply(higher_projection_cluster, axis) + calc_uni_loss_weight[1]*_Dip_Gradient.apply(lower_projection_cluster, axis))/2
+            L_multimodal = calc_muli_loss_weight*_Dip_Gradient.apply(torch.cat((higher_projection_cluster, lower_projection_cluster), dim=0), axis)
             loss = loss + L_unimodal - L_multimodal
         
         if higher_projection_child_improvement:
-            loss_higher_projection_child = self._improve_space_recursive(node.higher_projection_child, projection_axis_optimizer, loss, embedded_augmented_data, unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight)
+            loss_higher_projection_child = self._improve_space_recursive(node.higher_projection_child, projection_axis_optimizer, loss, embedded_augmented_data, unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight, projection_axis_learning)
         else:
             loss_higher_projection_child = 0
         if lower_projection_child_improvement:
-            loss_lower_projection_child = self._improve_space_recursive(node.lower_projection_child, projection_axis_optimizer, loss, embedded_augmented_data, unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight)
+            loss_lower_projection_child = self._improve_space_recursive(node.lower_projection_child, projection_axis_optimizer, loss, embedded_augmented_data, unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight, projection_axis_learning)
         else:
             loss_lower_projection_child = 0
 
@@ -635,15 +638,16 @@ class Cluster_Tree:
         elif loss_weight_scale_function == "exponential":
             weights = self._exponential(loss_weight_direction, node_criteria, weight_normalization, loss_weight)
         elif loss_weight_scale_function == None:
-            weights = loss_weight
+            weights = (loss_weight, loss_weight)
         else:
             raise ValueError(f"method for calculating the unimodal loss weight not supported. Make sure it is a string indicating the method (e.g. linear) or directly pass the weight as a float")
         
         if loss_application == "leaf_nodes" and not multimodal:
             if not node.higher_projection_child.is_leaf_node():
-                weights[0] = 0
+                weights = (0, weights[1])
             if not node.lower_projection_child.is_leaf_node():
-                weights[1] = 0
+                weights = (weights[0], 0)
+        return weights
         
     def _linear(self, direction, node_criteria, normalization, unimodal_loss_weight):
         if normalization == -1:
@@ -758,7 +762,6 @@ class _DipECT_Module(torch.nn.Module):
         pruning_threshold: float,
         grow_interval: float,
         use_pvalue: bool,
-        unimodal_loss_increase_method: Union[str, float],
         max_leaf_nodes: int,
         reconstruction_loss_weight: float,
         unimodality_treshhold: float,
@@ -780,7 +783,8 @@ class _DipECT_Module(torch.nn.Module):
         mulitmodal_loss_node_criteria_method, 
         mulitmodal_loss_weight_function, 
         mulitmodal_loss_weight_direction, 
-        multimodal_loss_weight
+        multimodal_loss_weight, 
+        projection_axis_learning
     ) -> "_DipECT_Module":
         """
         Trains the _DeepECT_Module in place.
@@ -866,7 +870,7 @@ class _DipECT_Module(torch.nn.Module):
                         )
 
                     # calculate cluster loss
-                    cluster_loss = self.cluster_tree.improve_space(embedded, embedded_aug if self.augmentation_invariance else None, projection_axis_optimizer, unimodal_loss_increase_method, unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight)
+                    cluster_loss = self.cluster_tree.improve_space(embedded, embedded_aug if self.augmentation_invariance else None, projection_axis_optimizer, unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight, projection_axis_learning)
                     cluster_loss = cluster_loss/(self.cluster_tree.number_nodes - len(self.cluster_tree.leaf_nodes))
 
                     self.cluster_tree.clear_node_assignments()
@@ -955,7 +959,6 @@ def _dipect(
     rec_loss_fn: torch.nn.modules.loss._Loss,
     autoencoder: _AbstractAutoencoder,
     embedding_size: int,
-    unimodal_loss_increase_method: Union[str, float],
     max_leaf_nodes: int,
     reconstruction_loss_weight: float,
     unimodality_treshhold: float,
@@ -977,7 +980,8 @@ def _dipect(
     mulitmodal_loss_node_criteria_method, 
     mulitmodal_loss_weight_function, 
     mulitmodal_loss_weight_direction, 
-    multimodal_loss_weight
+    multimodal_loss_weight,
+    projection_axis_learning
 ):
     """
     Start the actual DeepECT clustering procedure on the input data set.
@@ -1076,7 +1080,6 @@ def _dipect(
         pruning_threshold,
         grow_interval,
         use_pvalue,
-        unimodal_loss_increase_method, 
         max_leaf_nodes,
         reconstruction_loss_weight,
         unimodality_treshhold,
@@ -1098,7 +1101,8 @@ def _dipect(
         mulitmodal_loss_node_criteria_method, 
         mulitmodal_loss_weight_function, 
         mulitmodal_loss_weight_direction, 
-        multimodal_loss_weight
+        multimodal_loss_weight,
+        projection_axis_learning
     )
     # Get labels
     deepect_tree: PredictionClusterTree = dipect_module.predict(
@@ -1162,7 +1166,9 @@ class DipECT:
         batch_size: int = 256,
         pretrain_optimizer_params: dict = None,
         clustering_optimizer_params: dict = None,
-        projection_axis_optimizer_params: dict = None,
+        # projection_axis_optimizer_params: dict = None,
+        projection_axis_learning_rate: float = 1e-5,
+        projection_axis_learning: bool = True,
         pretrain_epochs: int = 50,
         max_epochs: int = 40,
         grow_interval: float = 2.0,
@@ -1172,7 +1178,6 @@ class DipECT:
         rec_loss_fn: torch.nn.modules.loss._Loss = torch.nn.MSELoss(),
         autoencoder: _AbstractAutoencoder = None,
         embedding_size: int = 10,
-        unimodal_loss_increase_method: Union[str, float] = "linear",
         max_leaf_nodes: int = 20,
         reconstruction_loss_weight: float = None,
         unimodality_treshhold: float = 1.0,
@@ -1184,15 +1189,15 @@ class DipECT:
         random_state: np.random.RandomState = np.random.RandomState(42),
         logging_active: bool = False,
         autoencoder_param_path: str = "pretrained_ae.pth",
-        unimodal_loss_application: str = "all", 
-        unimoal_loss_node_criteria_method: str = "tree_depth", 
-        unimodal_loss_weight_function: str = "linear", 
-        unimodal_loss_weight_direction: str = "ascending", 
+        unimodal_loss_application: str = "leaf_nodes", # None, "leaf_nodes", "all"
+        unimoal_loss_node_criteria_method: str = "tree_depth", # "tree_depth"., "time_of_split"
+        unimodal_loss_weight_function: str = "linear", # "linear", "exponential", None
+        unimodal_loss_weight_direction: str = "ascending", # "ascending", '"descending"
         unimodal_loss_weight: float = 1.0, 
-        loss_weight_function_normalization = -1,
+        loss_weight_function_normalization = -1, # -1 (no normalization), else normalization term ((np.log2(self.max_leaf_nodes) - 1) works good)
         mulitmodal_loss_application: str = "all", 
         mulitmodal_loss_node_criteria_method: str = "tree_depth", 
-        mulitmodal_loss_weight_function: str = "linear", 
+        mulitmodal_loss_weight_function: str = None, 
         mulitmodal_loss_weight_direction: str = "ascending", 
         multimodal_loss_weight: float = 1.0
     ):
@@ -1207,11 +1212,12 @@ class DipECT:
             if clustering_optimizer_params is None
             else clustering_optimizer_params
         )
-        self.projection_axis_optimizer_params = (
-            {"lr": 1e-5}
-            if projection_axis_optimizer_params is None
-            else projection_axis_optimizer_params
-        )
+        # self.projection_axis_optimizer_params = (
+        #     {"lr": 1e-5}
+        #     if projection_axis_optimizer_params is None
+        #     else projection_axis_optimizer_params
+        # )
+        self.projection_axis_optimizer_params = ({"lr": projection_axis_learning_rate} )
         self.pretrain_epochs = pretrain_epochs
         self.max_epochs = max_epochs
         self.grow_interval = grow_interval
@@ -1221,7 +1227,6 @@ class DipECT:
         self.rec_loss_fn = rec_loss_fn
         self.autoencoder = autoencoder
         self.embedding_size = embedding_size
-        self.unimodal_loss_increase_method = unimodal_loss_increase_method
         self.custom_dataloaders = custom_dataloaders
         self.augmentation_invariance = augmentation_invariance
         self.max_leaf_nodes = max_leaf_nodes
@@ -1244,6 +1249,7 @@ class DipECT:
         self.mulitmodal_loss_weight_function = mulitmodal_loss_weight_function
         self.mulitmodal_loss_weight_direction = mulitmodal_loss_weight_direction
         self.multimodal_loss_weight = multimodal_loss_weight
+        self.projection_axis_learning = projection_axis_learning
 
     def fit_predict(self, X: np.ndarray) -> "DipECT":
         """
@@ -1278,7 +1284,6 @@ class DipECT:
             self.rec_loss_fn,
             self.autoencoder,
             self.embedding_size,
-            self.unimodal_loss_increase_method,
             self.max_leaf_nodes,
             self.reconstruction_loss_weight,
             self.unimodality_treshhold,
@@ -1300,7 +1305,8 @@ class DipECT:
             self.mulitmodal_loss_node_criteria_method, 
             self.mulitmodal_loss_weight_function, 
             self.mulitmodal_loss_weight_direction, 
-            self.multimodal_loss_weight
+            self.multimodal_loss_weight, 
+            self.projection_axis_learning
         )
         self.tree_ = tree
         self.autoencoder = autoencoder

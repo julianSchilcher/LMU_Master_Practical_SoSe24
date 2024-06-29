@@ -582,8 +582,9 @@ class Cluster_Tree:
         if node.is_leaf_node():
             return loss
         
-        if projection_axis_learning: 
-            self._adjust_axis(node, projection_axis_optimizer)
+        if projection_axis_learning is not None:
+            if (projection_axis_learning == "leaf_nodes" and node.higher_projection_child.is_leaf_node() and node.lower_projection_child.is_leaf_node()) or projection_axis_learning == "all": 
+                self._adjust_axis(node, projection_axis_optimizer)
 
         axis = node.projection_axis.detach().clone()
         
@@ -1168,7 +1169,7 @@ class DipECT:
         clustering_optimizer_params: dict = None,
         # projection_axis_optimizer_params: dict = None,
         projection_axis_learning_rate: float = 1e-5,
-        projection_axis_learning: bool = True,
+        projection_axis_learning: str = "all", # None, "all", "leaf_nodes"
         pretrain_epochs: int = 50,
         max_epochs: int = 40,
         grow_interval: float = 2.0,

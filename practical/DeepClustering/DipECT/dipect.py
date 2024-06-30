@@ -594,7 +594,7 @@ class Cluster_Tree:
 
         if higher_projection_child_improvement and lower_projection_child_improvement:
             calc_uni_loss_weight = self._calc_loss_weight(node, unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization)
-            calc_muli_loss_weight = self._calc_loss_weight(node, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight, loss_weight_function_normalization, multimodal=True)[0]
+            calc_multi_loss_weight = self._calc_loss_weight(node, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight, loss_weight_function_normalization, multimodal=True)[0]
         
             if embedded_augmented_data  is not None:
                 higher_projection_cluster = torch.cat((node.higher_projection_child.assignments, embedded_augmented_data[node.higher_projection_child.assignment_indices]), dim=0)
@@ -604,7 +604,7 @@ class Cluster_Tree:
                 lower_projection_cluster = node.lower_projection_child.assignments
             
             L_unimodal = (calc_uni_loss_weight[0]*_Dip_Gradient.apply(higher_projection_cluster, axis) + calc_uni_loss_weight[1]*_Dip_Gradient.apply(lower_projection_cluster, axis))/2
-            L_multimodal = calc_muli_loss_weight*_Dip_Gradient.apply(torch.cat((higher_projection_cluster, lower_projection_cluster), dim=0), axis)
+            L_multimodal = calc_multi_loss_weight*_Dip_Gradient.apply(torch.cat((higher_projection_cluster, lower_projection_cluster), dim=0), axis)
             loss = loss + L_unimodal - L_multimodal
         
         if higher_projection_child_improvement:

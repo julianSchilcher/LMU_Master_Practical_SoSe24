@@ -53,7 +53,7 @@ class ClusteringMethod(Enum):
     """
     Enumeration for clustering methods.
     """
-    DIPECT = "DeepECT"
+    DIPECT = "DipECT"
     DEEPECT_OURS = "DeepECT (Ours)"
     DEEPECT_AUGMENTED_OURS = "DeepECT + Augmentation (Ours)"
     IDEC = "IDEC"

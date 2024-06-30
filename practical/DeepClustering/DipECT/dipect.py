@@ -1195,7 +1195,7 @@ class DipECT:
         unimodal_loss_weight_function: str = "linear", # "linear", "exponential", None
         unimodal_loss_weight_direction: str = "ascending", # "ascending", '"descending"
         unimodal_loss_weight: float = 1.0, 
-        loss_weight_function_normalization = -1, # -1 (no normalization), else normalization term ((np.log2(self.max_leaf_nodes) - 1) works good)
+        loss_weight_function_normalization = -1, # -1 (no normalization), else normalization term ((np.log2(self.max_leaf_nodes) - 1) works good and was until now always used)
         mulitmodal_loss_application: str = "all", 
         mulitmodal_loss_node_criteria_method: str = "tree_depth", 
         mulitmodal_loss_weight_function: str = None, 

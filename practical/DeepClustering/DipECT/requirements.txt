@@ -1,2 +1,8 @@
+torch
+torchvision
+torchaudio
+git+https://github.com/collinleiber/ClustPy
 ray[tune]
 nevergrad
+joblib
+ConfigSpace

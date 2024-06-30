@@ -4,22 +4,25 @@ import sys
 
 sys.path.append(os.getcwd())
 
+import warnings
 from typing import List, Union
 
 import numpy as np
 import torch
 import torch.utils.data
-from clustpy.deep._data_utils import (augmentation_invariance_check, get_dataloader)
+from clustpy.deep._data_utils import (augmentation_invariance_check,
+                                      get_dataloader)
 from clustpy.deep._train_utils import get_trained_autoencoder
 from clustpy.deep._utils import detect_device, encode_batchwise, set_torch_seed
-from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
+from clustpy.deep.autoencoders._abstract_autoencoder import \
+    _AbstractAutoencoder
 from clustpy.deep.dipencoder import _Dip_Gradient
 from clustpy.utils import dip_pval, dip_test
 from sklearn.cluster import KMeans
 from tqdm import tqdm
-import warnings
 
-from practical.DeepClustering.DeepECT.metrics import (PredictionClusterNode, PredictionClusterTree)
+from practical.DeepClustering.DeepECT.metrics import (PredictionClusterNode,
+                                                      PredictionClusterTree)
 
 
 # replaces the dip module
@@ -179,9 +182,9 @@ class Cluster_Node:
 
         raise ValueError("Parameter group with with name projection_axes not initialised yet. Please initialise it by calling optimizer.add_param_group({'params': [], 'lr': desired_learning_rate, 'name': 'projection_axes'},)")
     
-    def adapt_pruning_indicator(self, number_assignments: int):
+    def adapt_pruning_indicator(self, pruning_factor: float, number_assignments: int):
         # adapt pruning indicator with EMA
-        self.pruning_indicator = 0.5*(self.pruning_indicator + number_assignments)
+        self.pruning_indicator = pruning_factor*(self.pruning_indicator + number_assignments)
 
 
 class Cluster_Tree:
@@ -305,7 +308,7 @@ class Cluster_Tree:
         self.root.clear_assignments()
 
     def assign_to_tree(
-        self, data_embedded: torch.Tensor, set_pruning_incidator: bool = False
+        self, data_embedded: torch.Tensor, pruning_strategy: str, pruning_factor: float, set_pruning_incidator: bool = False
     ):
         """
         Assigns all samples in the minibatch to their nearest nodes in the cluster tree.
@@ -323,12 +326,15 @@ class Cluster_Tree:
         # clear all assignments
         self.clear_node_assignments()
         # assign top-down
-        self.assign_top_down(self.root, data_embedded, torch.tensor([i for i in range(len(data_embedded))]), set_pruning_incidator)
+        self.assign_top_down(self.root, data_embedded, torch.tensor([i for i in range(len(data_embedded))]), set_pruning_incidator, pruning_strategy, pruning_factor)
 
-    def assign_top_down(self, node: Cluster_Node, embedded_data: torch.Tensor, embedded_data_indices: torch.Tensor, set_pruning_incidator: bool):
+    def assign_top_down(self, node: Cluster_Node, embedded_data: torch.Tensor, embedded_data_indices: torch.Tensor, set_pruning_incidator: bool, pruning_strategy: str, pruning_factor: float):
         
         if set_pruning_incidator:
-                node.adapt_pruning_indicator(len(embedded_data))
+            if pruning_strategy == "epoch_assessment":
+                node.adapt_pruning_indicator(len(embedded_data * 0.001), len(embedded_data))
+            elif pruning_strategy == "moving_average":
+                node.adapt_pruning_indicator(pruning_factor, len(embedded_data))
         
         if embedded_data.numel() == 0:
             return
@@ -340,9 +346,9 @@ class Cluster_Tree:
         
         labels = self.predict_subclusters(node)
         if node.higher_projection_child is not None:
-            self.assign_top_down(node.higher_projection_child, embedded_data[labels == 1], embedded_data_indices[labels == 1], set_pruning_incidator)
+            self.assign_top_down(node.higher_projection_child, embedded_data[labels == 1], embedded_data_indices[labels == 1], set_pruning_incidator, pruning_strategy, pruning_factor)
         if node.lower_projection_child is not None:
-            self.assign_top_down(node.lower_projection_child, embedded_data[labels == 0], embedded_data_indices[labels == 0], set_pruning_incidator)
+            self.assign_top_down(node.lower_projection_child, embedded_data[labels == 0], embedded_data_indices[labels == 0], set_pruning_incidator, pruning_strategy, pruning_factor)
 
 
     def predict_subclusters(self, node: Cluster_Node):
@@ -573,8 +579,8 @@ class Cluster_Tree:
             self.clear_node_assignments()
         return False
     
-    def improve_space(self, embedded_data: torch.Tensor, embedded_augmented_data: Union[torch.Tensor | None], projection_axis_optimizer: torch.optim.Optimizer, unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight, projection_axis_learning):
-        self.assign_to_tree(embedded_data, set_pruning_incidator=True)
+    def improve_space(self, embedded_data: torch.Tensor, embedded_augmented_data: Union[torch.Tensor | None], projection_axis_optimizer: torch.optim.Optimizer, unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight, projection_axis_learning, pruning_strategy: str, pruning_factor: float):
+        self.assign_to_tree(embedded_data, pruning_strategy, pruning_factor, set_pruning_incidator=True)
         loss = self._improve_space_recursive(self.root, projection_axis_optimizer, 0, embedded_augmented_data, unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight, projection_axis_learning)
         return loss
 
@@ -785,7 +791,9 @@ class _DipECT_Module(torch.nn.Module):
         mulitmodal_loss_weight_function, 
         mulitmodal_loss_weight_direction, 
         multimodal_loss_weight, 
-        projection_axis_learning
+        projection_axis_learning,
+        pruning_strategy,
+        pruning_factor,
     ) -> "_DipECT_Module":
         """
         Trains the _DeepECT_Module in place.
@@ -829,7 +837,6 @@ class _DipECT_Module(torch.nn.Module):
         iterations_until_grow = int(len(trainloader)*grow_interval)
         iteration = 0
         tree_is_grown = False
-        
         # if grow_interval is 0, generate the whole tree before training
         if iterations_until_grow == 0:
             while not growing_treshhold_reached:
@@ -840,9 +847,8 @@ class _DipECT_Module(torch.nn.Module):
         for epoch in range(max_epochs):
 
             with tqdm(trainloader, unit="batch") as tepoch:
-                self.cluster_tree.prune_tree(pruning_threshold)
-                        
                 for batch in tepoch:
+                    self.cluster_tree.prune_tree(pruning_threshold)
 
                     if not tree_is_grown and iteration % iterations_until_grow == 0 and iteration > 0:
                         growing_treshhold_reached = self.cluster_tree.grow_tree(testloader, autoencoder, projection_axis_optimizer, max_leaf_nodes, unimodality_treshhold, number_of_grow_steps, use_pvalue)
@@ -871,7 +877,7 @@ class _DipECT_Module(torch.nn.Module):
                         )
 
                     # calculate cluster loss
-                    cluster_loss = self.cluster_tree.improve_space(embedded, embedded_aug if self.augmentation_invariance else None, projection_axis_optimizer, unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight, projection_axis_learning)
+                    cluster_loss = self.cluster_tree.improve_space(embedded, embedded_aug if self.augmentation_invariance else None, projection_axis_optimizer, unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight, projection_axis_learning, pruning_strategy, pruning_factor)
                     cluster_loss = cluster_loss/(self.cluster_tree.number_nodes - len(self.cluster_tree.leaf_nodes))
 
                     self.cluster_tree.clear_node_assignments()
@@ -982,7 +988,9 @@ def _dipect(
     mulitmodal_loss_weight_function, 
     mulitmodal_loss_weight_direction, 
     multimodal_loss_weight,
-    projection_axis_learning
+    projection_axis_learning,
+    pruning_strategy,
+    pruning_factor,
 ):
     """
     Start the actual DeepECT clustering procedure on the input data set.
@@ -1103,7 +1111,9 @@ def _dipect(
         mulitmodal_loss_weight_function, 
         mulitmodal_loss_weight_direction, 
         multimodal_loss_weight,
-        projection_axis_learning
+        projection_axis_learning,
+        pruning_strategy,
+        pruning_factor,
     )
     # Get labels
     deepect_tree: PredictionClusterTree = dipect_module.predict(
@@ -1200,7 +1210,9 @@ class DipECT:
         mulitmodal_loss_node_criteria_method: str = "tree_depth", 
         mulitmodal_loss_weight_function: str = None, 
         mulitmodal_loss_weight_direction: str = "ascending", 
-        multimodal_loss_weight: float = 1.0
+        multimodal_loss_weight: float = 1.0,
+        pruning_strategy: str = "moving_average", #"epoch_assessment", "moving_average",
+        pruning_factor: float = 0.5,
     ):
         self.batch_size = batch_size
         self.pretrain_optimizer_params = (
@@ -1250,7 +1262,9 @@ class DipECT:
         self.mulitmodal_loss_weight_function = mulitmodal_loss_weight_function
         self.mulitmodal_loss_weight_direction = mulitmodal_loss_weight_direction
         self.multimodal_loss_weight = multimodal_loss_weight
-        self.projection_axis_learning = projection_axis_learning
+        self.projection_axis_learning = projection_axis_learning,
+        self.pruning_strategy = pruning_strategy,
+        self.pruning_factor = pruning_factor
 
     def fit_predict(self, X: np.ndarray) -> "DipECT":
         """
@@ -1307,7 +1321,9 @@ class DipECT:
             self.mulitmodal_loss_weight_function, 
             self.mulitmodal_loss_weight_direction, 
             self.multimodal_loss_weight, 
-            self.projection_axis_learning
+            self.projection_axis_learning,
+            self.pruning_strategy,
+            self.pruning_factor
         )
         self.tree_ = tree
         self.autoencoder = autoencoder

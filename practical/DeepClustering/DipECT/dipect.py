@@ -664,11 +664,28 @@ class Cluster_Tree:
         return False
     
     def improve_space(self, embedded_data: torch.Tensor, embedded_augmented_data: Union[torch.Tensor | None], projection_axis_optimizer: torch.optim.Optimizer, unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight, projection_axis_learning, pruning_strategy: str, pruning_factor: float):
+        """
+        Calculates the cluster loss of the given data samples based on the current the tree structure. 
+        Based on the mode <projection_axis_learning>, it also adapts the projection axis.
+
+        Parameters
+        ----------
+        TODO
+        """
         self.assign_to_tree(embedded_data, pruning_strategy, pruning_factor, set_pruning_incidator=True)
         loss = self._improve_space_recursive(self.root, projection_axis_optimizer, 0, embedded_augmented_data, unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight, projection_axis_learning)
         return loss
 
     def _improve_space_recursive(self, node: Cluster_Node, projection_axis_optimizer: torch.optim.Optimizer, loss: torch.Tensor, embedded_augmented_data: Union[torch.Tensor | None], unimodal_loss_application, unimoal_loss_node_criteria_method, unimodal_loss_weight_function, unimodal_loss_weight_direction, unimodal_loss_weight, loss_weight_function_normalization, mulitmodal_loss_application, mulitmodal_loss_node_criteria_method, mulitmodal_loss_weight_function, mulitmodal_loss_weight_direction, multimodal_loss_weight, projection_axis_learning):
+        """
+        Helper function for going recursively through the tree and calculating the cluster loss for each node. 
+        The losses per node are summed up and returned. Based on the mode <projection_axis_learning>, 
+        the axis of the node is adapted before calculating the loss. 
+
+        Parameters
+        ----------
+        TODO
+        """
         if node.is_leaf_node():
             return loss
         
@@ -710,6 +727,16 @@ class Cluster_Tree:
 
 
     def _adjust_axis(self, node: Cluster_Node, projection_axis_optimizer: torch.optim.Optimizer):
+        """
+        Adjusts the projection axis of the given node.
+
+        Parameters
+        ----------
+        node : Cluster_Node
+            The node whose projection axis should be adjusted.
+        projection_axis_optimizer : torch.optim.Optimizer
+            The optimizer handling the projection axes.
+        """
         projection_axis_optimizer.zero_grad()
         # data gradients should not be stored
         data = node.assignments.detach().clone()
@@ -718,7 +745,6 @@ class Cluster_Tree:
         projection_axis_optimizer.step()
     
     def _calc_loss_weight(self, node: Cluster_Node, loss_application: str, loss_node_criteria_method: str, loss_weight_scale_function: str, loss_weight_direction: str, loss_weight: float, weight_normalization: float, multimodal: bool = False):
-
         if loss_application == None:
             return (0,0)
             

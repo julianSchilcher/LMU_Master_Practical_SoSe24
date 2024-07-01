@@ -25,10 +25,8 @@ from practical.DeepClustering.DeepECT.metrics import (PredictionClusterNode, Pre
 # replaces the dip module
 class Cluster_Node: 
     """
-    This class represents a cluster node within a binary cluster tree.
-    Each node in a cluster tree represents a cluster. The cluster is stored through its center (self.center).
-    During the assignment of a new minibatch to the cluster tree, each node stores the samples nearest to its center (self.assignments).
-    The centers of leaf nodes are optimized through autograd, whereas the center of inner nodes is adapted analytically with weights for each of its children stored in self.weights.
+    This class represents a cluster node within a binary cluster tree. Each node in a cluster tree represents a cluster.
+    Each inner node in the tree stores a projection axis used for the dip test.
     """
 
     def __init__(
@@ -36,8 +34,8 @@ class Cluster_Node:
         device: torch.device,
         id: int = 0,
         parent: "Cluster_Node" = None,
-        split_id: int = 0, # keep for prediction phase
-        split_level: int = 0, # used to adapt weight of L_uni depending on how deep we are in the tree
+        split_id: int = 0, 
+        split_level: int = 0,
         number_assignments: int = 0, # used to initialise pruning_indicator
     ) -> "Cluster_Node":
         """
@@ -45,8 +43,6 @@ class Cluster_Node:
 
         Parameters
         ----------
-        center : np.ndarray
-            The initial center for this node.
         device : torch.device
             The device to be trained on.
         id : int, optional
@@ -55,8 +51,10 @@ class Cluster_Node:
             The parent node, by default None.
         split_id : int, optional
             The ID of the split, by default 0.
-        weight : int, optional
-            The weight of the node, by default 1.
+        split_level : int, optional
+            The level of the node in the cluster tree, by default 0.
+        number_assignments : int, optional
+            Number of assignments for this node to (re-)initialise pruning indicator, by default 0.
 
         Returns
         -------
@@ -77,7 +75,11 @@ class Cluster_Node:
         self.check_invariant()
     
     def check_invariant(self):
-        if not((self.is_leaf_node() and self.projection_axis is None) or (not self.is_leaf_node() and self.projection_axis is not None)): # leaf node <=> projection_axis=None
+        """
+        Class invariant for assuring that the following bidirectional implication holds:
+        leaf node <=> (projection_axis==None)
+        """
+        if not((self.is_leaf_node() and self.projection_axis is None) or (not self.is_leaf_node() and self.projection_axis is not None)): 
             raise RuntimeError("Bad state: a leaf node stores a projection axis")
 
     def clear_assignments(self):
@@ -130,16 +132,17 @@ class Cluster_Node:
 
         Parameters
         ----------
-        optimizer : Union[torch.optim.Optimizer, None]
-            The optimizer to be used.
-        left_child_centers : np.ndarray
-            Initial centers for the left child.
-        left_child_weight : int
-            Weight of the left child.
-        right_child_centers : np.ndarray
-            Initial centers for the right child.
-        right_child_weight : int
-            Weight of the right child.
+        projection_axis: np.ndarray
+            The projection axis used for the dip test 
+            (used for cluster loss and assigning data to its childs (top.down approach))
+        projection_axis_optimizer : Union[torch.optim.Optimizer, None]
+            The optimizer used for improving the projection axes.
+        num_assignments_higher_projection_child : int
+            Number of initial assignments for the higher projection child - used to initialise
+            the pruning indicator.
+        num_assignments_lower_projection_child : int
+            Number of initial assignments for the lower projection child - used to initialise
+            the pruning indicator.
         max_id : int, optional
             The maximum ID, by default 0.
         max_split_id : int, optional
@@ -149,7 +152,6 @@ class Cluster_Node:
         self.projection_axis = torch.nn.Parameter(torch.nn.Parameter(torch.from_numpy(projection_axis).float()))
 
         if projection_axis_optimizer is not None:
-            # self.add_projection_axis_to_optimizer(optimizer, self.projection_axis) # using just one otptimizer
             projection_axis_optimizer.add_param_group({"params": self.projection_axis})
 
         self.higher_projection_child = Cluster_Node(
@@ -171,7 +173,16 @@ class Cluster_Node:
         self.check_invariant()
 
     def add_projection_axis_to_optimizer(self, optimizer: torch.optim.Optimizer, new_axis: torch.nn.Parameter):
+        """
+        Add new projection axis to the optimizer's param group 'projection_axes'
 
+        Parameters
+        ----------
+        optimizer : torch.optim.Optimizer
+            The optimizer used.
+        new_axis: torch.nn.Parameter
+            The new projection axis which should be added to the optimizer's param group 'projection_axes'
+        """
         for param_group in optimizer.param_groups:
             if param_group.get('name') == "projection_axes":
                 param_group['params'].extend([new_axis]) # optimizer expects a list of parameters
@@ -180,6 +191,14 @@ class Cluster_Node:
         raise ValueError("Parameter group with with name projection_axes not initialised yet. Please initialise it by calling optimizer.add_param_group({'params': [], 'lr': desired_learning_rate, 'name': 'projection_axes'},)")
     
     def adapt_pruning_indicator(self, number_assignments: int):
+        """
+        Adapt pruning treshhold based on the new number of assignments with an exponential moving average.
+
+        Parameters
+        ----------
+        number_assignments : int
+            The number of assignments to this node
+        """
         # adapt pruning indicator with EMA
         self.pruning_indicator = 0.5*(self.pruning_indicator + number_assignments)
 
@@ -188,10 +207,8 @@ class Cluster_Tree:
     """
     This class represents a binary cluster tree. It provides multiple
     functionalities used for improving the cluster tree, like calculating
-    the DC and NC losses for the tree and assigning samples of a minibatch
-    to the appropriate nodes. Furthermore, it provides methods for
-    growing and pruning the tree as well as the analytical adaptation
-    of the inner nodes.
+    the cluster loss and assigning samples in a top-down manner. Furthermore, 
+    it provides methods for growing and pruning the tree..
     """
 
     def __init__(
@@ -199,23 +216,30 @@ class Cluster_Tree:
         trainloader: torch.utils.data.DataLoader,
         autoencoder: torch.nn.Module,
         projection_axis_optimizer: torch.optim.Optimizer,
-        device: torch.device,
-        max_leaf_nodes: int
+        device: torch.device
     ) -> "Cluster_Tree":
         """
         Constructor for the Cluster_Tree class.
 
         Parameters
         ----------
-        init_leafnode_centers : np.ndarray
-            The centers of the two initial leaf nodes of the tree
-            given as an array of shape (2, #embedd_features).
+        trainloader : torch.utils.data.DataLoader
+            dataloader used to initialise the cluster tree (root and
+            its 2 childs)
+        autoencoder : torch.nn.Module
+            The autoencoder used to embedd the data of the dataloader.
+        projection_axis_optimizer : torch.optim.Optimizer
+            optimizer for improving the projection axes
         device : torch.device
             The device to be trained on.
+
+        Returns
+        -------
+        Cluster_Tree
+            The initialized Cluster_Tree object.
         """
         # initialise cluster tree
         self.device = device
-        self.max_leaf_nodes = max_leaf_nodes
         self.root = Cluster_Node(device)
         embedded_data = encode_batchwise(trainloader, autoencoder, self.device)
         axis, number_left_assignments, number_right_assignments = self.get_inital_projection_axis(embedded_data)
@@ -287,7 +311,23 @@ class Cluster_Tree:
 
     def get_inital_projection_axis(self, embedded_data: np.ndarray):
         """
-        Returns the inital projection axis for the data in the given trainloader. Furthermore, the size of the higher projection cluster and the lower projection cluster will be returned (e.g to initialise pruning indicator).
+        Returns the initial projection axis for the given data as well as the 
+        number of assignments the 2 clusters. The axis is defined through the resulting
+        centers from applying Kmeans to the given data.
+
+        Parameters
+        ----------
+        embedded_data : np.ndarray
+            Embedded data samples of shape [#Samples, Dimensionality]
+
+        Returns
+        -------
+        axis : np.array
+            The found projection axis
+        number_of_samples_cluster_0 : int
+            Number of assigned samples to cluster 0
+        number_of_samples_cluster_1 : int
+            Number of assigned samples to cluster 1
         """
         # init projection axis on full dataset
         kmeans = KMeans(n_clusters=2, n_init=10).fit(embedded_data)
@@ -308,17 +348,14 @@ class Cluster_Tree:
         self, data_embedded: torch.Tensor, set_pruning_incidator: bool = False
     ):
         """
-        Assigns all samples in the minibatch to their nearest nodes in the cluster tree.
-        It is performed bottom-up, so each sample is first assigned to its nearest
-        leaf node. Afterwards, the samples are assigned recursively to
-        the inner nodes by merging the assignments of the child node.
+        Assigns the given data recursively top-down to the cluster tree.
 
         Parameters
         ----------
-        minibatch_embedded : torch.Tensor
-            The minibatch with shape (#samples, #emb_features).
-        compute_sum_dist : bool, optional
-            Whether to compute the sum of squared distances, by default False.
+        embedded_data : torch.Tensor
+            Embedded data samples of shape [#Samples, Dimensionality]
+        set_pruning_indicator : bool, optional
+            Whether to update the pruning threshold, by default False.
         """
         # clear all assignments
         self.clear_node_assignments()
@@ -326,7 +363,21 @@ class Cluster_Tree:
         self.assign_top_down(self.root, data_embedded, torch.tensor([i for i in range(len(data_embedded))]), set_pruning_incidator)
 
     def assign_top_down(self, node: Cluster_Node, embedded_data: torch.Tensor, embedded_data_indices: torch.Tensor, set_pruning_incidator: bool):
-        
+        """
+        Helper function which assigns the given data to the given node and divides the given data to its childs if they exist.
+
+        Parameters
+        ----------
+        node : Cluster_Node
+            The node object which should get the given data assigned
+        embedded_data : torch.Tensor
+            Embedded data samples of shape [#Samples, Dimensionality]
+        embedded_data_indices : torch.Tensor
+            Indices of the embedded data samples in the batch [#Samples, ]
+        set_pruning_indicator : bool
+            Whether to update the pruning threshold
+        """
+
         if set_pruning_incidator:
                 node.adapt_pruning_indicator(len(embedded_data))
         
@@ -345,12 +396,28 @@ class Cluster_Tree:
             self.assign_top_down(node.lower_projection_child, embedded_data[labels == 0], embedded_data_indices[labels == 0], set_pruning_incidator)
 
 
-    def predict_subclusters(self, node: Cluster_Node):
+    def predict_subclusters(self, node: Cluster_Node) -> np.array:
+        """
+        Predicts the 2 subclusters (child assignments) for the given node using properties of the dip test. 
+        The treshold is set between the middle coordinate of the modal trianlge and the upper/lower modal interval
+
+        Parameters
+        ----------
+        node : Cluster_Node
+            The node object for which we want to predict 2 subclusters
+        
+        Returns
+        -------
+        labels : np.array
+            A label (0/1) for each data point of the given node, where label 1 indicates the higher projection
+            cluster
+        """
+
         if node.assignments.numel() == 1:
-            warnings.warn("Node just got 1 sample assigned")
+            warnings.warn("Node just got 1 sample assigned. Data point will be assigned to higher projection node")
             return np.array([1])
         
-        projections = torch.matmul(node.assignments.detach().clone().cpu().float(), node.projection_axis.detach().clone().reshape(-1,1)).numpy()[:,0] # remove second dimension after projection
+        projections = torch.matmul(node.assignments.detach().cpu().float(), node.projection_axis.detach().reshape(-1,1)).numpy()[:,0] # remove second dimension after projection
         sorted_indices = projections.argsort()
         _, modal_interval, modal_triangle = dip_test(projections[sorted_indices], is_data_sorted=True, just_dip=False)
         index_lower, index_upper = modal_interval
@@ -480,23 +547,17 @@ class Cluster_Tree:
         max_leaf_nodes: int,
         unimodality_treshhold: float,
         number_of_grow_steps: int = 1,
-        use_pvalue: bool = False,
+        use_pvalue: bool = True,
     ) -> bool:
         """
-        Grows the tree at the leaf node with the highest squared distance
-        between its assignments and center. The distance is not normalized,
-        so larger clusters will be chosen.
-
-        We transform the dataset (or a representative sub-sample of it)
-        onto the embedded space. Then, we determine the leaf node
-        with the highest sum of squared distances between its center
-        and the assigned data points. We selected this rule because it
-        provides a good balance between the number of data points
-        and data variance for this cluster.
-        Next, we split the selected node and attach two new leaf
-        nodes to it as children. We determine the initial centers for
-        these new leaf nodes by applying two-means (k-means with
-        k = 2) to the assigned data points.
+        Grows the tree at the leaf node with the highest multimodality. Since the dipvalue depends 
+        on the number of samples, we use the pvalue for the split criteria if use_pvalue is true. In this case
+        we split the leaf node with the lowest pvalue (lowest probability for unimodality). If the lowest pvalue 
+        found is 0, we expand the mulitmodal leaf node (pvalue < unimodal_treshold) with the maximal number of assigned 
+        samples. If use_pvalue is set to false, we introduce a criteria which includes the dipvalue and the number of samples
+        of the node for the decision.
+        The tree growing is stopped if all leaf nodes are unimodal (pvalue > unimodal_threshold) or the maximal number of
+        leaf nodes is reached. 
 
         Parameters
         ----------
@@ -504,14 +565,20 @@ class Cluster_Tree:
             The data loader for the dataset.
         autoencoder : torch.nn.Module
             The autoencoder model for embedding the data.
-        optimizer : torch.optim.Optimizer
-            The optimizer for the autoencoder.
-        device : Union[torch.device, str]
-            The device to perform calculations on.
+        projection_axis_optimizer : torch.optim.Optimizer
+            The optimizer for the projection axes (adding the new axis to it.)
+        max_leaf_nodes : int
+            The maximal number of leaf nodes.
+        unimodality_treshhold : float
+            Specifies the minimal probability we demand so that we can call a node unimodal
+        number_of_grow_steps : int
+            Specifies how many tree grow steps should be applied, default is 1.
+        use_pvalue : int
+            Specifies which splitting criteria should be used, default is True. 
 
         Returns
         ----------
-        Returns True if the algorithm should be stopped (uniform criteria met) or False otherwise
+        Returns True if the algorithm should be stopped or False otherwise
         """
 
         # do not grow further if treshhold was already reached
@@ -528,6 +595,13 @@ class Cluster_Tree:
                 best_value = -np.inf
                 total_assignments = sum([len(node.assignments) for node in self.leaf_nodes if node.assignments is not None])
 
+            # store node with maximal number of assignments for p value
+            if use_pvalue:
+                max_assignments = -np.inf
+                max_assignments_node = None
+                max_assignments_node_axis = None
+                max_assignments_node_lower_projection_cluster = None
+                max_assignments_node_higher_projection_cluster = None
             best_node_to_split = None
             best_node_axis = None
             best_node_number_assign_lower_projection_cluster = None
@@ -543,11 +617,17 @@ class Cluster_Tree:
                 dip_value = dip_test(projections, just_dip=True, is_data_sorted=False)
                 # pvalue gives the probability for unimodality (smaller dip value, higher p value)
                 pvalue = dip_pval(dip_value, len(node.assignments))
-
                 # the more samples, the smaller the dip value, consider this:
                 if use_pvalue:
                     current_value = pvalue
                     better = current_value < best_value
+                    if len(node_data) > max_assignments and pvalue < unimodality_treshhold:
+                        max_assignments = len(node_data)
+                        max_assignments_node = node
+                        max_assignments_node_axis = axis
+                        max_assignments_node_lower_projection_cluster = number_assign_lower_projection_cluster
+                        max_assignments_node_higher_projection_cluster = number_assign_higher_projection_cluster
+
                 else:
                     current_value = dip_value + 0.5*len(node.assignments)/(4*total_assignments)
                     better = current_value > best_value
@@ -564,9 +644,13 @@ class Cluster_Tree:
             if np.abs(best_value) == np.inf: # unimodality threshold reached
                 return True 
 
-            # split the identified node and add child nodes
-            print("split node with #assignments: ", len(best_node_to_split.assignments))
-            best_node_to_split.expand_tree(best_node_axis, projection_axis_optimizer, best_node_number_assign_higher_projection_cluster, best_node_number_assign_lower_projection_cluster, max([leaf.id for leaf in self.leaf_nodes]), max([node.split_id for node in self.nodes]))
+            
+            if use_pvalue and best_value == 0: # split node with highest number of assignments if pvalue is 0
+                print("spliting node with max #assignments: ", len(max_assignments_node.assignments))
+                max_assignments_node.expand_tree(max_assignments_node_axis, projection_axis_optimizer, max_assignments_node_higher_projection_cluster, max_assignments_node_lower_projection_cluster, max([leaf.id for leaf in self.leaf_nodes]), max([node.split_id for node in self.nodes]))
+            else: # split best node
+                print("split node with #assignments: ", len(best_node_to_split.assignments))
+                best_node_to_split.expand_tree(best_node_axis, projection_axis_optimizer, best_node_number_assign_higher_projection_cluster, best_node_number_assign_lower_projection_cluster, max([leaf.id for leaf in self.leaf_nodes]), max([node.split_id for node in self.nodes]))
             # check if max leafnode threshold reached
             if len(self.leaf_nodes) >= max_leaf_nodes: 
                 return True
@@ -750,8 +834,7 @@ class _DipECT_Module(torch.nn.Module):
             trainloader,
             autoencoder,
             projection_axis_optimizer,
-            device,
-            max_leaf_nodes
+            device
         )
 
     def fit(
@@ -818,8 +901,7 @@ class _DipECT_Module(torch.nn.Module):
         self : _DeepECT_Module
             This instance of the _DeepECT_Module
         """
-        # mov_dc_loss = 0.0
-        # mov_nc_loss = 0.0
+        
         mov_rec_loss = 0.0
         mov_rec_loss_aug = 0.0
         mov_loss = 0.0

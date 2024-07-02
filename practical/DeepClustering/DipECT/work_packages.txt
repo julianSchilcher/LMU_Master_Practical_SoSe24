@@ -22,7 +22,7 @@ Hyperparameter Optimization: https://browse.arxiv.org/pdf/2107.05847v3
     -> We want to optimize the models capability to produce clean dendrograms given class labels
 
 Seed = 128
-n_epochs = 60
+n_epochs = 50
 batch_size = 256
 
 Metrics to track with tensorboard (Setup Tensorflow Board logging):

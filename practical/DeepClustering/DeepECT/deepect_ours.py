@@ -12,7 +12,7 @@ import torch.utils.data
 from clustpy.data.real_torchvision_data import load_mnist
 from clustpy.deep._data_utils import augmentation_invariance_check
 from clustpy.deep._train_utils import \
-    get_standard_initial_deep_clustering_setting
+    get_default_deep_clustering_initialization
 from clustpy.deep._utils import set_torch_seed
 from clustpy.deep.autoencoders._abstract_autoencoder import \
     _AbstractAutoencoder
@@ -1075,7 +1075,7 @@ def _deep_ect(
         init_labels,
         init_leafnode_centers,
         _,
-    ) = get_standard_initial_deep_clustering_setting(
+    ) = get_default_deep_clustering_initialization(
         X,
         2,
         batch_size,

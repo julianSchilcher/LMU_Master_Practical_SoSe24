@@ -19,8 +19,7 @@ import torch
 from clustpy.data import load_fmnist, load_mnist, load_reuters, load_usps
 from clustpy.deep._utils import set_torch_seed
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
-from clustpy.deep.autoencoders._abstract_autoencoder import \
-    _AbstractAutoencoder
+from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
 from clustpy.deep.dec import IDEC
 from clustpy.metrics import unsupervised_clustering_accuracy
 from sklearn.cluster import KMeans
@@ -30,12 +29,15 @@ from sklearn.utils import Bunch
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
-from practical.DeepClustering.DeepECT.deepect_ours import \
-    DeepECT as DeepECTOurs
+from practical.DeepClustering.DeepECT.deepect_ours import DeepECT as DeepECTOurs
 from practical.DeepClustering.DipECT.baseline_hierachical.ae_plus import (
-    ae_bisecting, ae_complete, ae_single)
-from practical.DeepClustering.DipECT.baseline_hierachical.idec_hierarchical_clustpy import \
-    run_idec_hierarchical
+    ae_bisecting,
+    ae_complete,
+    ae_single,
+)
+from practical.DeepClustering.DipECT.baseline_hierachical.idec_hierarchical_clustpy import (
+    run_idec_hierarchical,
+)
 from practical.DeepClustering.DipECT.dipect import DipECT
 
 
@@ -43,6 +45,7 @@ class DatasetType(Enum):
     """
     Enumeration for dataset types.
     """
+
     MNIST = "MNIST"
     FASHION_MNIST = "Fashion MNIST"
     USPS = "USPS"
@@ -53,6 +56,7 @@ class ClusteringMethod(Enum):
     """
     Enumeration for clustering methods.
     """
+
     DIPECT = "DipECT"
     DEEPECT_OURS = "DeepECT (Ours)"
     DEEPECT_AUGMENTED_OURS = "DeepECT + Augmentation (Ours)"
@@ -151,6 +155,7 @@ def get_max_epoch_size(data, max_iterations, batch_size):
     """
     return math.ceil(max_iterations / (len(data) / batch_size))
 
+
 def get_max_iterations(data, max_epochs, batch_size):
     """
     Calculate the maximum number of iterations.
@@ -173,6 +178,7 @@ def get_max_iterations(data, max_epochs, batch_size):
     iterations_per_epoch = math.ceil(dataset_size / batch_size)
     max_iterations = max_epochs * iterations_per_epoch
     return max_iterations
+
 
 def pretraining(
     autoencoder_type: AutoencoderType,
@@ -212,7 +218,9 @@ def pretraining(
         torch.use_deterministic_algorithms(mode=True)
         # logging config
         logging.root.handlers = []
-        log_path = pathlib.Path(f"practical/DeepClustering/DipECT/pretrained_autoencoders_log/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{seed}.txt")
+        log_path = pathlib.Path(
+            f"practical/DeepClustering/DipECT/pretrained_autoencoders_log/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{seed}.txt"
+        )
         logging.basicConfig(
             level=logging.INFO,
             handlers=[
@@ -369,7 +377,9 @@ def fit(
     results = []
     for method in ClusteringMethod:
         # Save path
-        result_path = pathlib.Path(f"practical/DeepClustering/DipECT/results/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.pq")
+        result_path = pathlib.Path(
+            f"practical/DeepClustering/DipECT/results/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.pq"
+        )
         if os.path.exists(result_path):
             results.append(pd.read_parquet(result_path))
             continue
@@ -399,13 +409,17 @@ def fit(
                 prefetch_factor=200 if can_use_workers else None,
             ),
         )
-        
+
         # autoencoder save path
-        autoencoder_save_path = pathlib.Path(f"practical/DeepClustering/DipECT/results_autoencoder/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.pth")
+        autoencoder_save_path = pathlib.Path(
+            f"practical/DeepClustering/DipECT/results_autoencoder/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.pth"
+        )
 
         # logging config
         logging.root.handlers = []
-        log_path = pathlib.Path(f"practical/DeepClustering/DipECT/results_log/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.txt")
+        log_path = pathlib.Path(
+            f"practical/DeepClustering/DipECT/results_log/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.txt"
+        )
         logging.basicConfig(
             level=logging.INFO,
             handlers=[
@@ -498,10 +512,10 @@ def fit(
         elif method == ClusteringMethod.DIPECT:
             autoencoder.to(device)
             dipect = DipECT(
-                max_epochs=max_epochs,
+                clustering_n_epochs=max_epochs,
                 autoencoder=autoencoder,
                 clustering_optimizer_params={"lr": 1e-4, "betas": (0.9, 0.999)},
-                max_leaf_nodes=max_leaf_nodes,
+                tree_growth_upper_bound_leaf_nodes=max_leaf_nodes,
                 random_state=np.random.RandomState(seed),
                 custom_dataloaders=dataloaders,
                 logging_active=True,
@@ -988,14 +1002,18 @@ def get_autoencoder_path(
         autoencoder_params_path is None
         and autoencoder_type == AutoencoderType.CLUSTPY_STANDARD
     ):
-        params_path = pathlib.Path(f"practical/DeepClustering/DipECT/pretrained_autoencoders/{dataset['dataset_name']}_autoencoder_{embedding_dim}_pretrained_{seed}.pth")
+        params_path = pathlib.Path(
+            f"practical/DeepClustering/DipECT/pretrained_autoencoders/{dataset['dataset_name']}_autoencoder_{embedding_dim}_pretrained_{seed}.pth"
+        )
     elif (
         autoencoder_params_path is None
         and autoencoder_type == AutoencoderType.DEEPECT_STACKED_AE
     ):
-        params_path = pathlib.Path(f"practical/DeepClustering/DipECT/pretrained_autoencoders/{dataset['dataset_name']}_stacked_ae_{embedding_dim}_pretrained_{seed}.pth")
-    
-    else: 
+        params_path = pathlib.Path(
+            f"practical/DeepClustering/DipECT/pretrained_autoencoders/{dataset['dataset_name']}_stacked_ae_{embedding_dim}_pretrained_{seed}.pth"
+        )
+
+    else:
         params_path = pathlib.Path(autoencoder_params_path)
     return params_path.resolve()
 
@@ -1066,7 +1084,6 @@ def evaluate(
         embedding_dim=embedding_dim,
         can_use_workers=can_use_workers,
         max_epochs=max_epochs,
-        
     )
     print(results)
     print(
@@ -1237,12 +1254,20 @@ def pretrain_for_multiple_seeds(seeds: List[int], embedding_dims=[10], worker_nu
         result = pool.starmap(pretraining_with_data_load, all_autoencoders)
     return result
 
-def load_precomputed_results(dataset_type: DatasetType, autoencoder_type: AutoencoderType, seeds: List[int], embedding_dims: List[int] = [10]):
+
+def load_precomputed_results(
+    dataset_type: DatasetType,
+    autoencoder_type: AutoencoderType,
+    seeds: List[int],
+    embedding_dims: List[int] = [10],
+):
     results = []
     dataset = get_dataset(dataset_type)
     for method, seed, embedding_dim in product(ClusteringMethod, seeds, embedding_dims):
         # Save path
-        result_path = pathlib.Path(f"practical/DeepClustering/DipECT/results/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.pq")
+        result_path = pathlib.Path(
+            f"practical/DeepClustering/DipECT/results/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.pq"
+        )
         if os.path.exists(result_path):
             results.append(pd.read_parquet(result_path))
             continue
@@ -1266,6 +1291,7 @@ if __name__ == "__main__":
     # for ae_type, dataset_type, seed, ae_path, embedding_dim, _ in all_autoencoders:
     #     evaluate(ae_type, dataset_type, seed, ae_path, embedding_dim, max_epochs)
 
-
     ae_path = "./practical/DeepClustering/DipECT/pretrained_AE_test.pth"
-    evaluate(AutoencoderType.CLUSTPY_STANDARD, DatasetType.MNIST, 21, ae_path, 10, max_epochs)
+    evaluate(
+        AutoencoderType.CLUSTPY_STANDARD, DatasetType.MNIST, 21, ae_path, 10, max_epochs
+    )

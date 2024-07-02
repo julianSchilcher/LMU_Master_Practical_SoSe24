@@ -864,10 +864,20 @@ class Cluster_Tree:
 
         if projection_axis_learning is not None:
             if (
-                projection_axis_learning == "leaf_nodes"
-                and node.higher_projection_child.is_leaf_node()
-                and node.lower_projection_child.is_leaf_node()
-            ) or projection_axis_learning == "all":
+                (
+                    projection_axis_learning == "only_leaf_nodes"
+                    and node.higher_projection_child.is_leaf_node()
+                    and node.lower_projection_child.is_leaf_node()
+                )
+                or (
+                    projection_axis_learning == "partial_leaf_nodes"
+                    and (
+                        node.higher_projection_child.is_leaf_node()
+                        or node.lower_projection_child.is_leaf_node()
+                    )
+                )
+                or projection_axis_learning == "all"
+            ):
                 self._adjust_axis(node, projection_axis_optimizer)
         
         # axis need to be cloned, otherwise pytorch throws an error 
@@ -884,6 +894,8 @@ class Cluster_Tree:
             and node.lower_projection_child.assignments.numel() > 1
         )
 
+        l_unimodal = unimodal_loss
+        l_multimodal = multimodal_loss
         if higher_projection_child_improvement and lower_projection_child_improvement:
             calc_uni_loss_weight = self._calc_loss_weight(
                 node,
@@ -928,15 +940,25 @@ class Cluster_Tree:
                 higher_projection_cluster = node.higher_projection_child.assignments
                 lower_projection_cluster = node.lower_projection_child.assignments
 
-            unimodal_loss += (
-                calc_uni_loss_weight[0]
-                * _Dip_Gradient.apply(higher_projection_cluster, axis)
-                + calc_uni_loss_weight[1]
-                * _Dip_Gradient.apply(lower_projection_cluster, axis)
-            ) / 2
-            multimodal_loss += calc_multi_loss_weight * _Dip_Gradient.apply(
-                torch.cat((higher_projection_cluster, lower_projection_cluster), dim=0),
-                axis,
+            l_unimodal = (
+                unimodal_loss
+                + (
+                    calc_uni_loss_weight[0]
+                    * _Dip_Gradient.apply(higher_projection_cluster, axis)
+                    + calc_uni_loss_weight[1]
+                    * _Dip_Gradient.apply(lower_projection_cluster, axis)
+                )
+                / 2
+            )
+            l_multimodal = (
+                multimodal_loss
+                + calc_multi_loss_weight
+                * _Dip_Gradient.apply(
+                    torch.cat(
+                        (higher_projection_cluster, lower_projection_cluster), dim=0
+                    ),
+                    axis,
+                )
             )
 
         if higher_projection_child_improvement:
@@ -946,8 +968,8 @@ class Cluster_Tree:
             ) = self._improve_space_recursive(
                 node.higher_projection_child,
                 projection_axis_optimizer,
-                unimodal_loss,
-                multimodal_loss,
+                l_unimodal,
+                l_multimodal,
                 embedded_augmented_data,
                 unimodal_loss_application,
                 unimoal_loss_node_criteria_method,
@@ -974,8 +996,8 @@ class Cluster_Tree:
             ) = self._improve_space_recursive(
                 node.lower_projection_child,
                 projection_axis_optimizer,
-                unimodal_loss,
-                multimodal_loss,
+                l_unimodal,
+                l_multimodal,
                 embedded_augmented_data,
                 unimodal_loss_application,
                 unimoal_loss_node_criteria_method,
@@ -1244,7 +1266,13 @@ class _DipECT_Module(torch.nn.Module):
         iterations_until_grow = math.ceil(len(trainloader) * grow_interval)
         iteration = 0
         # if grow_interval is 0, generate the whole tree before training
-        metrics = dict()
+        metrics = {
+            "acc": 0.0,
+            "nmi": 0.0,
+            "ari": 0.0,
+            "dp": 0.0,
+            "lp": 0.0,
+        }
         if iterations_until_grow == 0:
             while not growing_treshhold_reached:
                 growing_treshhold_reached = self.cluster_tree.grow_tree(
@@ -1287,7 +1315,9 @@ class _DipECT_Module(torch.nn.Module):
                     if pruning_strategy == "moving_average":
                         self.cluster_tree.prune_tree(pruning_threshold, metrics)
 
-                    if iteration % iterations_until_grow == 0 and iteration > 0:
+                    if (
+                        iteration % iterations_until_grow == 0 and iteration > 0
+                    ) or self.cluster_tree.number_nodes < 3:
                         growing_treshhold_reached = self.cluster_tree.grow_tree(
                             testloader,
                             autoencoder,
@@ -1345,11 +1375,6 @@ class _DipECT_Module(torch.nn.Module):
                         self.cluster_tree.number_nodes
                         - len(self.cluster_tree.leaf_nodes)
                     )
-                    metrics["multimodal_loss"] = multimodal_loss.item()
-                    metrics["unimodal_loss"] = unimodal_loss.item()
-                    metrics["cluster_loss"] = cluster_loss.item()
-
-                    self.cluster_tree.clear_node_assignments()
 
                     if reconstruction_loss_weight is None:
                         reconstruction_loss_weight = 1 / (
@@ -1365,11 +1390,14 @@ class _DipECT_Module(torch.nn.Module):
                     else:
                         loss = cluster_loss + rec_loss * reconstruction_loss_weight
 
-                    metrics["rec_loss"] = rec_loss.item()
-                    metrics["loss"] = loss.item()
-
                     loss.backward()
                     optimizer.step()
+                    self.cluster_tree.clear_node_assignments()
+                    metrics["multimodal_loss"] = multimodal_loss.item()
+                    metrics["unimodal_loss"] = unimodal_loss.item()
+                    metrics["cluster_loss"] = cluster_loss.item()
+                    metrics["rec_loss"] = rec_loss.item()
+                    metrics["loss"] = loss.item()
                     iteration += 1
                     train.report(metrics)
                     mov_loss += metrics["loss"]
@@ -1377,7 +1405,6 @@ class _DipECT_Module(torch.nn.Module):
                     mov_cluster_loss += metrics["cluster_loss"]
                     mov_unimodal_loss += metrics["unimodal_loss"]
                     mov_multimodal_loss += metrics["multimodal_loss"]
-                    metrics.clear()
 
             if growing_treshhold_reached and early_stopping:
                 refinement_counter += 1
@@ -1525,6 +1552,8 @@ def _dipect(
         The final autoencoder
     """
     # Get initial setting (device, dataloaders, pretrained AE and initial clustering result)
+    if os.path.exists(autoencoder_save_param_path):
+        autoencoder.load_parameters(autoencoder_save_param_path)
     save_ae_state_dict = not hasattr(autoencoder, "fitted") or not autoencoder.fitted
     set_torch_seed(random_state)
 
@@ -1676,45 +1705,53 @@ class DipECT:
 
     def __init__(
         self,
+        # data
         batch_size: int = 256,
+        custom_dataloaders: tuple = None,
+        # optimizer
         pretrain_optimizer_params: dict = None,
         clustering_optimizer_params: dict = None,
-        # projection_axis_optimizer_params: dict = None,
         projection_axis_learning_rate: float = 1e-5,
-        projection_axis_learning: str = "all",  # None, "all", "leaf_nodes"
-        pretrain_epochs: int = 50,
-        max_epochs: int = 40,
-        grow_interval: float = 2.0,
-        use_pvalue: bool = False,
-        pruning_threshold: float = 0.1,
+        projection_axis_learning: str = "all",  # None, "all", "only_leaf_nodes", "partial_leaf_nodes"
         optimizer_class: torch.optim.Optimizer = torch.optim.Adam,
+        # autoencoder
         rec_loss_fn: torch.nn.modules.loss._Loss = torch.nn.MSELoss(),
         autoencoder: _AbstractAutoencoder = None,
-        embedding_size: int = 10,
-        max_leaf_nodes: int = 20,
-        reconstruction_loss_weight: float = None,
-        unimodality_treshhold: float = 0.95,
-        number_of_grow_steps: int = 1,
-        early_stopping: bool = False,
-        refinement_epochs: int = 0,
-        custom_dataloaders: tuple = None,
-        augmentation_invariance: bool = False,
-        random_state: np.random.RandomState = np.random.RandomState(42),
-        logging_active: bool = False,
+        autoencoder_pretrain_n_epochs: int = 50,
+        reconstruction_loss_weight: float = None,  # None, float(1e-4, 1e4)
         autoencoder_param_path: str = "pretrained_ae.pth",
-        unimodal_loss_application: str = "leaf_nodes",  # None, "leaf_nodes", "all"
-        unimoal_loss_node_criteria_method: str = "tree_depth",  # "tree_depth"., "time_of_split"
-        unimodal_loss_weight_function: str = "linear",  # "linear", "exponential", None
-        unimodal_loss_weight_direction: str = "ascending",  # "ascending", '"descending"
-        unimodal_loss_weight: float = 1.0,
-        loss_weight_function_normalization=-1,  # -1 (no normalization), else normalization term ((np.log2(self.max_leaf_nodes) - 1) works good and was until now always used)
-        mulitmodal_loss_application: str = "all",
-        mulitmodal_loss_node_criteria_method: str = "tree_depth",
-        mulitmodal_loss_weight_function: str = None,
-        mulitmodal_loss_weight_direction: str = "ascending",
-        multimodal_loss_weight: float = 1.0,
+        # clustering
+        clustering_n_epochs: int = 40,
+        embedding_size: int = 10,
+        augmentation_invariance: bool = False,
+        # pruning
+        pruning_threshold: float = 0.1,
         pruning_strategy: str = "moving_average",  # "epoch_assessment", "moving_average",
         pruning_factor: float = 0.5,
+        # tree growth
+        tree_growth_frequency: float = 2.0,
+        tree_growth_amount: int = 1,
+        tree_growth_upper_bound_leaf_nodes: int = 20,
+        tree_growth_use_unimodality_pvalue: bool = False,
+        tree_growth_unimodality_treshold: float = 0.95,
+        # unimodal
+        unimodal_loss_application: str = "leaf_nodes",  # None, "leaf_nodes", "all"
+        unimodal_loss_node_criteria_method: str = "tree_depth",  # "tree_depth", "time_of_split"
+        unimodal_loss_weight_function: str = "linear",  # "linear", "exponential", None
+        unimodal_loss_weight_direction: str = "ascending",  # "ascending", "descending"
+        unimodal_loss_weight: float = 1.0,
+        loss_weight_function_normalization=-1,  # -1 (no normalization), else normalization term ((np.log2(self.max_leaf_nodes) - 1) works good and was until now always used)
+        # multimodal
+        mulitmodal_loss_application: str = "all",  # None, "leaf_nodes", "all"
+        mulitmodal_loss_node_criteria_method: str = "tree_depth",  # "tree_depth", "time_of_split"
+        mulitmodal_loss_weight_function: str = None,  # "linear", "exponential", None
+        mulitmodal_loss_weight_direction: str = "ascending",  # "ascending", "descending"
+        multimodal_loss_weight: float = 1.0,
+        # utility
+        early_stopping: bool = False,
+        refinement_epochs: int = 0,
+        random_state: np.random.RandomState = np.random.RandomState(42),
+        logging_active: bool = False,
         evaluate_every_n_epochs: int = 2,
     ):
         self.batch_size = batch_size
@@ -1734,10 +1771,10 @@ class DipECT:
         #     else projection_axis_optimizer_params
         # )
         self.projection_axis_optimizer_params = {"lr": projection_axis_learning_rate}
-        self.pretrain_epochs = pretrain_epochs
-        self.max_epochs = max_epochs
-        self.grow_interval = grow_interval
-        self.use_pvalue = use_pvalue
+        self.pretrain_epochs = autoencoder_pretrain_n_epochs
+        self.max_epochs = clustering_n_epochs
+        self.grow_interval = tree_growth_frequency
+        self.use_pvalue = tree_growth_use_unimodality_pvalue
         self.pruning_threshold = pruning_threshold
         self.optimizer_class = optimizer_class
         self.rec_loss_fn = rec_loss_fn
@@ -1745,17 +1782,17 @@ class DipECT:
         self.embedding_size = embedding_size
         self.custom_dataloaders = custom_dataloaders
         self.augmentation_invariance = augmentation_invariance
-        self.max_leaf_nodes = max_leaf_nodes
+        self.max_leaf_nodes = tree_growth_upper_bound_leaf_nodes
         self.reconstruction_loss_weight = reconstruction_loss_weight
-        self.unimodality_treshhold = unimodality_treshhold
-        self.number_of_grow_steps = number_of_grow_steps
+        self.unimodality_treshhold = tree_growth_unimodality_treshold
+        self.number_of_grow_steps = tree_growth_amount
         self.early_stopping = early_stopping
         self.refinement_epochs = refinement_epochs
         self.random_state = random_state
         self.autoencoder_param_path = autoencoder_param_path
         self.logging_active = logging_active
         self.unimodal_loss_application = unimodal_loss_application
-        self.unimoal_loss_node_criteria_method = unimoal_loss_node_criteria_method
+        self.unimoal_loss_node_criteria_method = unimodal_loss_node_criteria_method
         self.unimodal_loss_weight_function = unimodal_loss_weight_function
         self.unimodal_loss_weight_direction = unimodal_loss_weight_direction
         self.unimodal_loss_weight = unimodal_loss_weight
@@ -1846,25 +1883,36 @@ if __name__ == "__main__":
     start = datetime.datetime.now()
     dataset, labels = load_mnist(return_X_y=True)
     autoencoder = FeedforwardAutoencoder([dataset.shape[1], 500, 500, 2000, 10])
-    autoencoder.load_parameters(
-        "practical/DeepClustering/DipECT/autoencoder/feedforward_mnist_21.pth"
-    )
-    autoencoder.fitted = True
 
     dipect = DipECT(
         autoencoder=autoencoder,
         autoencoder_param_path="practical/DeepClustering/DipECT/autoencoder/feedforward_mnist_21.pth",
         random_state=np.random.RandomState(21),
-        max_epochs=50,
-        max_leaf_nodes=100,
-        use_pvalue=True,
-        logging_active=True,
-        evaluate_every_n_epochs=4,
+        clustering_n_epochs=60,
+        early_stopping=False,
+        loss_weight_function_normalization=5.64386,
+        mulitmodal_loss_application="all",
+        mulitmodal_loss_node_criteria_method="tree_depth",
+        mulitmodal_loss_weight_direction="ascending",
+        mulitmodal_loss_weight_function="linear",
+        multimodal_loss_weight=250.0005,
+        projection_axis_learning="only_leaf_nodes",
+        projection_axis_learning_rate=0.0,
+        pruning_factor=0.5,
         pruning_strategy="epoch_assessment",
-        pruning_threshold=250,
-        pruning_factor=1.0,
-        reconstruction_loss_weight=1.0,
-        number_of_grow_steps=2
+        pruning_threshold=105.0,
+        reconstruction_loss_weight=None,
+        refinement_epochs=0,
+        tree_growth_amount=10,
+        tree_growth_frequency=0.5,
+        tree_growth_unimodality_treshold=0.975,
+        tree_growth_upper_bound_leaf_nodes=20,
+        tree_growth_use_unimodality_pvalue=False,
+        unimodal_loss_application=None,
+        unimodal_loss_node_criteria_method="tree_depth",
+        unimodal_loss_weight=250.00005,
+        unimodal_loss_weight_direction="descending",
+        unimodal_loss_weight_function="linear",
     )
     dipect.fit_predict(dataset / 255, labels)
     print(

@@ -13,8 +13,10 @@ Ideas:
 
 Hyperparameter Optimization: https://browse.arxiv.org/pdf/2107.05847v3
 1. Use Nevergrad + Ray Tune 
-    1. PCABO + TwoPointsDE + ScrHammerslySearch
+    1. NGIoh + SMAC3 + TwoPointsDE + SMAC3
         1. Chaining?
+        2. Workers = 4
+        3. Budget = 48 hours * workers / training time
 2. Use Resampling -> cross-validation (only for supervised models)
     1. Use training set to train + validate on test set (inner loop) + and test on combined train+test set
     -> We want to optimize the models capability to produce clean dendrograms given class labels

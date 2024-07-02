@@ -2,7 +2,7 @@ torch
 torchvision
 torchaudio
 git+https://github.com/collinleiber/ClustPy
-ray[tune]
+ray[data,train,tune]
 nevergrad
 joblib
 ConfigSpace

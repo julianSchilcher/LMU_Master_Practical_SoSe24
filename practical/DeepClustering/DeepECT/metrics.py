@@ -5,8 +5,11 @@ import clustpy.metrics
 import numpy as np
 import torch
 from scipy.special import comb
-from sklearn.metrics import (accuracy_score, adjusted_rand_score,
-                             normalized_mutual_info_score)
+from sklearn.metrics import (
+    accuracy_score,
+    adjusted_rand_score,
+    normalized_mutual_info_score,
+)
 
 
 class PredictionClusterNode:
@@ -45,7 +48,7 @@ class PredictionClusterNode:
         self.parent: PredictionClusterNode = parent
         self.left_child: PredictionClusterNode = left_child
         self.right_child: PredictionClusterNode = right_child
-        self.assigned_indices: List[int] = []
+        self.assigned_indices: List[torch.Tensor] = []
         self.center = center
 
     def assign_batch(
@@ -64,9 +67,7 @@ class PredictionClusterNode:
             Indices of the batch assigned to this node.
         """
         if assigned_batch_indices is not None:
-            self.assigned_indices.extend(
-                dataset_indices[assigned_batch_indices].tolist()
-            )
+            self.assigned_indices.append(dataset_indices[assigned_batch_indices])
 
     @property
     def assignments(self):
@@ -78,7 +79,9 @@ class PredictionClusterNode:
         List[int]
             The sorted list of assigned indices.
         """
-        return sorted(self.assigned_indices)
+        if any([len(t) > 0 for t in self.assigned_indices]):
+            return sorted(torch.cat(self.assigned_indices, dim=0).tolist())
+        return []
 
     @property
     def is_leaf(self):
@@ -185,6 +188,7 @@ class PredictionClusterTree:
         IndexError
             If the node with the given ID is not found.
         """
+
         def find_idx_recursive(node: PredictionClusterNode):
             if node.id == id:
                 return node
@@ -212,6 +216,7 @@ class PredictionClusterTree:
         List[PredictionClusterNode]
             The list of all leaf nodes.
         """
+
         def get_nodes_recursive(node: PredictionClusterNode):
             result = []
             if node.is_leaf:
@@ -233,6 +238,7 @@ class PredictionClusterTree:
         List[PredictionClusterNode]
             The list of all nodes.
         """
+
         def get_nodes_recursive(node: PredictionClusterNode):
             result = [node]
             if node.is_leaf:
@@ -247,6 +253,7 @@ class PredictionClusterTree:
         """
         Aggregates the assignments from leaf nodes to inner nodes.
         """
+
         def aggregate_nodes_recursive(node: PredictionClusterNode):
             if node.is_leaf:
                 return node.assigned_indices
@@ -363,6 +370,8 @@ class PredictionClusterTree:
         float
             The flat accuracy.
         """
+        if n_clusters > len(self.leaf_nodes):
+            return 0.0
         return clustpy.metrics.unsupervised_clustering_accuracy(
             ground_truth, self.get_k_cluster_predictions(ground_truth, n_clusters)
         )
@@ -383,6 +392,8 @@ class PredictionClusterTree:
         float
             The flat NMI.
         """
+        if n_clusters > len(self.leaf_nodes):
+            return 0.0
         return normalized_mutual_info_score(
             ground_truth, self.get_k_cluster_predictions(ground_truth, n_clusters)
         )
@@ -403,6 +414,8 @@ class PredictionClusterTree:
         float
             The flat ARI.
         """
+        if n_clusters > len(self.leaf_nodes):
+            return 0.0
         return adjusted_rand_score(
             ground_truth, self.get_k_cluster_predictions(ground_truth, n_clusters)
         )
@@ -468,7 +481,7 @@ def dendrogram_purity(tree: PredictionClusterTree, ground_truth: np.ndarray) -> 
     """
     total_per_label_frequencies = count_values_in_sequence(ground_truth)
     total_per_label_pairs_count = {
-        k: comb(v, 2, True) for k, v in total_per_label_frequencies.items()
+        k: comb(v, 2, exact=True) for k, v in total_per_label_frequencies.items()
     }
     total_n_of_pairs = sum(total_per_label_pairs_count.values())
 
@@ -484,7 +497,7 @@ def dendrogram_purity(tree: PredictionClusterTree, ground_truth: np.ndarray) -> 
                 [ground_truth[id] for id in node.assignments]
             )
             node_per_label_pairs_count: Dict[Any, int] = {
-                k: comb(v, 2, True) for k, v in node_per_label_frequencies.items()
+                k: comb(v, 2, exact=True) for k, v in node_per_label_frequencies.items()
             }
 
         else:  # it is an inner node

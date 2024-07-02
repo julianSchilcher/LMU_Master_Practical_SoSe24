@@ -22,7 +22,7 @@ from clustpy.data import load_mnist
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
 from sklearn.cluster import KMeans
 from tqdm import tqdm
-from ray import train
+#from ray import train
 
 from practical.DeepClustering.DeepECT.metrics import (
     PredictionClusterNode,
@@ -699,10 +699,6 @@ class Cluster_Tree:
             # store node with maximal number of assignments for p value
             if use_pvalue:
                 max_assignments = -np.inf
-                max_assignments_node = None
-                max_assignments_node_axis = None
-                max_assignments_node_lower_projection_cluster = None
-                max_assignments_node_higher_projection_cluster = None
             best_node_to_split = None
             best_node_axis = None
             best_node_number_assign_lower_projection_cluster = None
@@ -725,21 +721,17 @@ class Cluster_Tree:
                 # the more samples, the smaller the dip value, consider this:
                 if use_pvalue:
                     current_value = pvalue
-                    better = current_value < best_value
-                    if (
-                        len(node_data) > max_assignments
-                        and pvalue < unimodality_treshhold
-                    ):
+                    better = False 
+                    if best_value > unimodality_treshhold and current_value < best_value:
+                        # if best_value is above unimodality_treshhold, it is sufficient to be smaller than
+                        # best_value
                         max_assignments = len(node_data)
-                        max_assignments_node = node
-                        max_assignments_node_axis = axis
-                        max_assignments_node_lower_projection_cluster = (
-                            number_assign_lower_projection_cluster
-                        )
-                        max_assignments_node_higher_projection_cluster = (
-                            number_assign_higher_projection_cluster
-                        )
-
+                        better = True
+                    elif current_value <= unimodality_treshhold and len(node_data) > max_assignments:
+                        # if best_value is also already smaller than unimodality_treshhold, the current 
+                        # node must have more assignments in order to be accepted
+                        max_assignments = len(node_data)
+                        better = True
                 else:
                     current_value = dip_value + 0.5 * len(node.assignments) / (
                         4 * total_assignments
@@ -759,42 +751,28 @@ class Cluster_Tree:
                         number_assign_higher_projection_cluster
                     )
 
-                if np.abs(best_value) == np.inf:  # unimodality threshold reached
-                    return True
+            if np.abs(best_value) == np.inf:  # unimodality threshold reached
+                return True
 
-                if (
-                    use_pvalue and best_value == 0
-                ):  # split node with highest number of assignments if pvalue is 0
-                    logging.info(
-                        f"spliting node with max #assignments: {len(max_assignments_node.assignments)}"
-                    )
-                    max_assignments_node.expand_tree(
-                        max_assignments_node_axis,
-                        projection_axis_optimizer,
-                        max_assignments_node_higher_projection_cluster,
-                        max_assignments_node_lower_projection_cluster,
-                        max([leaf.id for leaf in self.leaf_nodes]),
-                        max([node.split_id for node in self.nodes]),
-                    )
-                else:  # split best node
-                    logging.info(
-                        f"split node with #assignments: {len(best_node_to_split.assignments)} "
-                    )
-                    best_node_to_split.expand_tree(
-                        best_node_axis,
-                        projection_axis_optimizer,
-                        best_node_number_assign_higher_projection_cluster,
-                        best_node_number_assign_lower_projection_cluster,
-                        max([leaf.id for leaf in self.leaf_nodes]),
-                        max([node.split_id for node in self.nodes]),
-                    )
-                if metrics is not None:
-                    metrics["nodes"] = len(self.nodes)
-                    metrics["leaf_nodes"] = len(self.leaf_nodes)
-                # check if max leafnode threshold reached
-                self.clear_node_assignments()
-                if len(self.leaf_nodes) >= max_leaf_nodes:
-                    return True
+            # split best node
+            logging.info(
+                f"split node with #assignments: {len(best_node_to_split.assignments)} "
+            )
+            best_node_to_split.expand_tree(
+                best_node_axis,
+                projection_axis_optimizer,
+                best_node_number_assign_higher_projection_cluster,
+                best_node_number_assign_lower_projection_cluster,
+                max([leaf.id for leaf in self.leaf_nodes]),
+                max([node.split_id for node in self.nodes]),
+            )
+            if metrics is not None:
+                metrics["nodes"] = len(self.nodes)
+                metrics["leaf_nodes"] = len(self.leaf_nodes)
+            # check if max leafnode threshold reached
+            self.clear_node_assignments()
+            if len(self.leaf_nodes) >= max_leaf_nodes:
+                return True
         return False
 
     def improve_space(
@@ -891,8 +869,11 @@ class Cluster_Tree:
                 and node.lower_projection_child.is_leaf_node()
             ) or projection_axis_learning == "all":
                 self._adjust_axis(node, projection_axis_optimizer)
-
-        axis = node.projection_axis.detach()
+        
+        # axis need to be cloned, otherwise pytorch throws an error 
+        # that the tensor will be inplaced modified while it is needed
+        # for gradient computation 
+        axis = node.projection_axis.detach().clone()
 
         higher_projection_child_improvement = (
             node.higher_projection_child.assignments is not None
@@ -1037,7 +1018,7 @@ class Cluster_Tree:
         """
         projection_axis_optimizer.zero_grad()
         # data gradients should not be stored
-        data = node.assignments.detach().cpu()
+        data = node.assignments.detach().cpu() # cpu() already creates a copy, no cloning necessary
         loss = -_Dip_Gradient.apply(data, node.projection_axis)
         loss.backward()
         projection_axis_optimizer.step()

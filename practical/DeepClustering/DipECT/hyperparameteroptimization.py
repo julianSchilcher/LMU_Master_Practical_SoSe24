@@ -12,6 +12,8 @@ from clustpy.data import load_mnist
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
 import numpy as np
 import pickle
+import pathlib
+import json
 
 
 def trainable_function(config: dict):
@@ -44,6 +46,7 @@ def trainable_function(config: dict):
         tree_growth_unimodality_treshold=config["tree_growth_unimodality_treshold"],
         tree_growth_upper_bound_leaf_nodes=config["tree_growth_upper_bound_leaf_nodes"],
         tree_growth_use_unimodality_pvalue=config["tree_growth_use_unimodality_pvalue"],
+        tree_growth_min_cluster_size=config["pruning_threshold"],
         # unimodal
         unimodal_loss_application=config["unimodal_loss_application"],
         unimodal_loss_node_criteria_method=config["unimodal_loss_node_criteria_method"],
@@ -69,7 +72,7 @@ def trainable_function(config: dict):
 # searchspace
 search_space = ng.p.Dict(
     clustering_optimizer_params=ng.p.Dict(lr=ng.p.Choice([1e-4])),
-    reconstruction_loss_weight=ng.p.Choice([None]),
+    reconstruction_loss_weight=ng.p.Choice([1 / 255, 2 / 255, 1e-2, 0.1, 1, None]),
     # projection axis
     projection_axis_learning_rate=ng.p.Choice([1e-3, 1e-4, 1e-5, 1e-6, 0.0]),
     projection_axis_learning=ng.p.Choice(
@@ -80,50 +83,73 @@ search_space = ng.p.Dict(
     # pruning
     pruning_factor=ng.p.Choice([1.0]),
     pruning_strategy=ng.p.Choice(["epoch_assessment"]),
-    pruning_threshold=ng.p.Choice([100, 250, 500]),
+    pruning_threshold=ng.p.Choice([500, 1000, 2000, 3000, 4000, 5000]),
     # tree growth
     tree_growth_frequency=ng.p.Choice([0.0, 0.5, 1.0, 2.0, 3.0, 4.0]),
-    tree_growth_amount=ng.p.Scalar(lower=1, upper=20).set_integer_casting(),
+    tree_growth_amount=ng.p.Scalar(lower=1, upper=5).set_integer_casting(),
     tree_growth_unimodality_treshold=ng.p.Choice([0.95, 0.975, 1.0]),
-    tree_growth_upper_bound_leaf_nodes=ng.p.Choice([20, 100]),
+    tree_growth_upper_bound_leaf_nodes=ng.p.Choice([100]),
     tree_growth_use_unimodality_pvalue=ng.p.Choice([True, False]),
     # unimodal
     unimodal_loss_application=ng.p.Choice([None, "leaf_nodes", "all"]),
     unimodal_loss_node_criteria_method=ng.p.Choice(["tree_depth", "time_of_split"]),
     unimodal_loss_weight=ng.p.Choice([0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0]),
     unimodal_loss_weight_direction=ng.p.Choice(["ascending", "descending"]),
-    unimodal_loss_weight_function=ng.p.Choice(["linear", "exponential", None]),
+    unimodal_loss_weight_function=ng.p.Choice(["linear", "exponential"]),
     loss_weight_function_normalization=ng.p.Choice([-1]),
     # multimodal
     mulitmodal_loss_application=ng.p.Choice([None, "leaf_nodes", "all"]),
     mulitmodal_loss_node_criteria_method=ng.p.Choice(["tree_depth", "time_of_split"]),
     mulitmodal_loss_weight_direction=ng.p.Choice(["ascending", "descending"]),
-    mulitmodal_loss_weight_function=ng.p.Choice(["linear", "exponential", None]),
+    mulitmodal_loss_weight_function=ng.p.Choice(["linear", "exponential"]),
     multimodal_loss_weight=ng.p.Choice([0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0]),
     # utility
     early_stopping=ng.p.Choice([False]),
     refinement_epochs=ng.p.Choice([0]),
 )
 
-optimizer = ng.optimizers.Chaining(
-    [ng.optimizers.NeuralMetaModelTwoPointsDE, ng.optimizers.SMAC3],
-    budgets=[100],
-)
 
+evaluated_points = []
+for file_name in pathlib.Path(
+    "/home/loebbert/projects/deepclustering/LMU_Master_Practical_SoSe24/practical/DeepClustering/DipECT/hpo/best_params_acc_dp"
+).glob("*.json"):
+    value = float("".join(file_name.stem[-2:]))
+    with open(file_name, "r") as file:
+        point = json.load(file)
+    evaluated_points.append(point)
+
+optimizer = ng.optimizers.Chaining(
+    [
+        # ng.optimizers.ScrHammersleySearch,
+        # ng.optimizers.NeuralMetaModelTwoPointsDE,
+        ng.optimizers.BayesOptimBO,
+        ng.optimizers.NGOpt,
+    ],
+    budgets=[300],
+)
 algo = NevergradSearch(
     optimizer=optimizer,
+    optimizer_kwargs={"budget": 500, "num_workers": 4},
     space=search_space,
     metric="dp",
     mode="max",
+    points_to_evaluate=evaluated_points,
 )
+
+func = tune.with_resources(trainable_function, resources={"cpu": 4, "gpu": 1 / 4})
 tuner = tune.Tuner(
-    tune.with_resources(trainable_function, resources={"cpu": 4, "gpu": 0.25}),
-    tune_config=tune.TuneConfig(search_alg=algo, num_samples=300),
+    func,
+    tune_config=tune.TuneConfig(search_alg=algo, num_samples=500),
     run_config=train.RunConfig(
         name="dipect_hpo_stage_1",
         storage_path="/home/loebbert/projects/deepclustering/LMU_Master_Practical_SoSe24/practical/DeepClustering/DipECT/hpo",
     ),
 )
+# tuner = tune.Tuner.restore(
+#     "/home/loebbert/projects/deepclustering/LMU_Master_Practical_SoSe24/practical/DeepClustering/DipECT/hpo/dipect_hpo_stage_1",
+#     func,
+#     restart_errored=True,
+# )
 results = tuner.fit()
 
 with open(

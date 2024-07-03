@@ -7,7 +7,7 @@ import sys
 sys.path.append(os.getcwd())
 
 import warnings
-from typing import List, Union
+from typing import List, Tuple, Union
 
 import numpy as np
 import torch
@@ -22,7 +22,7 @@ from clustpy.data import load_mnist
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
 from sklearn.cluster import KMeans
 from tqdm import tqdm
-#from ray import train
+from ray import train
 
 from practical.DeepClustering.DeepECT.metrics import (
     PredictionClusterNode,
@@ -641,6 +641,7 @@ class Cluster_Tree:
         max_leaf_nodes: int,
         unimodality_treshhold: float,
         number_of_grow_steps: int = 1,
+        tree_growth_min_cluster_size: int = 1000,
         use_pvalue: bool = True,
         metrics: dict = None,
     ) -> bool:
@@ -706,14 +707,26 @@ class Cluster_Tree:
             for node in self.leaf_nodes:
                 if node.assignments is None:
                     continue
-                node_data = node.assignments.numpy()
-                if len(node_data) < 2:
+                node_data = node.assignments[
+                    ~torch.any(node.assignments.isnan(), dim=1)
+                ].numpy()
+                if (
+                    len(node_data) < 2
+                    or (len(node_data) / 2) < tree_growth_min_cluster_size
+                ):
                     continue
                 (
                     axis,
                     number_assign_lower_projection_cluster,
                     number_assign_higher_projection_cluster,
                 ) = self.get_inital_projection_axis(node_data)
+                if (
+                    number_assign_higher_projection_cluster
+                    < tree_growth_min_cluster_size
+                    or number_assign_lower_projection_cluster
+                    < tree_growth_min_cluster_size
+                ):
+                    continue
                 projections = np.matmul(node_data, axis)
                 dip_value = dip_test(projections, just_dip=True, is_data_sorted=False)
                 # pvalue gives the probability for unimodality (smaller dip value, higher p value)
@@ -721,14 +734,20 @@ class Cluster_Tree:
                 # the more samples, the smaller the dip value, consider this:
                 if use_pvalue:
                     current_value = pvalue
-                    better = False 
-                    if best_value > unimodality_treshhold and current_value < best_value:
+                    better = False
+                    if (
+                        best_value > unimodality_treshhold
+                        and current_value < best_value
+                    ):
                         # if best_value is above unimodality_treshhold, it is sufficient to be smaller than
                         # best_value
                         max_assignments = len(node_data)
                         better = True
-                    elif current_value <= unimodality_treshhold and len(node_data) > max_assignments:
-                        # if best_value is also already smaller than unimodality_treshhold, the current 
+                    elif (
+                        current_value <= unimodality_treshhold
+                        and len(node_data) > max_assignments
+                    ):
+                        # if best_value is also already smaller than unimodality_treshhold, the current
                         # node must have more assignments in order to be accepted
                         max_assignments = len(node_data)
                         better = True
@@ -812,8 +831,8 @@ class Cluster_Tree:
         unimodal_loss, multimodal_loss = self._improve_space_recursive(
             self.root,
             projection_axis_optimizer,
-            0,
-            0,
+            torch.tensor(0.0, dtype=torch.float),
+            torch.tensor(0.0, dtype=torch.float),
             embedded_augmented_data,
             unimodal_loss_application,
             unimoal_loss_node_criteria_method,
@@ -849,7 +868,7 @@ class Cluster_Tree:
         mulitmodal_loss_weight_direction,
         multimodal_loss_weight,
         projection_axis_learning,
-    ):
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Helper function for going recursively through the tree and calculating the cluster loss for each node.
         The losses per node are summed up and returned. Based on the mode <projection_axis_learning>,
@@ -879,10 +898,10 @@ class Cluster_Tree:
                 or projection_axis_learning == "all"
             ):
                 self._adjust_axis(node, projection_axis_optimizer)
-        
-        # axis need to be cloned, otherwise pytorch throws an error 
+
+        # axis need to be cloned, otherwise pytorch throws an error
         # that the tensor will be inplaced modified while it is needed
-        # for gradient computation 
+        # for gradient computation
         axis = node.projection_axis.detach().clone()
 
         higher_projection_child_improvement = (
@@ -940,7 +959,7 @@ class Cluster_Tree:
                 higher_projection_cluster = node.higher_projection_child.assignments
                 lower_projection_cluster = node.lower_projection_child.assignments
 
-            l_unimodal = (
+            l_unimodal: torch.Tensor = (
                 unimodal_loss
                 + (
                     calc_uni_loss_weight[0]
@@ -950,7 +969,7 @@ class Cluster_Tree:
                 )
                 / 2
             )
-            l_multimodal = (
+            l_multimodal: torch.Tensor = (
                 multimodal_loss
                 + calc_multi_loss_weight
                 * _Dip_Gradient.apply(
@@ -988,7 +1007,10 @@ class Cluster_Tree:
             (
                 unimodal_loss_higher_projection_child,
                 multimodal_loss_higher_projection_child,
-            ) = (0, 0)
+            ) = (
+                torch.tensor(0.0, dtype=torch.float),
+                torch.tensor(0.0, dtype=torch.float),
+            )
         if lower_projection_child_improvement:
             (
                 unimodal_loss_lower_projection_child,
@@ -1016,7 +1038,10 @@ class Cluster_Tree:
             (
                 unimodal_loss_lower_projection_child,
                 multimodal_loss_lower_projection_child,
-            ) = (0, 0)
+            ) = (
+                torch.tensor(0.0, dtype=torch.float),
+                torch.tensor(0.0, dtype=torch.float),
+            )
 
         return (
             unimodal_loss_higher_projection_child
@@ -1040,7 +1065,9 @@ class Cluster_Tree:
         """
         projection_axis_optimizer.zero_grad()
         # data gradients should not be stored
-        data = node.assignments.detach().cpu() # cpu() already creates a copy, no cloning necessary
+        data = (
+            node.assignments.detach().cpu()
+        )  # cpu() already creates a copy, no cloning necessary
         loss = -_Dip_Gradient.apply(data, node.projection_axis)
         loss.backward()
         projection_axis_optimizer.step()
@@ -1059,7 +1086,9 @@ class Cluster_Tree:
         if loss_application == None:
             return (0, 0)
 
-        node_criteria = self._get_node_criteria(node, loss_node_criteria_method)
+        node_criteria = self._get_node_criteria(
+            node, loss_node_criteria_method, loss_weight_direction
+        )
 
         if loss_weight_scale_function == "linear":
             weights = self._linear(
@@ -1086,12 +1115,13 @@ class Cluster_Tree:
     def _linear(self, direction, node_criteria, normalization, unimodal_loss_weight):
         if normalization == -1:
             normalization = 1
-        if direction == "ascending":
-            weight = (unimodal_loss_weight / normalization) * node_criteria
-        elif direction == "descending":
-            weight = abs(unimodal_loss_weight - node_criteria)
-        else:
-            raise ValueError(f"unimodal loss direction {direction} not supported")
+        # if direction == "ascending":
+        #     weight = (unimodal_loss_weight / normalization) * node_criteria
+        # elif direction == "descending":
+        #     weight = abs(unimodal_loss_weight - node_criteria)
+        # else:
+        #     raise ValueError(f"unimodal loss direction {direction} not supported")
+        weight = (unimodal_loss_weight / normalization) * node_criteria
         return (weight, weight)
 
     def _exponential(
@@ -1099,19 +1129,34 @@ class Cluster_Tree:
     ):
         if normalization == -1:
             normalization = 0
-        if direction == "ascending":
-            weight = np.exp2(node_criteria - normalization) * unimodal_loss_weight
-        elif direction == "descending":
-            weight = np.exp2(-node_criteria) * unimodal_loss_weight
-        else:
-            raise ValueError(f"unimodal loss direction {direction} not supported")
+        # if direction == "ascending":
+        #     weight = np.exp2(node_criteria - normalization) * unimodal_loss_weight
+        # elif direction == "descending":
+        #     weight = np.exp2(-node_criteria) * unimodal_loss_weight
+        # else:
+        #     raise ValueError(f"unimodal loss direction {direction} not supported")
+        weight = np.exp2(node_criteria - normalization) * unimodal_loss_weight
         return (weight, weight)
 
-    def _get_node_criteria(self, node: Cluster_Node, node_criteria_method: str):
+    def _get_node_criteria(
+        self, node: Cluster_Node, node_criteria_method: str, direction: str
+    ):
         if node_criteria_method == "time_of_split":
-            return sorted([node.split_id for node in self.nodes]).index(node.split_id)
+            node_ids = sorted([node.split_id for node in self.nodes])
+            if direction == "ascending":
+                return node_ids.index(node.split_id)
+            elif direction == "descending":
+                return len(node_ids) - node_ids.index(node.split_id) - 1
+            else:
+                raise ValueError(f"loss direction {direction} not supported")
         if node_criteria_method == "tree_depth":
-            return node.split_level
+            if direction == "ascending":
+                return node.split_level
+            elif direction == "descending":
+                max_level = max([node.split_level for node in self.nodes])
+                return max_level - node.split_level
+            else:
+                raise ValueError(f"loss direction {direction} not supported")
 
 
 def transform_cluster_tree_to_pred_tree(tree: Cluster_Tree) -> PredictionClusterTree:
@@ -1216,6 +1261,7 @@ class _DipECT_Module(torch.nn.Module):
         projection_axis_learning,
         pruning_strategy,
         pruning_factor,
+        tree_growth_min_cluster_size,
         evaluate_after_n_epochs: int = 0,
     ) -> "_DipECT_Module":
         """
@@ -1281,6 +1327,7 @@ class _DipECT_Module(torch.nn.Module):
                     projection_axis_optimizer,
                     max_leaf_nodes,
                     unimodality_treshhold,
+                    tree_growth_min_cluster_size=tree_growth_min_cluster_size,
                     use_pvalue=use_pvalue,
                     metrics=metrics,
                 )
@@ -1325,6 +1372,7 @@ class _DipECT_Module(torch.nn.Module):
                             max_leaf_nodes,
                             unimodality_treshhold,
                             number_of_grow_steps,
+                            tree_growth_min_cluster_size,
                             use_pvalue,
                             metrics,
                         )
@@ -1502,6 +1550,7 @@ def _dipect(
     projection_axis_learning,
     pruning_strategy,
     pruning_factor,
+    tree_growth_min_cluster_size,
     evaluate_every_n_epochs,
 ):
     """
@@ -1637,6 +1686,7 @@ def _dipect(
         projection_axis_learning,
         pruning_strategy,
         pruning_factor,
+        tree_growth_min_cluster_size,
         evaluate_after_n_epochs=evaluate_every_n_epochs,
     )
     # Get labels
@@ -1734,6 +1784,7 @@ class DipECT:
         tree_growth_upper_bound_leaf_nodes: int = 20,
         tree_growth_use_unimodality_pvalue: bool = False,
         tree_growth_unimodality_treshold: float = 0.95,
+        tree_growth_min_cluster_size: int = 1000,
         # unimodal
         unimodal_loss_application: str = "leaf_nodes",  # None, "leaf_nodes", "all"
         unimodal_loss_node_criteria_method: str = "tree_depth",  # "tree_depth", "time_of_split"
@@ -1805,6 +1856,7 @@ class DipECT:
         self.projection_axis_learning = projection_axis_learning
         self.pruning_strategy = pruning_strategy
         self.pruning_factor = pruning_factor
+        self.tree_growth_min_cluster_size = tree_growth_min_cluster_size
         self.evaluate_every_n_epochs = evaluate_every_n_epochs
 
     def fit_predict(self, X: np.ndarray, Y: np.ndarray) -> "DipECT":
@@ -1866,6 +1918,7 @@ class DipECT:
             self.projection_axis_learning,
             self.pruning_strategy,
             self.pruning_factor,
+            self.tree_growth_min_cluster_size,
             self.evaluate_every_n_epochs,
         )
         self.tree_ = tree

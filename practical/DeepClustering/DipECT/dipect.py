@@ -22,7 +22,7 @@ from clustpy.data import load_mnist
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
 from sklearn.cluster import KMeans
 from tqdm import tqdm
-#from ray import train
+from ray import train
 
 from practical.DeepClustering.DeepECT.metrics import (
     PredictionClusterNode,

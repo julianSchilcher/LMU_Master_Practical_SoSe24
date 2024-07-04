@@ -142,4 +142,4 @@ dmypy.json
 *.pth
 
 # hpo
-dipect_hpo_stage_1
+dipect_hpo_stage_*

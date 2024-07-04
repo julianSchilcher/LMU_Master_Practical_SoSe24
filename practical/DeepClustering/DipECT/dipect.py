@@ -849,6 +849,32 @@ class Cluster_Tree:
         )
         return unimodal_loss, multimodal_loss
 
+    def get_modality_count(self, loss_node_criteria_method: str):
+        def _get_modality_count_recursive(node: Cluster_Node, count: int):
+            if node == None:
+                return count
+            if (
+                loss_node_criteria_method == "leaf_nodes"
+                and (
+                    (
+                        node.higher_projection_child != None
+                        and node.higher_projection_child.is_leaf_node()
+                    )
+                    or (
+                        node.lower_projection_child != None
+                        and node.lower_projection_child.is_leaf_node()
+                    )
+                )
+            ) or loss_node_criteria_method == "all":
+                count += 1
+
+            return max(
+                _get_modality_count_recursive(node.higher_projection_child, count),
+                _get_modality_count_recursive(node.lower_projection_child, count),
+            )
+
+        return _get_modality_count_recursive(self.root, 1)
+
     def _improve_space_recursive(
         self,
         node: Cluster_Node,
@@ -1419,9 +1445,23 @@ class _DipECT_Module(torch.nn.Module):
                         pruning_strategy,
                         pruning_factor,
                     )
-                    cluster_loss = (unimodal_loss - multimodal_loss) / (
-                        self.cluster_tree.number_nodes
-                        - len(self.cluster_tree.leaf_nodes)
+                    all = self.cluster_tree.number_nodes - len(
+                        self.cluster_tree.leaf_nodes
+                    )
+                    leaf_nodes = len(
+                        [
+                            not node.is_leaf_node()
+                            and (
+                                node.higher_projection_child.is_leaf_node()
+                                or node.lower_projection_child.is_leaf_node()
+                            )
+                            for node in self.cluster_tree.nodes
+                        ]
+                    )
+                    cluster_loss = unimodal_loss / (
+                        all if unimodal_loss_application == "all" else leaf_nodes
+                    ) - multimodal_loss / (
+                        all if mulitmodal_loss_application == "all" else leaf_nodes
                     )
 
                     if reconstruction_loss_weight is None:
@@ -1939,32 +1979,35 @@ if __name__ == "__main__":
 
     dipect = DipECT(
         autoencoder=autoencoder,
-        autoencoder_param_path="practical/DeepClustering/DipECT/autoencoder/feedforward_mnist_21.pth",
+        autoencoder_param_path="practical/DeepClustering/DipECT/autoencoder/feedforward_mnist_60_21.pth",
         random_state=np.random.RandomState(21),
+        autoencoder_pretrain_n_epochs=60,
+        logging_active=True,
         clustering_n_epochs=60,
+        clustering_optimizer_params={"lr": 1e-5},
         early_stopping=False,
-        loss_weight_function_normalization=5.64386,
+        loss_weight_function_normalization=-1,
         mulitmodal_loss_application="all",
         mulitmodal_loss_node_criteria_method="tree_depth",
         mulitmodal_loss_weight_direction="ascending",
-        mulitmodal_loss_weight_function="linear",
-        multimodal_loss_weight=250.0005,
-        projection_axis_learning="only_leaf_nodes",
-        projection_axis_learning_rate=0.0,
-        pruning_factor=0.5,
+        mulitmodal_loss_weight_function="exponential",
+        multimodal_loss_weight=1.0,
+        projection_axis_learning="partial_leaf_nodes",
+        projection_axis_learning_rate=1e-6,
+        pruning_factor=1.0,
         pruning_strategy="epoch_assessment",
-        pruning_threshold=105.0,
-        reconstruction_loss_weight=None,
+        pruning_threshold=2000,
+        reconstruction_loss_weight=1.0,
         refinement_epochs=0,
-        tree_growth_amount=10,
-        tree_growth_frequency=0.5,
+        tree_growth_amount=2,
+        tree_growth_frequency=2.0,
         tree_growth_unimodality_treshold=0.975,
-        tree_growth_upper_bound_leaf_nodes=20,
-        tree_growth_use_unimodality_pvalue=False,
-        unimodal_loss_application=None,
+        tree_growth_upper_bound_leaf_nodes=100,
+        tree_growth_use_unimodality_pvalue=True,
+        unimodal_loss_application="leaf_nodes",
         unimodal_loss_node_criteria_method="tree_depth",
-        unimodal_loss_weight=250.00005,
-        unimodal_loss_weight_direction="descending",
+        unimodal_loss_weight=1.0,
+        unimodal_loss_weight_direction="ascending",
         unimodal_loss_weight_function="linear",
     )
     dipect.fit_predict(dataset / 255, labels)

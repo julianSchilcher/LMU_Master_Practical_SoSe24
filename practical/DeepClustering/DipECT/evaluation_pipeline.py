@@ -848,14 +848,7 @@ def get_custom_dataloader_augmentations(
     translation = (
         0.14 if dataset_type == DatasetType.USPS else 0.08,
         0.14 if dataset_type == DatasetType.USPS else 0.08,
-    )
-    image_min_value = -0.999999 if dataset_type == DatasetType.USPS else 0.0
-    image_size = 16 if dataset_type == DatasetType.USPS else 28
-
-    image_max_value = (
-        np.max(data) - image_min_value
-        if dataset_type == DatasetType.USPS
-        else np.max(data)
+    )2
     )
 
     augmentation_transform = transforms.Compose(

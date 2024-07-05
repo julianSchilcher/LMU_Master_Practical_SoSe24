@@ -263,11 +263,11 @@ class Cluster_Tree:
         """
         # initialise cluster tree
         self.device = device
-        self.root = Cluster_Node(device)
         embedded_data = encode_batchwise(trainloader, autoencoder)
         axis, number_left_assignments, number_right_assignments = (
             self.get_inital_projection_axis(embedded_data)
         )
+        self.root = Cluster_Node(device, number_assignments=len(embedded_data))
         self.root.expand_tree(
             axis,
             projection_axis_optimizer,

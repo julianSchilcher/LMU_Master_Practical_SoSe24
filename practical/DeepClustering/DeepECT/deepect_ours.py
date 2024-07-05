@@ -1088,6 +1088,7 @@ def _deep_ect(
         custom_dataloaders,
         KMeans,
         {"random_state": random_state, "n_init": 20},
+        None,  
         random_state,
     )
 

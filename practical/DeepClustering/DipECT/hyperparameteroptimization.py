@@ -15,6 +15,7 @@ import numpy as np
 import pickle
 import pathlib
 import json
+from sklearn.gaussian_process.kernels import Matern
 
 
 def trainable_function(config: dict):
@@ -74,41 +75,48 @@ def trainable_function(config: dict):
 
 # searchspace
 search_space = ng.p.Dict(
-    autoencoder_pretraining_n_epochs=ng.p.TransitionChoice([25, 50, 60, 75, 100]),
-    clustering_optimizer_params=ng.p.Dict(
-        lr=ng.p.TransitionChoice([1e-4, 8e-5, 5e-5, 3e-5])
+    autoencoder_pretraining_n_epochs=ng.p.Choice([100]),
+    clustering_optimizer_params=ng.p.Dict(lr=ng.p.Choice([1e-3, 1e-4, 1e-5, 1e-6])),
+    reconstruction_loss_weight=ng.p.Scalar(
+        init=255.0, lower=1, upper=1000, mutable_sigma=True
     ),
-    reconstruction_loss_weight=ng.p.TransitionChoice(
-        [1 / 255, 0.007, 0.01, 0.1, 0.5, 1, 1.5, 2.0]
-    ),
+    # ng.p.Choice(
+    #     [1 / 510, 1 / 384, 1 / 255, 0.007, 0.1, 1, 10.0, 255.0, 510.0]
+    # ),
     # projection axis
-    projection_axis_learning_rate=ng.p.Choice([1e-3, 1e-5, 1e-6]),
-    projection_axis_learning=ng.p.Choice(["only_leaf_nodes", "partial_leaf_nodes"]),
+    projection_axis_learning_rate=ng.p.Choice([1e-3, 1e-4, 1e-5, 1e-6, 1e-8]),
+    projection_axis_learning=ng.p.Choice(["partial_leaf_nodes"]),
     # clustering
     clustering_n_epochs=ng.p.Choice([60]),
     # pruning
     pruning_factor=ng.p.Choice([1.0]),
     pruning_strategy=ng.p.Choice(["epoch_assessment"]),
-    pruning_threshold=ng.p.Choice([1500, 2000, 2500, 3000]),
+    pruning_threshold=ng.p.Choice([1500, 2000, 2500]),
     # tree growth
     tree_growth_frequency=ng.p.Choice([1.0, 2.0]),
-    tree_growth_amount=ng.p.Scalar(lower=1, upper=3).set_integer_casting(),
+    tree_growth_amount=ng.p.Scalar(lower=1, upper=4).set_integer_casting(),
     tree_growth_unimodality_treshold=ng.p.Choice([0.95, 0.975, 1.0]),
     tree_growth_upper_bound_leaf_nodes=ng.p.Choice([100]),
-    tree_growth_use_unimodality_pvalue=ng.p.TransitionChoice([True, False]),
+    tree_growth_use_unimodality_pvalue=ng.p.Choice([True]),
     # unimodal
     unimodal_loss_application=ng.p.Choice(["leaf_nodes", "all"]),
     unimodal_loss_node_criteria_method=ng.p.Choice(["tree_depth", "time_of_split"]),
-    unimodal_loss_weight=ng.p.Choice([0.0, 0.5, 1.0, 2.0]),
+    unimodal_loss_weight=ng.p.Scalar(
+        init=0.0, lower=0.0, upper=1000.0, mutable_sigma=True
+    ),  # ng.p.Choice([0.0, 0.1, 0.5, 1.0, 2.0, 10.0]),
     unimodal_loss_weight_direction=ng.p.Choice(["ascending", "descending"]),
-    unimodal_loss_weight_function=ng.p.Choice(["linear", "exponential"]),
+    unimodal_loss_weight_function=ng.p.Choice(["linear", "exponential", "log", "sqrt"]),
     loss_weight_function_normalization=ng.p.Choice([-1]),
     # multimodal
     mulitmodal_loss_application=ng.p.Choice(["leaf_nodes", "all"]),
     mulitmodal_loss_node_criteria_method=ng.p.Choice(["tree_depth", "time_of_split"]),
     mulitmodal_loss_weight_direction=ng.p.Choice(["ascending", "descending"]),
-    mulitmodal_loss_weight_function=ng.p.Choice(["linear", "exponential"]),
-    multimodal_loss_weight=ng.p.Choice([0.5, 1.0, 2.0]),
+    mulitmodal_loss_weight_function=ng.p.Choice(
+        ["linear", "exponential", "log", "sqrt"]
+    ),
+    multimodal_loss_weight=ng.p.Scalar(
+        init=1.0, lower=0.5, upper=1000.0, mutable_sigma=True
+    ),  # ng.p.Choice([0.1, 0.5, 1.0, 2.0]),
     # utility
     early_stopping=ng.p.Choice([False]),
     refinement_epochs=ng.p.Choice([0]),
@@ -116,25 +124,36 @@ search_space = ng.p.Dict(
 
 
 evaluated_points = []
-for file_name in pathlib.Path(
-    "/home/loebbert/projects/deepclustering/LMU_Master_Practical_SoSe24/practical/DeepClustering/DipECT/hpo/dipect_hpo_stage_1"
-).glob("*/params.json"):
-    # value = float("".join(file_name.stem[-2:]))
-    with open(file_name, "r") as file:
-        point = json.load(file)
-    evaluated_points.append(point)
+# for file_name in pathlib.Path(
+#     "/home/loebbert/projects/deepclustering/LMU_Master_Practical_SoSe24/practical/DeepClustering/DipECT/hpo"
+# ).glob("*/*/params.json"):
+#     # value = float("".join(file_name.stem[-2:]))
+#     with open(file_name, "r") as file:
+#         point = json.load(file)
+#     evaluated_points.append(point)
 
-# optimizer = ng.optimizers.Chaining(
-#     [
-#         # ng.optimizers.ScrHammersleySearch,
-#         # ng.optimizers.NeuralMetaModelTwoPointsDE,
-#         ng.optimizers.BayesOptimBO,
-#         ng.optimizers.NGOpt,
-#     ],
-#     budgets=[300],
-# )
+optimizer = ng.optimizers.Chaining(
+    [
+        # ng.optimizers.ScrHammersleySearch,
+        # ng.optimizers.NeuralMetaModelTwoPointsDE,
+        ng.optimizers.ParametrizedBO(
+            initialization="LHS",
+            init_budget=100,
+            utility_kind="ucb",
+            gp_parameters=dict(
+                kernel=Matern(nu=2.5),
+                alpha=1e-6,
+                normalize_y=True,
+                n_restarts_optimizer=5,
+                random_state=np.random.RandomState(21),
+            ),
+        ),
+        ng.optimizers.TwoPointsDE,
+    ],
+    budgets=[400],
+)
 
-optimizer = ng.optimizers.BayesOptim(pca=True, prop_doe_factor=0.1)
+# optimizer = ng.optimizers.TwoPointsDE
 algo = NevergradSearch(
     optimizer=optimizer,
     optimizer_kwargs={"budget": 500, "num_workers": 4},
@@ -154,11 +173,13 @@ scheduler = AsyncHyperBandScheduler(
     grace_period=8000,
 )
 
+stage_nr = 5
+
 tuner = tune.Tuner(
     func,
     tune_config=tune.TuneConfig(search_alg=algo, num_samples=500, scheduler=scheduler),
     run_config=train.RunConfig(
-        name="dipect_hpo_stage_2",
+        name=f"dipect_hpo_stage_{stage_nr}",
         storage_path="/home/loebbert/projects/deepclustering/LMU_Master_Practical_SoSe24/practical/DeepClustering/DipECT/hpo",
     ),
 )
@@ -172,7 +193,7 @@ tuner = tune.Tuner(
 results = tuner.fit()
 
 with open(
-    "/home/loebbert/projects/deepclustering/LMU_Master_Practical_SoSe24/practical/DeepClustering/DipECT/dipect_hpo_stage_1_result.pkl",
+    f"/home/loebbert/projects/deepclustering/LMU_Master_Practical_SoSe24/practical/DeepClustering/DipECT/hpo_stage_{stage_nr}_result.pkl",
     "wb",
 ) as file:
     pickle.dump(results.get_dataframe(), file)

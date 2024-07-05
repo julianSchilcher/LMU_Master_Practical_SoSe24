@@ -849,32 +849,6 @@ class Cluster_Tree:
         )
         return unimodal_loss, multimodal_loss
 
-    def get_modality_count(self, loss_node_criteria_method: str):
-        def _get_modality_count_recursive(node: Cluster_Node, count: int):
-            if node == None:
-                return count
-            if (
-                loss_node_criteria_method == "leaf_nodes"
-                and (
-                    (
-                        node.higher_projection_child != None
-                        and node.higher_projection_child.is_leaf_node()
-                    )
-                    or (
-                        node.lower_projection_child != None
-                        and node.lower_projection_child.is_leaf_node()
-                    )
-                )
-            ) or loss_node_criteria_method == "all":
-                count += 1
-
-            return max(
-                _get_modality_count_recursive(node.higher_projection_child, count),
-                _get_modality_count_recursive(node.lower_projection_child, count),
-            )
-
-        return _get_modality_count_recursive(self.root, 1)
-
     def _improve_space_recursive(
         self,
         node: Cluster_Node,
@@ -1110,7 +1084,10 @@ class Cluster_Tree:
         multimodal: bool = False,
     ):
         if loss_application == None:
-            return (0, 0)
+            return (
+                torch.tensor(0.0, dtype=torch.float),
+                torch.tensor(0.0, dtype=torch.float),
+            )
 
         node_criteria = self._get_node_criteria(
             node, loss_node_criteria_method, loss_weight_direction
@@ -1124,6 +1101,14 @@ class Cluster_Tree:
             weights = self._exponential(
                 loss_weight_direction, node_criteria, weight_normalization, loss_weight
             )
+        elif loss_weight_scale_function == "log":
+            weights = self._log(
+                loss_weight_direction, node_criteria, weight_normalization, loss_weight
+            )
+        elif loss_weight_scale_function == "sqrt":
+            weights = self._sqrt(
+                loss_weight_direction, node_criteria, weight_normalization, loss_weight
+            )
         elif loss_weight_scale_function == None:
             weights = (loss_weight, loss_weight)
         else:
@@ -1133,9 +1118,9 @@ class Cluster_Tree:
 
         if loss_application == "leaf_nodes" and not multimodal:
             if not node.higher_projection_child.is_leaf_node():
-                weights = (0, weights[1])
+                weights = (torch.tensor(0.0, dtype=torch.float), weights[1])
             if not node.lower_projection_child.is_leaf_node():
-                weights = (weights[0], 0)
+                weights = (weights[0], torch.tensor(0.0, dtype=torch.float))
         return weights
 
     def _linear(self, direction, node_criteria, normalization, unimodal_loss_weight):
@@ -1154,14 +1139,29 @@ class Cluster_Tree:
         self, direction, node_criteria, normalization, unimodal_loss_weight
     ):
         if normalization == -1:
-            normalization = 0
+            # normalization = 0
+            normalization = 1
         # if direction == "ascending":
         #     weight = np.exp2(node_criteria - normalization) * unimodal_loss_weight
         # elif direction == "descending":
         #     weight = np.exp2(-node_criteria) * unimodal_loss_weight
         # else:
         #     raise ValueError(f"unimodal loss direction {direction} not supported")
-        weight = np.exp2(node_criteria - normalization) * unimodal_loss_weight
+        weight = np.exp2((unimodal_loss_weight / normalization) * node_criteria)
+        return (weight, weight)
+
+    def _log(self, direction, node_criteria, normalization, unimodal_loss_weight):
+        if normalization == -1:
+            # normalization = 0
+            normalization = 1
+        weight = np.log1p((unimodal_loss_weight / normalization) * node_criteria)
+        return (weight, weight)
+
+    def _sqrt(self, direction, node_criteria, normalization, unimodal_loss_weight):
+        if normalization == -1:
+            # normalization = 0
+            normalization = 1
+        weight = np.sqrt((unimodal_loss_weight / normalization) * node_criteria)
         return (weight, weight)
 
     def _get_node_criteria(
@@ -1169,18 +1169,19 @@ class Cluster_Tree:
     ):
         if node_criteria_method == "time_of_split":
             node_ids = sorted([node.split_id for node in self.nodes])
+            index = node_ids.index(node.split_id) + 1
             if direction == "ascending":
-                return node_ids.index(node.split_id)
+                return index / len(node_ids)
             elif direction == "descending":
-                return len(node_ids) - node_ids.index(node.split_id) - 1
+                return (len(node_ids) - index + 1) / len(node_ids)
             else:
                 raise ValueError(f"loss direction {direction} not supported")
         if node_criteria_method == "tree_depth":
+            max_level = max([node.split_level for node in self.nodes]) + 1
             if direction == "ascending":
-                return node.split_level
+                return (node.split_level + 1) / max_level
             elif direction == "descending":
-                max_level = max([node.split_level for node in self.nodes])
-                return max_level - node.split_level
+                return (max_level - node.split_level + 1) / max_level
             else:
                 raise ValueError(f"loss direction {direction} not supported")
 
@@ -1419,11 +1420,13 @@ class _DipECT_Module(torch.nn.Module):
                     rec_loss, embedded, reconstructed = autoencoder.loss(
                         [idxs, M], rec_loss_fn, self.device
                     )
+                    assert any(torch.any(embedded.isnan(), dim=1)) == False
 
                     if self.augmentation_invariance:
                         rec_loss_aug, embedded_aug, reconstructed_aug = (
                             autoencoder.loss([idxs, M_aug], rec_loss_fn, self.device)
                         )
+                        assert any(torch.any(embedded_aug.isnan(), dim=1)) == False
 
                     # calculate cluster loss
                     unimodal_loss, multimodal_loss = self.cluster_tree.improve_space(

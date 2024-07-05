@@ -84,8 +84,10 @@ search_space = ng.p.Dict(
     #     [1 / 510, 1 / 384, 1 / 255, 0.007, 0.1, 1, 10.0, 255.0, 510.0]
     # ),
     # projection axis
-    projection_axis_learning_rate=ng.p.Choice([1e-3, 1e-4, 1e-5, 1e-6, 1e-8]),
-    projection_axis_learning=ng.p.Choice(["partial_leaf_nodes"]),
+    projection_axis_learning_rate=ng.p.Scalar(
+        lower=0.0, upper=1e-3, init=1e-5
+    ),  # ng.p.Choice([0.0, 1e-3, 1e-4, 1e-5, 1e-6, 1e-8]),
+    projection_axis_learning=ng.p.Choice(["all"]),
     # clustering
     clustering_n_epochs=ng.p.Choice([60]),
     # pruning
@@ -95,7 +97,7 @@ search_space = ng.p.Dict(
     # tree growth
     tree_growth_frequency=ng.p.Choice([1.0, 2.0]),
     tree_growth_amount=ng.p.Scalar(lower=1, upper=4).set_integer_casting(),
-    tree_growth_unimodality_treshold=ng.p.Choice([0.95, 0.975, 1.0]),
+    tree_growth_unimodality_treshold=ng.p.Choice([0.95, 0.975]),
     tree_growth_upper_bound_leaf_nodes=ng.p.Choice([100]),
     tree_growth_use_unimodality_pvalue=ng.p.Choice([True]),
     # unimodal
@@ -173,7 +175,7 @@ scheduler = AsyncHyperBandScheduler(
     grace_period=8000,
 )
 
-stage_nr = 5
+stage_nr = 6
 
 tuner = tune.Tuner(
     func,

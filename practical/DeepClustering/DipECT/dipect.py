@@ -18,7 +18,7 @@ from clustpy.deep._utils import detect_device, encode_batchwise, set_torch_seed
 from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
 from clustpy.deep.dipencoder import _Dip_Gradient
 from clustpy.utils import dip_pval, dip_test
-from clustpy.data import load_mnist
+from clustpy.data import load_fmnist, load_mnist, load_usps
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
 from sklearn.cluster import KMeans
 from tqdm import tqdm
@@ -1147,7 +1147,7 @@ class Cluster_Tree:
         #     weight = np.exp2(-node_criteria) * unimodal_loss_weight
         # else:
         #     raise ValueError(f"unimodal loss direction {direction} not supported")
-        weight = np.exp2((unimodal_loss_weight / normalization) * node_criteria)
+        weight = (unimodal_loss_weight / normalization) * np.exp2(node_criteria)
         return (weight, weight)
 
     def _log(self, direction, node_criteria, normalization, unimodal_loss_weight):
@@ -1977,41 +1977,42 @@ if __name__ == "__main__":
         ],
     )
     start = datetime.datetime.now()
-    dataset, labels = load_mnist(return_X_y=True)
+    dataset, labels = load_usps(return_X_y=True)
     autoencoder = FeedforwardAutoencoder([dataset.shape[1], 500, 500, 2000, 10])
 
     dipect = DipECT(
         autoencoder=autoencoder,
-        autoencoder_param_path="practical/DeepClustering/DipECT/autoencoder/feedforward_mnist_60_21.pth",
+        autoencoder_param_path="practical/DeepClustering/DipECT/autoencoder/feedforward_usps_100_21.pth",
         random_state=np.random.RandomState(21),
-        autoencoder_pretrain_n_epochs=60,
+        autoencoder_pretrain_n_epochs=100,
         logging_active=True,
         clustering_n_epochs=60,
-        clustering_optimizer_params={"lr": 1e-5},
+        clustering_optimizer_params={"lr": 1e-4},
         early_stopping=False,
         loss_weight_function_normalization=-1,
         mulitmodal_loss_application="all",
-        mulitmodal_loss_node_criteria_method="tree_depth",
+        mulitmodal_loss_node_criteria_method="time_of_split",  # "time_of_split",
         mulitmodal_loss_weight_direction="ascending",
-        mulitmodal_loss_weight_function="exponential",
-        multimodal_loss_weight=1.0,
-        projection_axis_learning="partial_leaf_nodes",
-        projection_axis_learning_rate=1e-6,
+        mulitmodal_loss_weight_function="linear",  # "linear",
+        multimodal_loss_weight=1,  # 960,
+        projection_axis_learning="all",
+        projection_axis_learning_rate=0.0005,
         pruning_factor=1.0,
         pruning_strategy="epoch_assessment",
-        pruning_threshold=2000,
-        reconstruction_loss_weight=1.0,
+        pruning_threshold=dataset.shape[0] / 35,
+        tree_growth_min_cluster_size=dataset.shape[0] / 35,
+        reconstruction_loss_weight=1.0,  # 700,
         refinement_epochs=0,
-        tree_growth_amount=2,
-        tree_growth_frequency=2.0,
-        tree_growth_unimodality_treshold=0.975,
+        tree_growth_amount=3,
+        tree_growth_frequency=1.0,
+        tree_growth_unimodality_treshold=0.985,
         tree_growth_upper_bound_leaf_nodes=100,
         tree_growth_use_unimodality_pvalue=True,
         unimodal_loss_application="leaf_nodes",
         unimodal_loss_node_criteria_method="tree_depth",
-        unimodal_loss_weight=1.0,
-        unimodal_loss_weight_direction="ascending",
-        unimodal_loss_weight_function="linear",
+        unimodal_loss_weight=1,  # 650,
+        unimodal_loss_weight_direction="descending",
+        unimodal_loss_weight_function="log",
     )
     dipect.fit_predict(dataset / 255, labels)
     print(

@@ -75,53 +75,59 @@ def trainable_function(config: dict):
 
 # searchspace
 search_space = ng.p.Dict(
-    autoencoder_pretraining_n_epochs=ng.p.Choice([100]),
-    clustering_optimizer_params=ng.p.Dict(lr=ng.p.Choice([1e-3, 1e-4, 1e-5, 1e-6])),
+    autoencoder_pretraining_n_epochs=100,  # ng.p.Choice([100]),
+    clustering_optimizer_params=dict(
+        lr=1e-4
+    ),  # ng.p.Dict(lr=ng.p.Choice([1e-3, 1e-4, 1e-5])),
     reconstruction_loss_weight=ng.p.Scalar(
-        init=255.0, lower=1, upper=1000, mutable_sigma=True
+        init=550, lower=300, upper=1000, mutable_sigma=True
     ),
     # ng.p.Choice(
     #     [1 / 510, 1 / 384, 1 / 255, 0.007, 0.1, 1, 10.0, 255.0, 510.0]
     # ),
     # projection axis
     projection_axis_learning_rate=ng.p.Scalar(
-        lower=0.0, upper=1e-3, init=1e-5
+        lower=1e-4, upper=1e-3, init=2e-4
     ),  # ng.p.Choice([0.0, 1e-3, 1e-4, 1e-5, 1e-6, 1e-8]),
-    projection_axis_learning=ng.p.Choice(["all"]),
+    projection_axis_learning="all",  # ng.p.Choice(["all"]),
     # clustering
-    clustering_n_epochs=ng.p.Choice([60]),
+    clustering_n_epochs=60,  # ng.p.Choice([60]),
     # pruning
-    pruning_factor=ng.p.Choice([1.0]),
-    pruning_strategy=ng.p.Choice(["epoch_assessment"]),
+    pruning_factor=1.0,  # ng.p.Choice([1.0]),
+    pruning_strategy="epoch_assessment",  # ng.p.Choice(["epoch_assessment"]),
     pruning_threshold=ng.p.Choice([1500, 2000, 2500]),
     # tree growth
     tree_growth_frequency=ng.p.Choice([1.0, 2.0]),
-    tree_growth_amount=ng.p.Scalar(lower=1, upper=4).set_integer_casting(),
-    tree_growth_unimodality_treshold=ng.p.Choice([0.95, 0.975]),
-    tree_growth_upper_bound_leaf_nodes=ng.p.Choice([100]),
-    tree_growth_use_unimodality_pvalue=ng.p.Choice([True]),
+    tree_growth_amount=ng.p.Scalar(lower=1, upper=3).set_integer_casting(),
+    tree_growth_unimodality_treshold=ng.p.Scalar(
+        init=0.975, lower=0.95, upper=1.0
+    ),  # ng.p.Choice([0.975]),
+    tree_growth_upper_bound_leaf_nodes=100,  # ng.p.Choice([100]),
+    tree_growth_use_unimodality_pvalue=True,  # ng.p.Choice([True]),
     # unimodal
-    unimodal_loss_application=ng.p.Choice(["leaf_nodes", "all"]),
+    unimodal_loss_application="leaf_nodes",  # ng.p.Choice(["leaf_nodes", "all"]),
     unimodal_loss_node_criteria_method=ng.p.Choice(["tree_depth", "time_of_split"]),
     unimodal_loss_weight=ng.p.Scalar(
-        init=0.0, lower=0.0, upper=1000.0, mutable_sigma=True
+        init=750.0, lower=250.0, upper=1000.0, mutable_sigma=True
     ),  # ng.p.Choice([0.0, 0.1, 0.5, 1.0, 2.0, 10.0]),
     unimodal_loss_weight_direction=ng.p.Choice(["ascending", "descending"]),
-    unimodal_loss_weight_function=ng.p.Choice(["linear", "exponential", "log", "sqrt"]),
-    loss_weight_function_normalization=ng.p.Choice([-1]),
+    unimodal_loss_weight_function=ng.p.Choice(
+        ["exponential", "linear", "log", "sqrt"]
+    ),  # ng.p.Choice(["linear", "log", "sqrt"]),
+    loss_weight_function_normalization=-1,  # ng.p.Choice([-1]),
     # multimodal
-    mulitmodal_loss_application=ng.p.Choice(["leaf_nodes", "all"]),
+    mulitmodal_loss_application="all",  # ng.p.Choice(["leaf_nodes", "all"]),
     mulitmodal_loss_node_criteria_method=ng.p.Choice(["tree_depth", "time_of_split"]),
-    mulitmodal_loss_weight_direction=ng.p.Choice(["ascending", "descending"]),
+    mulitmodal_loss_weight_direction="ascending",  # ng.p.Choice(["ascending", "descending"]),
     mulitmodal_loss_weight_function=ng.p.Choice(
-        ["linear", "exponential", "log", "sqrt"]
+        ["exponential", "linear", "log", "sqrt"]
     ),
     multimodal_loss_weight=ng.p.Scalar(
-        init=1.0, lower=0.5, upper=1000.0, mutable_sigma=True
+        init=500.0, lower=200.0, upper=1000.0, mutable_sigma=True
     ),  # ng.p.Choice([0.1, 0.5, 1.0, 2.0]),
     # utility
-    early_stopping=ng.p.Choice([False]),
-    refinement_epochs=ng.p.Choice([0]),
+    early_stopping=False,  # ng.p.Choice([False]),
+    refinement_epochs=0,  # ng.p.Choice([0]),
 )
 
 
@@ -138,9 +144,10 @@ optimizer = ng.optimizers.Chaining(
     [
         # ng.optimizers.ScrHammersleySearch,
         # ng.optimizers.NeuralMetaModelTwoPointsDE,
+        # ng.optimizers.RandomSearch,
         ng.optimizers.ParametrizedBO(
-            initialization="LHS",
-            init_budget=100,
+            initialization="Hammersley",
+            init_budget=75,
             utility_kind="ucb",
             gp_parameters=dict(
                 kernel=Matern(nu=2.5),
@@ -150,15 +157,16 @@ optimizer = ng.optimizers.Chaining(
                 random_state=np.random.RandomState(21),
             ),
         ),
+        ng.optimizers.TBPSA,
         ng.optimizers.TwoPointsDE,
     ],
-    budgets=[400],
+    budgets=[400, 100],
 )
 
 # optimizer = ng.optimizers.TwoPointsDE
 algo = NevergradSearch(
     optimizer=optimizer,
-    optimizer_kwargs={"budget": 500, "num_workers": 4},
+    optimizer_kwargs={"budget": 600, "num_workers": 4},
     space=search_space,
     metric="dp",
     mode="max",
@@ -175,11 +183,11 @@ scheduler = AsyncHyperBandScheduler(
     grace_period=8000,
 )
 
-stage_nr = 6
+stage_nr = 7
 
 tuner = tune.Tuner(
     func,
-    tune_config=tune.TuneConfig(search_alg=algo, num_samples=500, scheduler=scheduler),
+    tune_config=tune.TuneConfig(search_alg=algo, num_samples=800, scheduler=scheduler),
     run_config=train.RunConfig(
         name=f"dipect_hpo_stage_{stage_nr}",
         storage_path="/home/loebbert/projects/deepclustering/LMU_Master_Practical_SoSe24/practical/DeepClustering/DipECT/hpo",

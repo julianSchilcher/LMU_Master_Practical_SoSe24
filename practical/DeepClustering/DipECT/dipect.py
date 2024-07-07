@@ -12,22 +12,22 @@ from typing import List, Tuple, Union
 import numpy as np
 import torch
 import torch.utils.data
-from clustpy.deep._data_utils import augmentation_invariance_check, get_dataloader
-from clustpy.deep._train_utils import get_trained_network
+from clustpy.data import (load_cifar10)
+from clustpy.deep._data_utils import (augmentation_invariance_check,
+                                      get_dataloader)
+from clustpy.deep._train_utils import get_trained_autoencoder
 from clustpy.deep._utils import detect_device, encode_batchwise, set_torch_seed
-from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
+from clustpy.deep.autoencoders import (ConvolutionalAutoencoder)
+from clustpy.deep.autoencoders._abstract_autoencoder import \
+    _AbstractAutoencoder
 from clustpy.deep.dipencoder import _Dip_Gradient
 from clustpy.utils import dip_pval, dip_test
-from clustpy.data import load_fmnist, load_mnist, load_usps, load_reuters, load_cifar10
-from clustpy.deep.autoencoders import FeedforwardAutoencoder, ConvolutionalAutoencoder
+from ray import train
 from sklearn.cluster import KMeans
 from tqdm import tqdm
-from ray import train
 
-from practical.DeepClustering.DeepECT.metrics import (
-    PredictionClusterNode,
-    PredictionClusterTree,
-)
+from practical.DeepClustering.DeepECT.metrics import (PredictionClusterNode,
+                                                      PredictionClusterTree)
 
 
 # replaces the dip module
@@ -1665,7 +1665,7 @@ def _dipect(
     else:
         trainloader, testloader = custom_dataloaders
     # Get initial AE
-    autoencoder = get_trained_network(
+    autoencoder = get_trained_autoencoder(
         trainloader=trainloader,
         optimizer_params=pretrain_optimizer_params,
         n_epochs=pretrain_epochs,
@@ -1673,7 +1673,7 @@ def _dipect(
         optimizer_class=optimizer_class,
         loss_fn=rec_loss_fn,
         embedding_size=embedding_size,
-        neural_network=autoencoder,
+        autoencoder=autoencoder,
     )
 
     logging.info(device)

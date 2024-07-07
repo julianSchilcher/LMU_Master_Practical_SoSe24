@@ -12,12 +12,12 @@ from typing import List, Tuple, Union
 import numpy as np
 import torch
 import torch.utils.data
-from clustpy.data import load_cifar10
+from clustpy.data import (load_cifar10)
 from clustpy.deep._data_utils import (augmentation_invariance_check,
                                       get_dataloader)
-from clustpy.deep._train_utils import get_trained_autoencoder
+from clustpy.deep._train_utils import get_trained_network
 from clustpy.deep._utils import detect_device, encode_batchwise, set_torch_seed
-from clustpy.deep.autoencoders import ConvolutionalAutoencoder
+from clustpy.deep.autoencoders import (ConvolutionalAutoencoder)
 from clustpy.deep.autoencoders._abstract_autoencoder import \
     _AbstractAutoencoder
 from clustpy.deep.dipencoder import _Dip_Gradient
@@ -1870,7 +1870,7 @@ def _dipect(
     else:
         trainloader, testloader = custom_dataloaders
     # Get initial AE
-    autoencoder = get_trained_autoencoder(
+    autoencoder = get_trained_network(
         trainloader=trainloader,
         optimizer_params=pretrain_optimizer_params,
         n_epochs=pretrain_epochs,
@@ -1878,7 +1878,7 @@ def _dipect(
         optimizer_class=optimizer_class,
         loss_fn=rec_loss_fn,
         embedding_size=embedding_size,
-        autoencoder=autoencoder,
+        neural_network=autoencoder,
     )
 
     logging.info(device)

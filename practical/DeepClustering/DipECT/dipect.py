@@ -18,8 +18,8 @@ from clustpy.deep._utils import detect_device, encode_batchwise, set_torch_seed
 from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
 from clustpy.deep.dipencoder import _Dip_Gradient
 from clustpy.utils import dip_pval, dip_test
-from clustpy.data import load_fmnist, load_mnist, load_usps
-from clustpy.deep.autoencoders import FeedforwardAutoencoder
+from clustpy.data import load_fmnist, load_mnist, load_usps, load_reuters, load_cifar10
+from clustpy.deep.autoencoders import FeedforwardAutoencoder, ConvolutionalAutoencoder
 from sklearn.cluster import KMeans
 from tqdm import tqdm
 from ray import train
@@ -732,6 +732,9 @@ class Cluster_Tree:
                 # pvalue gives the probability for unimodality (smaller dip value, higher p value)
                 pvalue = dip_pval(dip_value, len(node.assignments))
                 # the more samples, the smaller the dip value, consider this:
+                logging.info(
+                    f"checking node with #assignments: {len(node.assignments)} - pvalue: {pvalue}"
+                )
                 if use_pvalue:
                     current_value = pvalue
                     better = False
@@ -1360,7 +1363,7 @@ class _DipECT_Module(torch.nn.Module):
                 )
             iterations_until_grow = math.ceil(len(trainloader) * 2.0)
             growing_treshhold_reached = False  # prevent from immediatly ending training
-
+        classes = np.unique(labels).size
         for epoch in range(max_epochs):
             # evaluation
             if epoch > 0:
@@ -1368,9 +1371,9 @@ class _DipECT_Module(torch.nn.Module):
                     pred_tree = self.predict(testloader, autoencoder)
                     metrics.update(
                         {
-                            "acc": pred_tree.flat_accuracy(labels, 10),
-                            "nmi": pred_tree.flat_nmi(labels, 10),
-                            "ari": pred_tree.flat_ari(labels, 10),
+                            "acc": pred_tree.flat_accuracy(labels, classes),
+                            "nmi": pred_tree.flat_nmi(labels, classes),
+                            "ari": pred_tree.flat_ari(labels, classes),
                             "dp": pred_tree.dendrogram_purity(labels),
                             "lp": pred_tree.leaf_purity(labels)[0],
                         }
@@ -1489,6 +1492,11 @@ class _DipECT_Module(torch.nn.Module):
                     metrics["cluster_loss"] = cluster_loss.item()
                     metrics["rec_loss"] = rec_loss.item()
                     metrics["loss"] = loss.item()
+                    metrics["nodes"] = self.cluster_tree.number_nodes
+                    metrics["leaf_nodes"] = len(self.cluster_tree.leaf_nodes)
+                    metrics["combined_metrics"] = (
+                        metrics["acc"] + metrics["dp"] + metrics["lp"]
+                    )
                     iteration += 1
                     train.report(metrics)
                     mov_loss += metrics["loss"]
@@ -1734,13 +1742,15 @@ def _dipect(
     )
     # Get labels
     pred_tree: PredictionClusterTree = dipect_module.predict(testloader, autoencoder)
+    classes = np.unique(Y).size
     metrics = {
-        "acc": pred_tree.flat_accuracy(Y, 10),
-        "nmi": pred_tree.flat_nmi(Y, 10),
-        "ari": pred_tree.flat_ari(Y, 10),
+        "acc": pred_tree.flat_accuracy(Y, classes),
+        "nmi": pred_tree.flat_nmi(Y, classes),
+        "ari": pred_tree.flat_ari(Y, classes),
         "dp": pred_tree.dendrogram_purity(Y),
         "lp": pred_tree.leaf_purity(Y)[0],
     }
+    metrics["combined_metrics"] = metrics["acc"] + metrics["dp"] + metrics["lp"]
     train.report(metrics)
     if logging_active:
         logging.info(metrics)
@@ -1977,12 +1987,15 @@ if __name__ == "__main__":
         ],
     )
     start = datetime.datetime.now()
-    dataset, labels = load_usps(return_X_y=True)
-    autoencoder = FeedforwardAutoencoder([dataset.shape[1], 500, 500, 2000, 10])
+    dataset, labels = load_cifar10(return_X_y=True)
+    dataset = dataset.reshape(-1, 32, 32, 3).astype("float32")
+    dataset = dataset.transpose((0, 3, 1, 2)) / 255.0
+    autoencoder = ConvolutionalAutoencoder(32, [512, 10])
 
     dipect = DipECT(
+        batch_size=256,
         autoencoder=autoencoder,
-        autoencoder_param_path="practical/DeepClustering/DipECT/autoencoder/feedforward_usps_100_21.pth",
+        autoencoder_param_path="practical/DeepClustering/DipECT/autoencoder/conv_cifar_100_21.pth",
         random_state=np.random.RandomState(21),
         autoencoder_pretrain_n_epochs=100,
         logging_active=True,
@@ -1994,27 +2007,27 @@ if __name__ == "__main__":
         mulitmodal_loss_node_criteria_method="time_of_split",  # "time_of_split",
         mulitmodal_loss_weight_direction="ascending",
         mulitmodal_loss_weight_function="linear",  # "linear",
-        multimodal_loss_weight=1,  # 960,
+        multimodal_loss_weight=3,
         projection_axis_learning="all",
         projection_axis_learning_rate=0.0005,
         pruning_factor=1.0,
         pruning_strategy="epoch_assessment",
         pruning_threshold=dataset.shape[0] / 35,
         tree_growth_min_cluster_size=dataset.shape[0] / 35,
-        reconstruction_loss_weight=1.0,  # 700,
+        reconstruction_loss_weight=1,
         refinement_epochs=0,
         tree_growth_amount=3,
-        tree_growth_frequency=1.0,
-        tree_growth_unimodality_treshold=0.985,
+        tree_growth_frequency=2.0,
+        tree_growth_unimodality_treshold=0.995,
         tree_growth_upper_bound_leaf_nodes=100,
         tree_growth_use_unimodality_pvalue=True,
         unimodal_loss_application="leaf_nodes",
         unimodal_loss_node_criteria_method="tree_depth",
-        unimodal_loss_weight=1,  # 650,
+        unimodal_loss_weight=1,
         unimodal_loss_weight_direction="descending",
-        unimodal_loss_weight_function="log",
+        unimodal_loss_weight_function="linear",
     )
-    dipect.fit_predict(dataset / 255, labels)
+    dipect.fit_predict(dataset, labels)
     print(
         f"-------------------------------------------Time needed: {(datetime.datetime.now()-start).total_seconds()/60}min"
     )

@@ -33,7 +33,7 @@ def test_grow_assign():
 
     tree = Cluster_Tree(dataloader, autoencoder, None, "cpu")
     tree.assign_to_tree(torch.from_numpy(X))
-    tree.grow_tree(dataloader, autoencoder, None, 20, 1.0, 1)
+    tree.grow_tree(dataloader, autoencoder, None, 20, 1.0, 1, 0)
     # reasssign data so that the new leaf nodes contain its data
     tree.assign_to_tree(torch.from_numpy(X))
 

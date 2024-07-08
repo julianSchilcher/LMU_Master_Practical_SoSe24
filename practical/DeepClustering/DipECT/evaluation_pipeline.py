@@ -19,7 +19,8 @@ import torch
 from clustpy.data import load_fmnist, load_mnist, load_reuters, load_usps
 from clustpy.deep._utils import set_torch_seed
 from clustpy.deep.autoencoders import FeedforwardAutoencoder
-from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
+from clustpy.deep.autoencoders._abstract_autoencoder import \
+    _AbstractAutoencoder
 from clustpy.deep.dec import IDEC
 from clustpy.metrics import unsupervised_clustering_accuracy
 from sklearn.cluster import KMeans
@@ -29,15 +30,12 @@ from sklearn.utils import Bunch
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
-from practical.DeepClustering.DeepECT.deepect_ours import DeepECT as DeepECTOurs
+from practical.DeepClustering.DeepECT.deepect_ours import \
+    DeepECT as DeepECTOurs
 from practical.DeepClustering.DipECT.baseline_hierachical.ae_plus import (
-    ae_bisecting,
-    ae_complete,
-    ae_single,
-)
-from practical.DeepClustering.DipECT.baseline_hierachical.idec_hierarchical_clustpy import (
-    run_idec_hierarchical,
-)
+    ae_bisecting, ae_complete, ae_single)
+from practical.DeepClustering.DipECT.baseline_hierachical.idec_hierarchical_clustpy import \
+    run_idec_hierarchical
 from practical.DeepClustering.DipECT.dipect import DipECT
 
 
@@ -848,7 +846,6 @@ def get_custom_dataloader_augmentations(
     translation = (
         0.14 if dataset_type == DatasetType.USPS else 0.08,
         0.14 if dataset_type == DatasetType.USPS else 0.08,
-    )2
     )
 
     augmentation_transform = transforms.Compose(

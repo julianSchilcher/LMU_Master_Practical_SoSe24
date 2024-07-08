@@ -21,9 +21,9 @@ from clustpy.utils import dip_pval, dip_test
 from clustpy.data import load_fmnist, load_mnist, load_usps, load_reuters, load_cifar10
 from clustpy.deep.autoencoders import FeedforwardAutoencoder, ConvolutionalAutoencoder
 import sklearn
+from ray import train
 from sklearn.cluster import KMeans
 from tqdm import tqdm
-from ray import train
 
 from practical.DeepClustering.DeepECT.metrics import (
     PredictionClusterNode,
@@ -232,7 +232,7 @@ class Cluster_Tree:
     This class represents a binary cluster tree. It provides multiple
     functionalities used for improving the cluster tree, like calculating
     the cluster loss and assigning samples in a top-down manner. Furthermore,
-    it provides methods for growing and pruning the tree..
+    it provides methods for growing and pruning the tree.
     """
 
     def __init__(
@@ -249,12 +249,11 @@ class Cluster_Tree:
         Parameters
         ----------
         trainloader : torch.utils.data.DataLoader
-            dataloader used to initialise the cluster tree (root and
-            its 2 childs)
+            Dataloader used to initialize the cluster tree (root and its 2 children).
         autoencoder : torch.nn.Module
-            The autoencoder used to embedd the data of the dataloader.
+            The autoencoder used to embed the data of the dataloader.
         projection_axis_optimizer : torch.optim.Optimizer
-            optimizer for improving the projection axes
+            Optimizer for improving the projection axes.
         device : torch.device
             The device to be trained on.
 
@@ -263,14 +262,14 @@ class Cluster_Tree:
         Cluster_Tree
             The initialized Cluster_Tree object.
         """
-        # initialise cluster tree
+        # initialize cluster tree
         self.device = device
-        self.root = Cluster_Node(device)
         self.random_seed = random_seed
         embedded_data = encode_batchwise(trainloader, autoencoder)
         axis, number_left_assignments, number_right_assignments = (
             self.get_inital_projection_axis(embedded_data)
         )
+        self.root = Cluster_Node(device, number_assignments=len(embedded_data))
         self.root.expand_tree(
             axis,
             projection_axis_optimizer,
@@ -346,8 +345,8 @@ class Cluster_Tree:
     def get_inital_projection_axis(self, embedded_data: np.ndarray):
         """
         Returns the initial projection axis for the given data as well as the
-        number of assignments the 2 clusters. The axis is defined through the resulting
-        centers from applying Kmeans to the given data.
+        number of assignments to the 2 clusters. The axis is defined through the resulting
+        centers from applying KMeans to the given data.
 
         Parameters
         ----------
@@ -357,11 +356,11 @@ class Cluster_Tree:
         Returns
         -------
         axis : np.array
-            The found projection axis
+            The found projection axis.
         number_of_samples_cluster_0 : int
-            Number of assigned samples to cluster 0
+            Number of assigned samples to cluster 0.
         number_of_samples_cluster_1 : int
-            Number of assigned samples to cluster 1
+            Number of assigned samples to cluster 1.
         """
         # init projection axis on full dataset
         kmeans = KMeans(n_clusters=2, n_init=20, random_state=self.random_seed).fit(
@@ -394,9 +393,13 @@ class Cluster_Tree:
 
         Parameters
         ----------
-        embedded_data : torch.Tensor
-            Embedded data samples of shape [#Samples, Dimensionality]
-        set_pruning_indicator : bool, optional
+        data_embedded : torch.Tensor
+            Embedded data samples of shape [#Samples, Dimensionality].
+        pruning_strategy : Union[str, None], optional
+            Strategy to use for pruning, by default None.
+        pruning_factor : Union[float, None], optional
+            Factor to use for pruning, by default None.
+        set_pruning_incidator : bool, optional
             Whether to update the pruning threshold, by default False.
         """
         # clear all assignments
@@ -421,18 +424,22 @@ class Cluster_Tree:
         pruning_factor: float,
     ):
         """
-        Helper function which assigns the given data to the given node and divides the given data to its childs if they exist.
+        Helper function which assigns the given data to the given node and divides the given data to its children if they exist.
 
         Parameters
         ----------
         node : Cluster_Node
-            The node object which should get the given data assigned
+            The node object which should get the given data assigned.
         embedded_data : torch.Tensor
-            Embedded data samples of shape [#Samples, Dimensionality]
+            Embedded data samples of shape [#Samples, Dimensionality].
         embedded_data_indices : torch.Tensor
-            Indices of the embedded data samples in the batch [#Samples, ]
-        set_pruning_indicator : bool
-            Whether to update the pruning threshold
+            Indices of the embedded data samples in the batch [#Samples, ].
+        set_pruning_incidator : bool
+            Whether to update the pruning threshold.
+        pruning_strategy : str
+            The pruning strategy to use.
+        pruning_factor : float
+            The pruning factor to use.
         """
 
         if set_pruning_incidator:
@@ -469,18 +476,18 @@ class Cluster_Tree:
     def predict_subclusters(self, node: Cluster_Node) -> np.array:
         """
         Predicts the 2 subclusters (child assignments) for the given node using properties of the dip test.
-        The treshold is set between the middle coordinate of the modal trianlge and the upper/lower modal interval
+        The threshold is set between the middle coordinate of the modal triangle and the upper/lower modal interval.
 
         Parameters
         ----------
         node : Cluster_Node
-            The node object for which we want to predict 2 subclusters
+            The node object for which we want to predict 2 subclusters.
 
         Returns
         -------
         labels : np.array
             A label (0/1) for each data point of the given node, where label 1 indicates the higher projection
-            cluster
+            cluster.
         """
 
         if node.assignments.numel() == 1:
@@ -522,7 +529,7 @@ class Cluster_Tree:
         for node in self.nodes:
             node.pruning_indicator = 0.0
 
-    def prune_tree(self, pruning_threshold: float, metrics: dict = None):
+    def prune_tree(self, pruning_threshold: float, metrics: dict = None) -> bool:
         """
         Prunes the tree by removing nodes with pruning indicators below the pruning threshold.
 
@@ -530,6 +537,8 @@ class Cluster_Tree:
         ----------
         pruning_threshold : float
             The threshold value for pruning. Nodes with pruning indicators below this threshold will be removed.
+        metrics : dict, optional
+            Dictionary to store metrics, by default None.
 
         Returns
         -------
@@ -651,13 +660,13 @@ class Cluster_Tree:
         metrics: dict = None,
     ) -> bool:
         """
-        Grows the tree at the leaf node with the highest multimodality. Since the dipvalue depends
-        on the number of samples, we use the pvalue for the split criteria if use_pvalue is true. In this case
-        we split the leaf node with the lowest pvalue (lowest probability for unimodality). If the lowest pvalue
-        found is 0, we expand the mulitmodal leaf node (pvalue < unimodal_treshold) with the maximal number of assigned
-        samples. If use_pvalue is set to false, we introduce a criteria which includes the dipvalue and the number of samples
+        Grows the tree at the leaf node with the highest multimodality. Since the dip value depends
+        on the number of samples, we use the p-value for the split criteria if use_pvalue is true. In this case
+        we split the leaf node with the lowest p-value (lowest probability for unimodality). If the lowest p-value
+        found is 0, we expand the multimodal leaf node (p-value < unimodal_threshold) with the maximal number of assigned
+        samples. If use_pvalue is set to false, we introduce a criteria which includes the dip value and the number of samples
         of the node for the decision.
-        The tree growing is stopped if all leaf nodes are unimodal (pvalue > unimodal_threshold) or the maximal number of
+        The tree growing is stopped if all leaf nodes are unimodal (p-value > unimodal_threshold) or the maximal number of
         leaf nodes is reached.
 
         Parameters
@@ -671,18 +680,23 @@ class Cluster_Tree:
         max_leaf_nodes : int
             The maximal number of leaf nodes.
         unimodality_treshhold : float
-            Specifies the minimal probability we demand so that we can call a node unimodal
-        number_of_grow_steps : int
+            Specifies the minimal probability we demand so that we can call a node unimodal.
+        number_of_grow_steps : int, optional
             Specifies how many tree grow steps should be applied, default is 1.
-        use_pvalue : int
+        tree_growth_min_cluster_size : int, optional
+            Minimum cluster size to allow tree growth, default is 1000.
+        use_pvalue : bool, optional
             Specifies which splitting criteria should be used, default is True.
+        metrics : dict, optional
+            Dictionary to store metrics, by default None.
 
         Returns
-        ----------
-        Returns True if the algorithm should be stopped or False otherwise
+        -------
+        bool
+            Returns True if the algorithm should be stopped or False otherwise.
         """
 
-        # do not grow further if treshhold was already reached
+        # do not grow further if threshold was already reached
         if len(self.leaf_nodes) >= max_leaf_nodes:
             return True
 
@@ -725,7 +739,7 @@ class Cluster_Tree:
                     continue
                 projections = np.matmul(node_data, axis)
                 dip_value = dip_test(projections, just_dip=True, is_data_sorted=False)
-                # pvalue gives the probability for unimodality (smaller dip value, higher p value)
+                # p-value gives the probability for unimodality (smaller dip value, higher p-value)
                 pvalue = dip_pval(dip_value, len(node.assignments))
                 # the more samples, the smaller the dip value, consider this:
 
@@ -846,7 +860,45 @@ class Cluster_Tree:
 
         Parameters
         ----------
-        TODO
+        embedded_data : torch.Tensor
+            The embedded data samples.
+        embedded_augmented_data : Union[torch.Tensor, None]
+            The embedded augmented data samples.
+        projection_axis_optimizer : torch.optim.Optimizer
+            The optimizer for the projection axes.
+        unimodal_loss_application : str
+            Specifies where the unimodal loss should be applied.
+        unimoal_loss_node_criteria_method : str
+            Specifies the method to use for node criteria.
+        unimodal_loss_weight_function : str
+            Specifies the weight function for unimodal loss.
+        unimodal_loss_weight_direction : str
+            Specifies the weight direction for unimodal loss.
+        unimodal_loss_weight : float
+            The weight for unimodal loss.
+        loss_weight_function_normalization : float
+            The normalization factor for the loss weight function.
+        mulitmodal_loss_application : str
+            Specifies where the multimodal loss should be applied.
+        mulitmodal_loss_node_criteria_method : str
+            Specifies the method to use for node criteria for multimodal loss.
+        mulitmodal_loss_weight_function : str
+            Specifies the weight function for multimodal loss.
+        mulitmodal_loss_weight_direction : str
+            Specifies the weight direction for multimodal loss.
+        multimodal_loss_weight : float
+            The weight for multimodal loss.
+        projection_axis_learning : str
+            Specifies the learning strategy for projection axes.
+        pruning_strategy : str
+            The strategy to use for pruning.
+        pruning_factor : float
+            The factor to use for pruning.
+
+        Returns
+        -------
+        Tuple[torch.Tensor, torch.Tensor]
+            The unimodal and multimodal losses.
         """
         self.assign_to_tree(
             embedded_data,
@@ -913,7 +965,45 @@ class Cluster_Tree:
 
         Parameters
         ----------
-        TODO
+        node : Cluster_Node
+            The node whose space should be improved.
+        projection_axis_optimizer : torch.optim.Optimizer
+            The optimizer for the projection axes.
+        unimodal_loss : torch.Tensor
+            The unimodal loss tensor.
+        multimodal_loss : torch.Tensor
+            The multimodal loss tensor.
+        embedded_augmented_data : Union[torch.Tensor, None]
+            The embedded augmented data samples.
+        unimodal_loss_application : str
+            Specifies where the unimodal loss should be applied.
+        unimoal_loss_node_criteria_method : str
+            Specifies the method to use for node criteria.
+        unimodal_loss_weight_function : str
+            Specifies the weight function for unimodal loss.
+        unimodal_loss_weight_direction : str
+            Specifies the weight direction for unimodal loss.
+        unimodal_loss_weight : float
+            The weight for unimodal loss.
+        loss_weight_function_normalization : float
+            The normalization factor for the loss weight function.
+        mulitmodal_loss_application : str
+            Specifies where the multimodal loss should be applied.
+        mulitmodal_loss_node_criteria_method : str
+            Specifies the method to use for node criteria for multimodal loss.
+        mulitmodal_loss_weight_function : str
+            Specifies the weight function for multimodal loss.
+        mulitmodal_loss_weight_direction : str
+            Specifies the weight direction for multimodal loss.
+        multimodal_loss_weight : float
+            The weight for multimodal loss.
+        projection_axis_learning : str
+            Specifies the learning strategy for projection axes.
+
+        Returns
+        -------
+        Tuple[torch.Tensor, torch.Tensor]
+            The unimodal and multimodal losses.
         """
         if projection_axis_learning is not None:
             if (
@@ -1092,8 +1182,35 @@ class Cluster_Tree:
         loss_weight: float,
         weight_normalization: float,
         multimodal: bool = False,
-    ):
-        if loss_application == None:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Calculates the loss weight for a node based on the given criteria.
+
+        Parameters
+        ----------
+        node : Cluster_Node
+            The node for which to calculate the loss weight.
+        loss_application : Union[str, None]
+            Specifies where the loss should be applied.
+        loss_node_criteria_method : str
+            The method to use for node criteria.
+        loss_weight_scale_function : str
+            The weight function for loss.
+        loss_weight_direction : str
+            The weight direction for loss.
+        loss_weight : float
+            The weight for the loss.
+        weight_normalization : float
+            The normalization factor for the weight.
+        multimodal : bool, optional
+            Whether to calculate weight for multimodal loss, by default False.
+
+        Returns
+        -------
+        Tuple[torch.Tensor, torch.Tensor]
+            The calculated weights for unimodal and multimodal loss.
+        """
+        if loss_application is None:
             return (
                 torch.tensor(0.0, dtype=torch.float),
                 torch.tensor(0.0, dtype=torch.float),
@@ -1119,7 +1236,7 @@ class Cluster_Tree:
             weights = self._sqrt(
                 loss_weight_direction, node_criteria, weight_normalization, loss_weight
             )
-        elif loss_weight_scale_function == None:
+        elif loss_weight_scale_function is None:
             weights = (loss_weight, loss_weight)
         else:
             raise ValueError(
@@ -1136,12 +1253,6 @@ class Cluster_Tree:
     def _linear(self, direction, node_criteria, normalization, unimodal_loss_weight):
         if normalization == -1:
             normalization = 1
-        # if direction == "ascending":
-        #     weight = (unimodal_loss_weight / normalization) * node_criteria
-        # elif direction == "descending":
-        #     weight = abs(unimodal_loss_weight - node_criteria)
-        # else:
-        #     raise ValueError(f"unimodal loss direction {direction} not supported")
         weight = (unimodal_loss_weight / normalization) * node_criteria
         return (weight, weight)
 
@@ -1149,27 +1260,18 @@ class Cluster_Tree:
         self, direction, node_criteria, normalization, unimodal_loss_weight
     ):
         if normalization == -1:
-            # normalization = 0
             normalization = 1
-        # if direction == "ascending":
-        #     weight = np.exp2(node_criteria - normalization) * unimodal_loss_weight
-        # elif direction == "descending":
-        #     weight = np.exp2(-node_criteria) * unimodal_loss_weight
-        # else:
-        #     raise ValueError(f"unimodal loss direction {direction} not supported")
         weight = (unimodal_loss_weight / normalization) * np.exp2(node_criteria)
         return (weight, weight)
 
     def _log(self, direction, node_criteria, normalization, unimodal_loss_weight):
         if normalization == -1:
-            # normalization = 0
             normalization = 1
         weight = np.log1p((unimodal_loss_weight / normalization) * node_criteria)
         return (weight, weight)
 
     def _sqrt(self, direction, node_criteria, normalization, unimodal_loss_weight):
         if normalization == -1:
-            # normalization = 0
             normalization = 1
         weight = np.sqrt((unimodal_loss_weight / normalization) * node_criteria)
         return (weight, weight)
@@ -1233,16 +1335,17 @@ class _DipECT_Module(torch.nn.Module):
     Parameters
     ----------
     init_centers : np.ndarray
-        The initial cluster centers
+        The initial cluster centers.
     augmentation_invariance : bool
         If True, augmented samples provided in custom_dataloaders[0] will be used to learn
-        cluster assignments that are invariant to the augmentation transformations (default: False)
+        cluster assignments that are invariant to the augmentation transformations (default: False).
 
     Attributes
     ----------
     cluster_tree: Cluster_Node
+        The cluster tree.
     augmentation_invariance : bool
-        Is augmentation invariance used
+        Is augmentation invariance used.
     """
 
     def __init__(
@@ -1313,30 +1416,80 @@ class _DipECT_Module(torch.nn.Module):
         Parameters
         ----------
         autoencoder : torch.nn.Module
-            The autoencoder used for training
+            The autoencoder used for training.
         trainloader : torch.utils.data.DataLoader
-            DataLoader for training data
+            DataLoader for training data.
         testloader : torch.utils.data.DataLoader
-            DataLoader for testing data
-        max_iterations : int
-            Maximum number of iterations for training
+            DataLoader for testing data.
+        labels : np.ndarray
+            True labels of the data.
+        max_epochs : int
+            Maximum number of epochs for training.
         pruning_threshold : float
-            Threshold for pruning the cluster tree
-        grow_interval : int
-            Interval for growing the cluster tree
+            Threshold for pruning the cluster tree.
+        grow_interval : float
+            Interval for growing the cluster tree.
+        use_pvalue : bool
+            Whether to use p-value for split criteria.
         max_leaf_nodes : int
-            Maximum number of leaf nodes in the cluster tree
+            Maximum number of leaf nodes in the cluster tree.
+        reconstruction_loss_weight : float
+            Weight for the reconstruction loss.
+        unimodality_treshhold : float
+            Threshold for unimodality.
+        number_of_grow_steps : int
+            Number of grow steps.
+        early_stopping : bool
+            Whether to use early stopping.
+        refinement_epochs : int
+            Number of refinement epochs.
         optimizer : torch.optim.Optimizer
-            Optimizer for training
+            Optimizer for training.
+        projection_axis_optimizer : torch.optim.Optimizer
+            Optimizer for projection axes.
         rec_loss_fn : torch.nn.modules.loss._Loss
-            Loss function for reconstruction
+            Loss function for reconstruction.
         device : Union[torch.device, str]
-            Device for training (e.g., "cuda" or "cpu")
+            Device for training (e.g., "cuda" or "cpu").
+        logging_active : bool
+            Whether to log metrics.
+        unimodal_loss_application : str
+            Specifies where the unimodal loss should be applied.
+        unimoal_loss_node_criteria_method : str
+            Specifies the method to use for node criteria.
+        unimodal_loss_weight_function : str
+            Specifies the weight function for unimodal loss.
+        unimodal_loss_weight_direction : str
+            Specifies the weight direction for unimodal loss.
+        unimodal_loss_weight : float
+            The weight for unimodal loss.
+        loss_weight_function_normalization : float
+            The normalization factor for the loss weight function.
+        mulitmodal_loss_application : str
+            Specifies where the multimodal loss should be applied.
+        mulitmodal_loss_node_criteria_method : str
+            Specifies the method to use for node criteria for multimodal loss.
+        mulitmodal_loss_weight_function : str
+            Specifies the weight function for multimodal loss.
+        mulitmodal_loss_weight_direction : str
+            Specifies the weight direction for multimodal loss.
+        multimodal_loss_weight : float
+            The weight for multimodal loss.
+        projection_axis_learning : str
+            Specifies the learning strategy for projection axes.
+        pruning_strategy : str
+            The strategy to use for pruning.
+        pruning_factor : float
+            The factor to use for pruning.
+        tree_growth_min_cluster_size : int
+            Minimum cluster size to allow tree growth.
+        evaluate_after_n_epochs : int, optional
+            Interval to evaluate the model, by default 0.
 
         Returns
         -------
-        self : _DeepECT_Module
-            This instance of the _DeepECT_Module
+        _DipECT_Module
+            The instance of the _DipECT_Module.
         """
 
         self.device = device
@@ -1375,7 +1528,9 @@ class _DipECT_Module(torch.nn.Module):
                     metrics=metrics,
                 )
             iterations_until_grow = math.ceil(len(trainloader) * 2.0)
-            growing_treshhold_reached = False  # prevent from immediatly ending training
+            growing_treshhold_reached = (
+                False  # prevent from immediately ending training
+            )
         classes = np.unique(labels).size
         for epoch in range(max_epochs):
             # evaluation
@@ -1421,7 +1576,7 @@ class _DipECT_Module(torch.nn.Module):
                         )
                         if growing_treshhold_reached and early_stopping:
                             logging.info(
-                                "Stopped algorithm earlier since unimodality treshhold is reached. Eventually refinement epochs starting..."
+                                "Stopped algorithm earlier since unimodality threshold is reached. Eventually refinement epochs starting..."
                             )
                             break
 
@@ -1545,14 +1700,14 @@ class _DipECT_Module(torch.nn.Module):
         Parameters
         ----------
         dataloader : torch.utils.data.DataLoader
-            DataLoader for the samples to be predicted
+            DataLoader for the samples to be predicted.
         autoencoder: torch.nn.Module
-            Autoencoder model for calculating the embeddings
+            Autoencoder model for calculating the embeddings.
 
         Returns
         -------
         pred_tree : PredictionClusterTree
-            The prediction cluster tree with assigned samples
+            The prediction cluster tree with assigned samples.
         """
         # get prediction tree
         pred_tree = transform_cluster_tree_to_pred_tree(self.cluster_tree)
@@ -1623,37 +1778,89 @@ def _dipect(
     Parameters
     ----------
     X : np.ndarray
-        The given data set. Can be a np.ndarray or a torch.Tensor
+        The given data set. Can be a np.ndarray or a torch.Tensor.
+    Y : np.ndarray
+        The given labels for the data set.
     batch_size : int
-        Size of the data batches
+        Size of the data batches.
     pretrain_optimizer_params : dict
-        Parameters of the optimizer for the pretraining of the autoencoder, includes the learning rate
+        Parameters of the optimizer for the pretraining of the autoencoder, includes the learning rate.
     clustering_optimizer_params : dict
-        Parameters of the optimizer for the actual clustering procedure, includes the learning rate
+        Parameters of the optimizer for the actual clustering procedure, includes the learning rate.
+    projection_axis_optimizer_params : dict
+        Parameters of the optimizer for the projection axes.
     pretrain_epochs : int
-        Number of epochs for the pretraining of the autoencoder
-    max_iterations : int
-        Number of iterations for the actual clustering procedure
+        Number of epochs for the pretraining of the autoencoder.
+    max_epochs : int
+        Number of epochs for the actual clustering procedure.
     pruning_threshold : float
-        The threshold for pruning the tree
+        The threshold for pruning the tree.
     grow_interval : int
-        Interval for growing the tree
+        Interval for growing the tree.
+    use_pvalue : bool
+        Whether to use p-value for split criteria.
     optimizer_class : torch.optim.Optimizer
-        The optimizer class
+        The optimizer class.
     rec_loss_fn : torch.nn.modules.loss._Loss
-        Loss function for the reconstruction
+        Loss function for the reconstruction.
     autoencoder : torch.nn.Module
-        The input autoencoder
+        The input autoencoder.
     embedding_size : int
-        Size of the embedding within the autoencoder
+        Size of the embedding within the autoencoder.
+    max_leaf_nodes : int
+        Maximum number of leaf nodes in the cluster tree.
+    reconstruction_loss_weight : float
+        Weight for the reconstruction loss.
+    unimodality_treshhold : float
+        Threshold for unimodality.
+    number_of_grow_steps : int
+        Number of grow steps.
+    early_stopping : bool
+        Whether to use early stopping.
+    refinement_epochs : int
+        Number of refinement epochs.
     custom_dataloaders : tuple
-        Tuple consisting of a trainloader (random order) at the first and a test loader (non-random order) at the second position
+        Tuple consisting of a trainloader (random order) at the first and a test loader (non-random order) at the second position.
     augmentation_invariance : bool
-        If True, augmented samples provided in custom_dataloaders[0] will be used to learn cluster assignments that are invariant to the augmentation transformations
+        If True, augmented samples provided in custom_dataloaders[0] will be used to learn cluster assignments that are invariant to the augmentation transformations.
     random_state : np.random.RandomState
-        Use a fixed random state to get a repeatable solution
+        Use a fixed random state to get a repeatable solution.
+    logging_active : bool
+        Whether to log metrics.
     autoencoder_save_param_path : str
-        Path to save the autoencoder parameters
+        Path to save the autoencoder parameters.
+    unimodal_loss_application : str
+        Specifies where the unimodal loss should be applied.
+    unimoal_loss_node_criteria_method : str
+        Specifies the method to use for node criteria.
+    unimodal_loss_weight_function : str
+        Specifies the weight function for unimodal loss.
+    unimodal_loss_weight_direction : str
+        Specifies the weight direction for unimodal loss.
+    unimodal_loss_weight : float
+        The weight for unimodal loss.
+    loss_weight_function_normalization : float
+        The normalization factor for the loss weight function.
+    mulitmodal_loss_application : str
+        Specifies where the multimodal loss should be applied.
+    mulitmodal_loss_node_criteria_method : str
+        Specifies the method to use for node criteria for multimodal loss.
+    mulitmodal_loss_weight_function : str
+        Specifies the weight function for multimodal loss.
+    mulitmodal_loss_weight_direction : str
+        Specifies the weight direction for multimodal loss.
+    multimodal_loss_weight : float
+        The weight for multimodal loss.
+    projection_axis_learning : str
+        Specifies the learning strategy for projection axes.
+    pruning_strategy : str
+        The strategy to use for pruning.
+    pruning_factor : float
+        The factor to use for pruning.
+    tree_growth_min_cluster_size : int
+        Minimum cluster size to allow tree growth.
+    evaluate_every_n_epochs : int
+        Interval to evaluate the model.
 
     Returns
     -------
@@ -1662,7 +1869,7 @@ def _dipect(
         The cluster centers as identified by a final KMeans execution,
         The labels as identified by DeepECT after the training terminated,
         The cluster centers as identified by DeepECT after the training terminated,
-        The final autoencoder
+        The final autoencoder.
     """
     # Get initial setting (device, dataloaders, pretrained AE and initial clustering result)
     if os.path.exists(autoencoder_save_param_path):
@@ -1779,44 +1986,94 @@ class DipECT:
     Parameters
     ----------
     batch_size : int
-        Size of the data batches (default: 256)
+        Size of the data batches (default: 256).
     pretrain_optimizer_params : dict
-        Parameters of the optimizer for the pretraining of the autoencoder, includes the learning rate (default: {"lr": 1e-3})
+        Parameters of the optimizer for the pretraining of the autoencoder, includes the learning rate (default: {"lr": 1e-3}).
     clustering_optimizer_params : dict
-        Parameters of the optimizer for the actual clustering procedure, includes the learning rate (default: {"lr": 1e-4})
-    pretrain_epochs : int
-        Number of epochs for the pretraining of the autoencoder (default: 50)
-    max_iterations : int
-        Number of iterations for the actual clustering procedure (default: 50000)
-    grow_interval : int
-        Interval for growing the tree (default: 500)
-    pruning_threshold : float
-        The threshold for pruning the tree (default: 0.1)
+        Parameters of the optimizer for the actual clustering procedure, includes the learning rate (default: {"lr": 1e-4}).
+    projection_axis_learning_rate : float
+        Learning rate for projection axes (default: 1e-5).
+    projection_axis_learning : str
+        Learning strategy for projection axes, options are None, "all", "only_leaf_nodes", "partial_leaf_nodes" (default: "all").
     optimizer_class : torch.optim.Optimizer
-        The optimizer class (default: torch.optim.Adam)
+        The optimizer class (default: torch.optim.Adam).
     rec_loss_fn : torch.nn.modules.loss._Loss
-        Loss function for the reconstruction (default: torch.nn.MSELoss())
+        Loss function for the reconstruction (default: torch.nn.MSELoss()).
     autoencoder : torch.nn.Module
-        The input autoencoder. If None, a new FeedforwardAutoencoder will be created (default: None)
-    embedding_size : int
-        Size of the embedding within the autoencoder (default: 10)
-    max_leaf_nodes : int
-        Maximum number of leaf nodes in the cluster tree (default: 20)
-    custom_dataloaders : tuple
-        Tuple consisting of a trainloader (random order) at the first and a test loader (non-random order) at the second position. If None, the default dataloaders will be used (default: None)
-    augmentation_invariance : bool
-        If True, augmented samples provided in custom_dataloaders[0] will be used to learn cluster assignments that are invariant to the augmentation transformations (default: False)
-    random_state : np.random.RandomState
-        Use a fixed random state to get a repeatable solution. Can also be of type int (default: None)
+        The input autoencoder. If None, a new FeedforwardAutoencoder will be created (default: None).
+    autoencoder_pretrain_n_epochs : int
+        Number of epochs for pretraining the autoencoder (default: 50).
+    reconstruction_loss_weight : float
+        Weight for the reconstruction loss (default: None).
     autoencoder_param_path : str
-        Path to save the autoencoder parameters (default: None)
+        Path to save the autoencoder parameters (default: "pretrained_ae.pth").
+    clustering_n_epochs : int
+        Number of epochs for the actual clustering procedure (default: 40).
+    embedding_size : int
+        Size of the embedding within the autoencoder (default: 10).
+    max_leaf_nodes : int
+        Maximum number of leaf nodes in the cluster tree (default: 20).
+    custom_dataloaders : tuple
+        Tuple consisting of a trainloader (random order) at the first and a test loader (non-random order) at the second position. If None, the default dataloaders will be used (default: None).
+    augmentation_invariance : bool
+        If True, augmented samples provided in custom_dataloaders[0] will be used to learn cluster assignments that are invariant to the augmentation transformations (default: False).
+    pruning_threshold : float
+        The threshold for pruning the tree (default: 0.1).
+    pruning_strategy : str
+        Strategy for pruning, options are "moving_average", "epoch_assessment" (default: "moving_average").
+    pruning_factor : float
+        Factor for pruning (default: 0.5).
+    tree_growth_frequency : float
+        Interval for growing the tree (default: 2.0).
+    tree_growth_amount : int
+        Number of grow steps (default: 1).
+    tree_growth_upper_bound_leaf_nodes : int
+        Maximum number of leaf nodes for tree growth (default: 20).
+    tree_growth_use_unimodality_pvalue : bool
+        Whether to use p-value for split criteria (default: False).
+    tree_growth_unimodality_treshold : float
+        Threshold for unimodality (default: 0.95).
+    tree_growth_min_cluster_size : int
+        Minimum cluster size to allow tree growth (default: 1000).
+    unimodal_loss_application : str
+        Specifies where the unimodal loss should be applied, options are None, "leaf_nodes", "all" (default: "leaf_nodes").
+    unimodal_loss_node_criteria_method : str
+        Method for node criteria, options are "tree_depth", "time_of_split" (default: "tree_depth").
+    unimodal_loss_weight_function : str
+        Weight function for unimodal loss, options are "linear", "exponential", None (default: "linear").
+    unimodal_loss_weight_direction : str
+        Weight direction for unimodal loss, options are "ascending", "descending" (default: "ascending").
+    unimodal_loss_weight : float
+        Weight for unimodal loss (default: 1.0).
+    loss_weight_function_normalization : float
+        Normalization factor for the loss weight function (default: -1).
+    mulitmodal_loss_application : str
+        Specifies where the multimodal loss should be applied, options are None, "leaf_nodes", "all" (default: "all").
+    mulitmodal_loss_node_criteria_method : str
+        Method for node criteria for multimodal loss, options are "tree_depth", "time_of_split" (default: "tree_depth").
+    mulitmodal_loss_weight_function : str
+        Weight function for multimodal loss, options are "linear", "exponential", None (default: None).
+    mulitmodal_loss_weight_direction : str
+        Weight direction for multimodal loss, options are "ascending", "descending" (default: "ascending").
+    multimodal_loss_weight : float
+        Weight for multimodal loss (default: 1.0).
+    early_stopping : bool
+        Whether to use early stopping (default: False).
+    refinement_epochs : int
+        Number of refinement epochs (default: 0).
+    random_state : np.random.RandomState
+        Use a fixed random state to get a repeatable solution. Can also be of type int (default: np.random.RandomState(42)).
+    logging_active : bool
+        Whether to log metrics (default: False).
+    evaluate_every_n_epochs : int
+        Interval to evaluate the model (default: 2).
 
     Attributes
     ----------
     tree_ : PredictionClusterTree
-        The prediction cluster tree after training
+        The prediction cluster tree after training.
     autoencoder : torch.nn.Module
-        The final autoencoder
+        The final autoencoder.
     """
 
     def __init__(
@@ -1882,11 +2139,6 @@ class DipECT:
             if clustering_optimizer_params is None
             else clustering_optimizer_params
         )
-        # self.projection_axis_optimizer_params = (
-        #     {"lr": 1e-5}
-        #     if projection_axis_optimizer_params is None
-        #     else projection_axis_optimizer_params
-        # )
         self.projection_axis_optimizer_params = {"lr": projection_axis_learning_rate}
         self.pretrain_epochs = autoencoder_pretrain_n_epochs
         self.max_epochs = clustering_n_epochs
@@ -1933,12 +2185,14 @@ class DipECT:
         Parameters
         ----------
         X : np.ndarray
-            The given data set as a 2D-array of shape (#samples, #features)
+            The given data set as a 2D-array of shape (#samples, #features).
+        Y : np.ndarray
+            The given labels for the data set.
 
         Returns
         -------
-        self : DeepECT
-            This instance of the DeepECT algorithm
+        self : DipECT
+            This instance of the DipECT algorithm.
         """
         augmentation_invariance_check(
             self.augmentation_invariance, self.custom_dataloaders
@@ -2051,4 +2305,3 @@ if __name__ == "__main__":
     print(
         f"-------------------------------------------Time needed: {(datetime.datetime.now()-start).total_seconds()/60}min"
     )
-    # 8 mins

@@ -1,0 +1,32 @@
+{
+  "autoencoder_pretraining_n_epochs": 100,
+  "batch_size": 256,
+  "clustering_n_epochs": 60,
+  "clustering_optimizer_params": {
+    "lr": 0.0001
+  },
+  "early_stopping": false,
+  "loss_weight_function_normalization": -1,
+  "mulitmodal_loss_application": "all",
+  "mulitmodal_loss_node_criteria_method": "time_of_split",
+  "mulitmodal_loss_weight_direction": "ascending",
+  "mulitmodal_loss_weight_function": "exponential",
+  "multimodal_loss_weight": 816.4808800364622,
+  "projection_axis_learning": "all",
+  "projection_axis_learning_rate": 0.00041425840086402424,
+  "pruning_factor": 1.0,
+  "pruning_strategy": "epoch_assessment",
+  "pruning_threshold": 2000,
+  "reconstruction_loss_weight": 752.5419334998459,
+  "refinement_epochs": 0,
+  "tree_growth_amount": 3,
+  "tree_growth_frequency": 1.0,
+  "tree_growth_unimodality_treshold": 0.9854142104197341,
+  "tree_growth_upper_bound_leaf_nodes": 100,
+  "tree_growth_use_unimodality_pvalue": true,
+  "unimodal_loss_application": "all",
+  "unimodal_loss_node_criteria_method": "tree_depth",
+  "unimodal_loss_weight": 473.7437531094021,
+  "unimodal_loss_weight_direction": "descending",
+  "unimodal_loss_weight_function": "linear"
+}

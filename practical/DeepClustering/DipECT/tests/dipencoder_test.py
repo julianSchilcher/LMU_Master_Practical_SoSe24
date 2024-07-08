@@ -20,7 +20,7 @@ def _get_mock_autoencoder(fkt_object=None):
 def test_Tree():
     dataloader, labels = _gen_artificial_dataset(4)
     autoencoder = _get_mock_autoencoder()
-    tree = Cluster_Tree(dataloader, autoencoder, None, "cpu")
+    tree = Cluster_Tree(dataloader, autoencoder, None, "cpu",  np.random.RandomState(0))
     assert tree.root.projection_axis is not None and tree.root.projection_axis.numel() == 2
     assert tree.root.higher_projection_child is not None and tree.root.lower_projection_child is not None
     assert not tree.root.is_leaf_node() and tree.root.higher_projection_child.is_leaf_node() and tree.root.lower_projection_child.is_leaf_node()
@@ -31,7 +31,7 @@ def test_grow_assign():
 
     X = dataloader.dataset.tensors[0].numpy()
 
-    tree = Cluster_Tree(dataloader, autoencoder, None, "cpu")
+    tree = Cluster_Tree(dataloader, autoencoder, None, "cpu", np.random.RandomState(0))
     tree.assign_to_tree(torch.from_numpy(X))
     tree.grow_tree(dataloader, autoencoder, None, 20, 1.0, 1, 0)
     # reasssign data so that the new leaf nodes contain its data

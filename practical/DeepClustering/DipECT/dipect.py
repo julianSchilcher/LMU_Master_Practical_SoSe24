@@ -1330,7 +1330,7 @@ def transform_cluster_tree_to_pred_tree(tree: Cluster_Tree) -> PredictionCluster
 
 class _DipECT_Module(torch.nn.Module):
     """
-    The _DeepECT_Module. Contains most of the algorithm specific procedures like the loss and tree-grow functions.
+    The _DipECT_Module. Contains most of the algorithm specific procedures like the loss and tree-grow functions.
 
     Parameters
     ----------
@@ -1411,7 +1411,7 @@ class _DipECT_Module(torch.nn.Module):
         evaluate_after_n_epochs: int = 0,
     ) -> "_DipECT_Module":
         """
-        Trains the _DeepECT_Module in place.
+        Trains the _DipECT_Module in place.
 
         Parameters
         ----------
@@ -1773,7 +1773,7 @@ def _dipect(
     evaluate_every_n_epochs,
 ):
     """
-    Start the actual DeepECT clustering procedure on the input data set.
+    Start the actual DipECT clustering procedure on the input data set.
 
     Parameters
     ----------
@@ -1910,7 +1910,6 @@ def _dipect(
         [dummy_param], **projection_axis_optimizer_params
     )
     projection_axis_optimizer.param_groups = []
-    # optimizer.add_param_group({'params': [], 'lr': projection_axis_lr, 'name': 'projection_axes'}) # using just one optimizer (with different lr for projection axis and data)
 
     # Setup DeepECT Module
     dipect_module = _DipECT_Module(
@@ -1979,9 +1978,9 @@ def _dipect(
 
 class DipECT:
     """
-    The Deep Embedded Cluster Tree (DeepECT) algorithm.
+    A deep hierarchical clustering algorithm based on the dip test for modality.
     First, an autoencoder (AE) will be trained (will be skipped if input autoencoder is given).
-    Afterward, a cluster tree will be grown and the AE will be optimized using the DeepECT loss function.
+    Afterward, a cluster tree will be grown and the AE will be optimized using the DipECT loss function.
 
     Parameters
     ----------
@@ -2092,7 +2091,7 @@ class DipECT:
         autoencoder: _AbstractAutoencoder = None,
         autoencoder_pretrain_n_epochs: int = 50,
         reconstruction_loss_weight: float = None,  # None, float(1e-4, 1e4)
-        autoencoder_param_path: str = "pretrained_ae.pth",
+        autoencoder_param_path: str = "",
         # clustering
         clustering_n_epochs: int = 40,
         embedding_size: int = 10,

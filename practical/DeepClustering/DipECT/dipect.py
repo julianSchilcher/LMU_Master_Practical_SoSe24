@@ -32,7 +32,7 @@ from practical.DeepClustering.DeepECT.metrics import (
 import practical.DeepClustering.DipECT.metrics_visualization as metrics_visualization
 
 
-def plus_plus(ds, k, random_state=np.random.RandomState(42)):
+def kmeans_plus_plus_init(ds, k, random_state=np.random.RandomState(42)):
     """
     Create cluster centroids using the k-means++ algorithm.
     Parameters
@@ -65,6 +65,18 @@ def plus_plus(ds, k, random_state=np.random.RandomState(42)):
         centroids.append(ds[i])
 
     return np.array(centroids)
+
+
+def kmeans_init(ds, k, random_state=np.random.RandomState(42)):
+    centroids = []
+
+    for _ in range(k // 2):
+        cluster = KMeans(
+            n_clusters=2, n_init=1, random_state=random_state.randint(1, 262144)
+        ).fit(ds)
+        centroids.append(cluster.cluster_centers_)
+
+    return np.concatenate(centroids, axis=0)
 
 
 def predict_subclusters(embedded_data: np.ndarray, axis: np.ndarray) -> np.array:
@@ -328,7 +340,8 @@ class Cluster_Tree:
         projection_axis_optimizer: torch.optim.Optimizer,
         device: torch.device,
         random_seed: np.random.RandomState,
-        number_kmeans_init_projection_axis: int,
+        projection_axis_init: str,
+        projection_axis_n_init: int,
     ) -> "Cluster_Tree":
         """
         Constructor for the Cluster_Tree class.
@@ -350,7 +363,8 @@ class Cluster_Tree:
             The initialized Cluster_Tree object.
         """
         # initialize cluster tree
-        self.number_kmeans_init_projection_axis = number_kmeans_init_projection_axis
+        self.projection_axis_init = projection_axis_init
+        self.projection_axis_n_init = projection_axis_n_init
         self.device = device
         self.random_seed = random_seed
         embedded_data = encode_batchwise(trainloader, autoencoder)
@@ -462,24 +476,27 @@ class Cluster_Tree:
         #     np.sum(labels == 0),
         #     np.sum(labels == 1),
         # )
-        centroids = plus_plus(embedded_data, 6, self.random_seed)
+        if self.projection_axis_init == "kmeans++":
+            centroids = kmeans_plus_plus_init(
+                embedded_data, self.projection_axis_n_init, self.random_seed
+            )
+        elif self.projection_axis_init == "kmeans":
+            centroids = kmeans_init(
+                embedded_data, self.projection_axis_n_init, self.random_seed
+            )
+        else:
+            raise ValueError(
+                f"Projection Axis init was {self.projection_axis_init} - should be one of [kmeans++, kmeans]"
+            )
         best_dip_value = -np.inf
-        # best_kmeans = None
-        # for _ in range(self.number_kmeans_init_projection_axis):
         best_axis = None
         for left, right in combinations(range(len(centroids)), 2):
-            # kmeans = KMeans(n_clusters=2, n_init=1, random_state=self.random_seed).fit(
-            #     embedded_data
-            # )
-            # kmeans_centers = kmeans.cluster_centers_
-            # axis = kmeans_centers[0] - kmeans_centers[1]
             axis = centroids[left] - centroids[right]
             projections = np.matmul(embedded_data, axis)
             dip_value = dip_test(projections, just_dip=True, is_data_sorted=False)
             if dip_value > best_dip_value:
                 best_dip_value = dip_value
                 best_axis = (left, right)
-                # best_kmeans = kmeans
         centers = centroids[best_axis, :]
         labels = predict_subclusters(embedded_data, axis)
         # higher projection by cluster 1 since axis points to cluster 1
@@ -1469,7 +1486,8 @@ class _DipECT_Module(torch.nn.Module):
         projection_axis_optimizer: torch.optim.Optimizer,
         device: torch.device,
         random_state: np.random.RandomState,
-        number_kmeans_init_projection_axis: int,
+        projection_axis_init: str,
+        projection_axis_n_init: int,
         augmentation_invariance: bool = False,
         logging_active: bool = False,
     ):
@@ -1487,7 +1505,8 @@ class _DipECT_Module(torch.nn.Module):
             projection_axis_optimizer,
             device,
             self.random_state,
-            number_kmeans_init_projection_axis,
+            projection_axis_init,
+            projection_axis_n_init,
         )
 
     def fit(
@@ -1631,9 +1650,6 @@ class _DipECT_Module(torch.nn.Module):
             "acc": 0.0,
             "nmi": 0.0,
             "ari": 0.0,
-            "acc-kmeans": 0.0,
-            "nmi-kmeans": 0.0,
-            "ari-kmeans": 0.0,
             "dp": 0.0,
             "lp": 0.0,
         }
@@ -1673,13 +1689,8 @@ class _DipECT_Module(torch.nn.Module):
                     metrics.update(
                         {
                             "acc": pred_tree.flat_accuracy(labels, classes),
-                            "acc-kmeans": pred_tree.flat_accuracy_kmeans(
-                                labels, classes
-                            ),
                             "nmi": pred_tree.flat_nmi(labels, classes),
-                            "nmi-kmeans": pred_tree.flat_nmi_kmeans(labels, classes),
                             "ari": pred_tree.flat_ari(labels, classes),
-                            "ari-kmeans": pred_tree.flat_ari_kmeans(labels, classes),
                             "dp": pred_tree.dendrogram_purity(labels),
                             "lp": pred_tree.leaf_purity(labels)[0],
                         }
@@ -1933,7 +1944,8 @@ def _dipect(
     mulitmodal_loss_weight_direction,
     multimodal_loss_weight,
     projection_axis_learning,
-    number_kmeans_init_projection_axis: int,
+    projection_axis_init: str,
+    projection_axis_n_init: int,
     pruning_strategy,
     pruning_factor,
     tree_growth_min_cluster_size,
@@ -2088,7 +2100,8 @@ def _dipect(
         projection_axis_optimizer,
         device,
         random_state,
-        number_kmeans_init_projection_axis,
+        projection_axis_init,
+        projection_axis_n_init,
         augmentation_invariance,
         logging_active,
     ).to(device)
@@ -2139,11 +2152,8 @@ def _dipect(
     classes = np.unique(Y).size
     metrics = {
         "acc": pred_tree.flat_accuracy(Y, classes),
-        "acc-kmeans": pred_tree.flat_accuracy_kmeans(Y, classes),
         "nmi": pred_tree.flat_nmi(Y, classes),
-        "nmi-kmeans": pred_tree.flat_nmi_kmeans(Y, classes),
         "ari": pred_tree.flat_ari(Y, classes),
-        "ari-kmeans": pred_tree.flat_ari_kmeans(Y, classes),
         "dp": pred_tree.dendrogram_purity(Y),
         "lp": pred_tree.leaf_purity(Y)[0],
     }
@@ -2263,7 +2273,8 @@ class DipECT:
         clustering_optimizer_params: dict = None,
         projection_axis_learning_rate: float = 1e-4,
         projection_axis_learning: str = "all",  # None, "all", "only_leaf_nodes", "partial_leaf_nodes"
-        number_kmeans_init_projection_axis: int = 10,
+        projection_axis_init: str = "kmeans",  # "kmeans++"
+        projection_axis_n_init: int = 10,
         optimizer_class: torch.optim.Optimizer = torch.optim.Adam,
         # autoencoder
         rec_loss_fn: torch.nn.modules.loss._Loss = torch.nn.MSELoss(),
@@ -2352,7 +2363,8 @@ class DipECT:
         self.mulitmodal_loss_weight_direction = mulitmodal_loss_weight_direction
         self.multimodal_loss_weight = multimodal_loss_weight
         self.projection_axis_learning = projection_axis_learning
-        self.number_kmeans_init_projection_axis = number_kmeans_init_projection_axis
+        self.projection_axis_init = projection_axis_init
+        self.projection_axis_n_init = projection_axis_n_init
         self.pruning_strategy = pruning_strategy
         self.pruning_factor = pruning_factor
         self.tree_growth_min_cluster_size = tree_growth_min_cluster_size
@@ -2380,10 +2392,14 @@ class DipECT:
         augmentation_invariance_check(
             self.augmentation_invariance, self.custom_dataloaders
         )
-        os.environ["OMP_NUM_THREADS"] = "2"
-        os.environ["MKL_NUM_THREADS"] = "2"
-        os.environ["OPENBLAS_NUM_THREADS"] = "2"
-        os.environ["BLIS_NUM_THREADS"] = "2"
+        for lib in [
+            "OMP_NUM_THREADS",
+            "MKL_NUM_THREADS",
+            "OPENBLAS_NUM_THREADS",
+            "BLIS_NUM_THREADS",
+        ]:
+            print(f"{lib} - {os.getenv(lib)}")
+            os.environ[lib] = "1"
         os.environ["SKLEARN_SEED"] = str(self.random_state.get_state()[1][0])
         tree, autoencoder = _dipect(
             X,
@@ -2424,7 +2440,8 @@ class DipECT:
             self.mulitmodal_loss_weight_direction,
             self.multimodal_loss_weight,
             self.projection_axis_learning,
-            self.number_kmeans_init_projection_axis,
+            self.projection_axis_init,
+            self.projection_axis_n_init,
             self.pruning_strategy,
             self.pruning_factor,
             self.tree_growth_min_cluster_size,

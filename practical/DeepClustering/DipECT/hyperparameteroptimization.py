@@ -39,6 +39,8 @@ def trainable_function(config: dict):
         # projection axis
         projection_axis_learning_rate=config["projection_axis_learning_rate"],
         projection_axis_learning=config["projection_axis_learning"],
+        projection_axis_init=config["projection_axis_init"],
+        projection_axis_n_init=config["projection_axis_n_init"],
         # clustering
         clustering_n_epochs=config["clustering_n_epochs"],
         # pruning
@@ -82,16 +84,20 @@ search_space = ng.p.Dict(
         lr=1e-4
     ),  # ng.p.Dict(lr=ng.p.Choice([1e-3, 1e-4, 1e-5])),
     reconstruction_loss_weight=ng.p.Scalar(
-        init=704.994797, lower=1.0, upper=1000.0, mutable_sigma=True
+        init=772.3825128714965, lower=1.0, upper=1000.0, mutable_sigma=True
     ),
     # ng.p.Choice(
     #     [1 / 510, 1 / 384, 1 / 255, 0.007, 0.1, 1, 10.0, 255.0, 510.0]
     # ),
     # projection axis
     projection_axis_learning_rate=ng.p.Scalar(
-        lower=1e-6, upper=95e-5, init=5e-4, mutable_sigma=True
+        lower=1e-6, upper=95e-5, init=0.0003952954333547711, mutable_sigma=True
     ),  # ng.p.Choice([0.0, 1e-3, 1e-4, 1e-5, 1e-6, 1e-8]),
     projection_axis_learning="all",  # ng.p.Choice(["all"]),
+    projection_axis_init=ng.p.Choice(["kmeans", "kmeans++"]),
+    projection_axis_n_init=ng.p.Scalar(
+        init=10, lower=4, upper=12, mutable_sigma=True
+    ).set_integer_casting(),
     # clustering
     clustering_n_epochs=60,  # ng.p.Choice([60]),
     # pruning
@@ -102,19 +108,17 @@ search_space = ng.p.Dict(
     tree_growth_frequency=1.0,  # 1.0, ng.p.Choice([, 2.0]),
     tree_growth_amount=3,  # 3, ng.p.Scalar(lower=1, upper=3).set_integer_casting(),
     tree_growth_unimodality_treshold=ng.p.Scalar(
-        init=0.985152, lower=0.95, upper=1.0, mutable_sigma=True
+        init=0.9954713118040149, lower=0.95, upper=1.0, mutable_sigma=True
     ),  # ng.p.Choice([0.975]),
     tree_growth_upper_bound_leaf_nodes=100,  # ng.p.Choice([100]),
-    tree_growth_use_unimodality_pvalue=ng.p.Choice(
-        [True, False]
-    ),  # ng.p.Choice([True]),
+    tree_growth_use_unimodality_pvalue=True,  # ng.p.Choice([True]),
     # unimodal
     unimodal_loss_application=ng.p.Choice(["leaf_nodes", "all"]),
     unimodal_loss_node_criteria_method=ng.p.Choice(
         ["tree_depth", "equal"]
     ),  # ng.p.Choice(["tree_depth", "time_of_split"]),
     unimodal_loss_weight=ng.p.Scalar(
-        init=650.698737, lower=1.0, upper=1000.0, mutable_sigma=True
+        init=534.3911240634819, lower=1.0, upper=1000.0, mutable_sigma=True
     ),
     # ng.p.Scalar(
     #     init=750.0, lower=250.0, upper=1000.0, mutable_sigma=True
@@ -129,12 +133,10 @@ search_space = ng.p.Dict(
     mulitmodal_loss_node_criteria_method=ng.p.Choice(
         ["tree_depth", "time_of_split"]
     ),  # "time_of_split",  #
-    mulitmodal_loss_weight_direction=ng.p.Choice(["ascending", "descending"]),
-    mulitmodal_loss_weight_function=ng.p.Choice(
-        ["exponential", "linear", "log", "sqrt"]
-    ),
+    mulitmodal_loss_weight_direction="descending",
+    mulitmodal_loss_weight_function="exponential",
     multimodal_loss_weight=ng.p.Scalar(
-        init=962.130178, lower=1, upper=1000.0, mutable_sigma=True
+        init=638.2691524389803, lower=1, upper=1000.0, mutable_sigma=True
     ),
     # ng.p.Scalar(
     #     init=500.0, lower=200.0, upper=1000.0, mutable_sigma=True
@@ -190,7 +192,24 @@ evaluated_points = []
 #     ),
 # )
 
-optimizer = ng.optimizers.BAR3
+optimizer = ng.optimizers.ConfPortfolio(
+    optimizers=[
+        ng.optimizers.RandomSearch,
+        ng.optimizers.NGOpt,
+        ng.optimizers.ParametrizedBO(
+            utility_kind="ucb",
+            gp_parameters=dict(
+                kernel=Matern(nu=2.5),
+                alpha=1e-6,
+                normalize_y=True,
+                n_restarts_optimizer=5,
+                random_state=np.random.RandomState(21),
+            ),
+        ),
+        ng.optimizers.RFMetaModelTwoPointsDE,
+    ],
+    warmup_ratio=0.5,
+)
 
 algo = NevergradSearch(
     optimizer=optimizer,
@@ -211,7 +230,7 @@ scheduler = AsyncHyperBandScheduler(
     grace_period=6000,
 )
 
-stage_nr = 14
+stage_nr = 17
 
 tuner = tune.Tuner(
     func,

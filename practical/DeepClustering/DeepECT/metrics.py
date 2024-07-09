@@ -259,7 +259,7 @@ class PredictionClusterTree:
 
         return get_nodes_recursive(self.root)
 
-    def __aggregate_assignments(self):
+    def aggregate_assignments(self):
         """
         Aggregates the assignments from leaf nodes to inner nodes.
         """
@@ -305,7 +305,7 @@ class PredictionClusterTree:
         List[PredictionClusterNode]
             The list of k cluster nodes.
         """
-        self.__aggregate_assignments()
+        self.aggregate_assignments()
         result_nodes = []
         max_split_level = sorted(list(set([node.split_id for node in self.nodes])))[
             k - 1

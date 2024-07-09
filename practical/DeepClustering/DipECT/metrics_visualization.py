@@ -16,8 +16,10 @@ from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.utils import Bunch
+from sklearn.preprocessing import minmax_scale
+from PIL import Image, ImageDraw, ImageFont
 
-from practical.DeepClustering.DipECT.dipect import Cluster_Tree
+
 from practical.DeepClustering.DipECT.evaluation_pipeline import (
     AutoencoderType, DatasetType, calculate_flat_mean_for_multiple_seeds,
     calculate_hierarchical_mean_for_multiple_seeds,
@@ -73,10 +75,6 @@ def parse_log(file_path):
     )
 
 
-import glob
-import os
-
-import numpy as np
 
 
 def parse_multiple_logs(relative_path, file_pattern):
@@ -424,6 +422,14 @@ def visualize_peformance_AE(
     embeddings = np.concatenate(embeddings)
     # PCA of embedded space
     print("fitting pca")
+    plot_pca_embedded_space(embeddings, labels)
+    print("fitted pca")
+
+    print("fitting umap")
+    plot_umap_embedded_space(embeddings, labels)
+    print("fitted umap")
+
+def plot_pca_embedded_space(embeddings, labels, path = None):
     plt.figure()
     pca = PCA(n_components=2)
     projected_data = pca.fit_transform(embeddings)
@@ -431,58 +437,26 @@ def visualize_peformance_AE(
     plt.xlabel("Principal Component 1")
     plt.ylabel("Principal Component 2")
     plt.title("PCA of embedded space")
-    if dataset["dataset_name"] == "FashionMNIST":
-        cbar = plt.colorbar()
-        cbar.set_ticks(np.arange(10))
-        cbar.set_ticklabels(
-            [
-                "T-shirt/top",
-                "Trouser",
-                "Pullover",
-                "Dress",
-                "Coat",
-                "Sandal",
-                "Shirt",
-                "Sneaker",
-                "Bag",
-                "Ankle boot",
-            ]
-        )
-
+    plt.colorbar(label="Digit")
+    if path is None:
+        plt.show()
     else:
-        plt.colorbar(label="Digit")
-    plt.show()
-    print("fitted pca")
+        plt.savefig(path)
+        plt.close()
 
-    print("fitting umap")
+def plot_umap_embedded_space(embeddings, labels, path = None):
     plt.figure()
     projected_data = umap.UMAP().fit_transform(embeddings)
     plt.scatter(projected_data[:, 0], projected_data[:, 1], c=labels, cmap="viridis")
     plt.xlabel("umap feature 1")
     plt.ylabel("umap feature 2")
     plt.title("umap of embedded space")
-    if dataset["dataset_name"] == "FashionMNIST":
-        cbar = plt.colorbar()
-        cbar.set_ticks(np.arange(10))
-        cbar.set_ticklabels(
-            [
-                "T-shirt/top",
-                "Trouser",
-                "Pullover",
-                "Dress",
-                "Coat",
-                "Sandal",
-                "Shirt",
-                "Sneaker",
-                "Bag",
-                "Ankle boot",
-            ]
-        )
-
+    plt.colorbar(label="Digit")
+    if path is None:
+        plt.show()
     else:
-        plt.colorbar(label="Digit")
-    plt.show()
-    print("fitted umap")
+        plt.savefig(path)
+        plt.close()
 
 
 def load_results():
@@ -737,9 +711,6 @@ def show_augmented_data(data: np.ndarray, dataset_type: DatasetType, image_size:
         ax[i+number_samples].set_axis_off()
         
 
-
-
-
 def graphviz_layout_binary_tree(G, root):
     A = nx.nx_agraph.to_agraph(G)
     A.layout(prog='dot')  # 'dot' is used for hierarchical layouts
@@ -749,11 +720,15 @@ def graphviz_layout_binary_tree(G, root):
         pos[node] = (float(x), float(y))
     return pos
 
-def build_and_visualize_tree(root, autoencoder, data):
+def build_and_visualize_tree(root, autoencoder, data, fig_size, embedded = False, path = None):
     if root is None:
         return
-    testloader = get_dataloader(data, 256, False, False)
-    embedded_data = encode_batchwise(testloader, autoencoder, "cpu")
+    
+    if not embedded:
+        testloader = get_dataloader(data, 256, False, False)
+        embedded_data = encode_batchwise(testloader, autoencoder)
+    else:
+        embedded_data = data    
     embedded_data = torch.from_numpy(embedded_data)
 
     # Create a directed graph
@@ -780,22 +755,25 @@ def build_and_visualize_tree(root, autoencoder, data):
     
     # Draw the images at the nodes
     for node in G.nodes:
-        image = np.mean(autoencoder.decode(embedded_data[node.assigned_indices]).detach().numpy(), axis=0)
-        if np.max(image) <= 1: # scale back to range [0,255] if necessary
-            image = image*255 
-        image = image.reshape(28,28)
+        if len(node.assigned_indices) == 0:
+            continue
+        assigned_indices = torch.cat(node.assigned_indices)
+        if len(node.assigned_indices) == 0:  
+            continue    
+        image = np.mean(autoencoder.decode(embedded_data[assigned_indices]).detach().numpy(), axis=0)
+        # normalize to [0,1] for plotting
+        image = minmax_scale(image, feature_range=(0, 1))
         
-        # if dataset_type == DatasetType.USPS:
-        #     image = image.reshape(16,16)
-        # else:
-        #     image = image.reshape(28,28)
-        imagebox = OffsetImage(image, zoom=1)
+        image = image.reshape(fig_size)
+        imagebox = OffsetImage(image, zoom=1.5, cmap="gray")
         ab = AnnotationBbox(imagebox, pos[node], frameon=False)
         ax.add_artist(ab)
     
-    plt.show()
-
-from PIL import Image, ImageDraw, ImageFont
+    if path is None:
+        plt.show()
+    else:
+        plt.savefig(path)
+        plt.close()
 
 
 def integer_to_image(number, font_size=10, image_size=(28, 28), bg_color=(255, 255, 255), text_color=(0, 0, 0)):
@@ -852,13 +830,6 @@ def build_and_visualize_splitindex_tree(root):
     # Draw the images at the nodes
     for node in G.nodes:
         image = integer_to_image(node.split_id)
-        # image = autoencoder.decode(center).detach().numpy()
-        # image = image.reshape(28,28)
-        
-        # if dataset_type == DatasetType.USPS:
-        #     image = image.reshape(16,16)
-        # else:
-        #     image = image.reshape(28,28)
         imagebox = OffsetImage(image, zoom=1)
         ab = AnnotationBbox(imagebox, pos[node], frameon=False)
         ax.add_artist(ab)
@@ -866,17 +837,34 @@ def build_and_visualize_splitindex_tree(root):
     plt.show()
 
 
-def visualize_axis_for_2_clusters(X1, X2, y1, y2):
+def visualize_prediction_subclusters(X1, X2, y1, y2):
     def get_inital_projection_axis(X_embedd):
         """
         Returns the inital projection axis for the data in the given trainloader. Furthermore, the size of the higher projection cluster and the lower projection cluster will be returned (e.g to initialise pruning indicator).
         """
         # init projection axis on full dataset
-        kmeans = KMeans(n_clusters=2, n_init=10).fit(X_embedd)
-        kmeans_centers = kmeans.cluster_centers_
-        labels = kmeans.labels_
-        axis = kmeans_centers[0] - kmeans_centers[1]        
-        return axis, kmeans_centers[0], kmeans_centers[1]
+        best_dip_value = -np.inf
+        best_kmeans = None
+        for i in range(10):
+            kmeans = KMeans(n_clusters=2, n_init=3, random_state= np.random.RandomState(32)).fit(
+                X_embedd
+            )
+            kmeans_centers = kmeans.cluster_centers_
+            axis = kmeans_centers[0] - kmeans_centers[1]
+            projections = np.matmul(X_embedd, axis)
+            dip_value = dip_test(projections, just_dip=True, is_data_sorted=False)
+            if dip_value > best_dip_value:
+                best_dip_value = dip_value
+                best_kmeans = kmeans
+
+        centers = best_kmeans.cluster_centers_
+        labels = best_kmeans.labels_
+        # higher projection by cluster 1 since axis points to cluster 1
+        return (
+            centers[0] - centers[1],
+            centers[0],
+            centers[1],
+        )
         
     def predict_subclusters(data, axis):
         projections = data @ axis
@@ -897,22 +885,13 @@ def visualize_axis_for_2_clusters(X1, X2, y1, y2):
 
     # Combine the datasets
     X = np.vstack((X1, X2))
-    y = np.hstack((y1, y2 + 1))  # Adjust labels for the second cluster
-
-    dataloader = get_dataloader(X, 50 )
-    encode = lambda x: x
-    autoencoder = type("Autoencoder", (), {"encode": encode})
-
     axis, c1, c2 = get_inital_projection_axis(X)
 
     labels = predict_subclusters(X, axis)
 
-
     # Create a scatter plot
     plt.scatter(X[:, 0], X[:, 1], c=labels, cmap='plasma', marker='o')
 
-    # origin = [np.mean(X, axis=0)[0]], [np.mean(X, axis=0)[1]]  # Vector origin point
-    # plt.quiver(*origin, axis[0], axis[1], scale=5, color='red', label='Direction Vector')
     plt.plot([c1[0], c2[0]], [c1[1], c2[1]], color='red',linewidth=2.5, label='Line between points')
 
     # Add title and labels
@@ -926,23 +905,15 @@ def visualize_axis_for_2_clusters(X1, X2, y1, y2):
 
 
 
-def visualize_axis_after_tree_growth(X):
-        # Generate sample data
+def visualize_tree_growth_step(X):
+    from practical.DeepClustering.DipECT.dipect import Cluster_Tree
 
-    # X1, y1 = make_blobs(n_samples=50, centers=1)
-    # X2, y2 = make_blobs(n_samples=200, centers=1)
-    # X3, y3 = make_blobs(n_samples=100, centers=1)
-    # X4, y4 = make_blobs(n_samples=250, centers=1)
-
-    # Combine the datasets
-    # X = np.vstack((X1, X2, X3, X4))
-    # y = np.hstack((y1, y2 + 1, y3 + 2, y4 + 3))  
 
     dataloader = get_dataloader(X, 50 )
     encode = lambda x: x
-    autoencoder = type("Autoencoder", (), {"encode": encode})
+    autoencoder = type("Autoencoder", (), {"encode": encode, "parameters": lambda: iter(torch.nn.Parameter(torch.tensor([1.0])))})
 
-    tree = Cluster_Tree(dataloader, autoencoder, None, "cpu", max_leaf_nodes=10)
+    tree = Cluster_Tree(dataloader, autoencoder, None, "cpu", np.random.RandomState(42), 10)
 
     tree.assign_to_tree(torch.from_numpy(X))
 
@@ -958,10 +929,8 @@ def visualize_axis_after_tree_growth(X):
     plt.xlabel('Feature 1')
     plt.ylabel('Feature 2')
 
-    # Show plot
+    tree.grow_tree(dataloader, autoencoder, None, 20, 1.0, tree_growth_min_cluster_size=0)
 
-
-    tree.grow_tree(dataloader, autoencoder, None, 0.0)
     tree.assign_to_tree(torch.from_numpy(X))
 
     pred_labels = np.ones(len(X))*-1
@@ -979,7 +948,7 @@ def visualize_axis_after_tree_growth(X):
 
         # Check if the sorted tensors are identical
         is_identical = torch.equal(X_sorted, X_combined_sorted)
-        print(is_identical)
+        
         pred_labels[tree.root.higher_projection_child.lower_projection_child.assignment_indices] = 0
         pred_labels[tree.root.higher_projection_child.higher_projection_child.assignment_indices] = 1
         pred_labels[tree.root.lower_projection_child.assignment_indices] = 2
@@ -996,7 +965,7 @@ def visualize_axis_after_tree_growth(X):
 
         # Check if the sorted tensors are identical
         is_identical = torch.equal(X_sorted, X_combined_sorted)
-        print(is_identical)
+    
         pred_labels[tree.root.lower_projection_child.lower_projection_child.assignment_indices] = 0
         pred_labels[tree.root.lower_projection_child.higher_projection_child.assignment_indices] = 1
         pred_labels[tree.root.higher_projection_child.assignment_indices] = 2

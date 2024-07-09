@@ -5,6 +5,7 @@ import clustpy.metrics
 import numpy as np
 import torch
 from scipy.special import comb
+from sklearn.cluster import KMeans
 from sklearn.metrics import (
     accuracy_score,
     adjusted_rand_score,
@@ -50,11 +51,13 @@ class PredictionClusterNode:
         self.right_child: PredictionClusterNode = right_child
         self.assigned_indices: List[torch.Tensor] = []
         self.center = center
+        self.assigned_samples: List[torch.Tensor] = []
 
     def assign_batch(
         self,
         dataset_indices: torch.Tensor,
         assigned_batch_indices: Union[torch.Tensor, None],
+        assigned_samples: Union[torch.Tensor, None],
     ):
         """
         Assigns a batch of data points to this node.
@@ -68,6 +71,7 @@ class PredictionClusterNode:
         """
         if assigned_batch_indices is not None:
             self.assigned_indices.append(dataset_indices[assigned_batch_indices])
+            self.assigned_samples.append(assigned_samples.clone())
 
     @property
     def assignments(self):
@@ -80,8 +84,14 @@ class PredictionClusterNode:
             The sorted list of assigned indices.
         """
         if any([len(t) > 0 for t in self.assigned_indices]):
-            return sorted(torch.cat(self.assigned_indices, dim=0).tolist())
+            return torch.cat(self.assigned_indices, dim=0).tolist()
         return []
+
+    @property
+    def samples(self):
+        if any([len(t) > 0 for t in self.assigned_samples]):
+            return torch.cat(self.assigned_samples, dim=0).numpy()
+        return None
 
     @property
     def is_leaf(self):
@@ -254,15 +264,32 @@ class PredictionClusterTree:
         Aggregates the assignments from leaf nodes to inner nodes.
         """
 
-        def aggregate_nodes_recursive(node: PredictionClusterNode):
+        def aggregate_nodes_indices_recursive(node: PredictionClusterNode):
             if node.is_leaf:
                 return node.assigned_indices
             node.assigned_indices.clear()
-            node.assigned_indices.extend(aggregate_nodes_recursive(node.left_child))
-            node.assigned_indices.extend(aggregate_nodes_recursive(node.right_child))
+            node.assigned_indices.extend(
+                aggregate_nodes_indices_recursive(node.left_child)
+            )
+            node.assigned_indices.extend(
+                aggregate_nodes_indices_recursive(node.right_child)
+            )
             return node.assigned_indices
 
-        aggregate_nodes_recursive(self.root)
+        def aggregate_nodes_samples_recursive(node: PredictionClusterNode):
+            if node.is_leaf:
+                return node.assigned_samples
+            node.assigned_samples.clear()
+            node.assigned_samples.extend(
+                aggregate_nodes_samples_recursive(node.left_child)
+            )
+            node.assigned_samples.extend(
+                aggregate_nodes_samples_recursive(node.right_child)
+            )
+            return node.assigned_samples
+
+        aggregate_nodes_indices_recursive(self.root)
+        aggregate_nodes_samples_recursive(self.root)
 
     def get_k_clusters(self, k: int) -> List[PredictionClusterNode]:
         """
@@ -301,7 +328,9 @@ class PredictionClusterTree:
         ), "Number of cluster nodes doesn't correspond to number of classes"
         return result_nodes
 
-    def get_k_cluster_predictions(self, ground_truth: np.ndarray, k: int):
+    def get_k_cluster_predictions_by_time_of_split(
+        self, ground_truth: np.ndarray, k: int
+    ):
         """
         Gets the predictions for k clusters.
 
@@ -320,6 +349,26 @@ class PredictionClusterTree:
         predictions = np.zeros_like(ground_truth, dtype=np.int32)
         for i, cluster in enumerate(self.get_k_clusters(k)):
             predictions[cluster.assignments] = i
+        return predictions
+
+    def get_k_cluster_predictions_by_kmeans(
+        self, ground_truth: np.ndarray, k: int, random_state=np.random.RandomState(42)
+    ):
+        samples = []
+        for node in self.leaf_nodes:
+            samples.append(node.samples)
+        clusters = KMeans(n_clusters=k, n_init=10, random_state=random_state).fit(
+            np.concatenate(samples, axis=0)
+        )
+        predictions = np.zeros_like(ground_truth, dtype=np.int32)
+        start = 0
+        for node in self.leaf_nodes:
+            for label, idx in zip(
+                clusters.labels_[start : start + len(node.assignments)],
+                node.assignments,
+            ):
+                predictions[idx] = label
+            start += len(node.assignments)
         return predictions
 
     def dendrogram_purity(self, ground_truth: np.ndarray):
@@ -373,7 +422,31 @@ class PredictionClusterTree:
         if n_clusters > len(self.leaf_nodes):
             return 0.0
         return clustpy.metrics.unsupervised_clustering_accuracy(
-            ground_truth, self.get_k_cluster_predictions(ground_truth, n_clusters)
+            ground_truth,
+            self.get_k_cluster_predictions_by_time_of_split(ground_truth, n_clusters),
+        )
+
+    def flat_accuracy_kmeans(self, ground_truth: np.ndarray, n_clusters: int):
+        """
+        Calculates the flat accuracy.
+
+        Parameters
+        ----------
+        ground_truth : np.ndarray
+            The ground truth labels.
+        n_clusters : int
+            The number of clusters.
+
+        Returns
+        -------
+        float
+            The flat accuracy.
+        """
+        if n_clusters > len(self.leaf_nodes):
+            return 0.0
+        return clustpy.metrics.unsupervised_clustering_accuracy(
+            ground_truth,
+            self.get_k_cluster_predictions_by_kmeans(ground_truth, n_clusters),
         )
 
     def flat_nmi(self, ground_truth: np.ndarray, n_clusters: int):
@@ -395,7 +468,31 @@ class PredictionClusterTree:
         if n_clusters > len(self.leaf_nodes):
             return 0.0
         return normalized_mutual_info_score(
-            ground_truth, self.get_k_cluster_predictions(ground_truth, n_clusters)
+            ground_truth,
+            self.get_k_cluster_predictions_by_time_of_split(ground_truth, n_clusters),
+        )
+
+    def flat_nmi_kmeans(self, ground_truth: np.ndarray, n_clusters: int):
+        """
+        Calculates the flat normalized mutual information (NMI).
+
+        Parameters
+        ----------
+        ground_truth : np.ndarray
+            The ground truth labels.
+        n_clusters : int
+            The number of clusters.
+
+        Returns
+        -------
+        float
+            The flat NMI.
+        """
+        if n_clusters > len(self.leaf_nodes):
+            return 0.0
+        return normalized_mutual_info_score(
+            ground_truth,
+            self.get_k_cluster_predictions_by_kmeans(ground_truth, n_clusters),
         )
 
     def flat_ari(self, ground_truth: np.ndarray, n_clusters: int):
@@ -417,7 +514,31 @@ class PredictionClusterTree:
         if n_clusters > len(self.leaf_nodes):
             return 0.0
         return adjusted_rand_score(
-            ground_truth, self.get_k_cluster_predictions(ground_truth, n_clusters)
+            ground_truth,
+            self.get_k_cluster_predictions_by_time_of_split(ground_truth, n_clusters),
+        )
+
+    def flat_ari_kmeans(self, ground_truth: np.ndarray, n_clusters: int):
+        """
+        Calculates the flat adjusted rand index (ARI).
+
+        Parameters
+        ----------
+        ground_truth : np.ndarray
+            The ground truth labels.
+        n_clusters : int
+            The number of clusters.
+
+        Returns
+        -------
+        float
+            The flat ARI.
+        """
+        if n_clusters > len(self.leaf_nodes):
+            return 0.0
+        return adjusted_rand_score(
+            ground_truth,
+            self.get_k_cluster_predictions_by_kmeans(ground_truth, n_clusters),
         )
 
 

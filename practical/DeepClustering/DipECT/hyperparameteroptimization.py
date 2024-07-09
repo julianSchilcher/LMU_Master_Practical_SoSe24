@@ -96,7 +96,7 @@ search_space = ng.p.Dict(
     projection_axis_learning="all",  # ng.p.Choice(["all"]),
     projection_axis_init=ng.p.Choice(["kmeans", "kmeans++"]),
     projection_axis_n_init=ng.p.Scalar(
-        init=10, lower=4, upper=12, mutable_sigma=True
+        init=6, lower=3, upper=8, mutable_sigma=True
     ).set_integer_casting(),
     # clustering
     clustering_n_epochs=60,  # ng.p.Choice([60]),
@@ -113,10 +113,8 @@ search_space = ng.p.Dict(
     tree_growth_upper_bound_leaf_nodes=100,  # ng.p.Choice([100]),
     tree_growth_use_unimodality_pvalue=True,  # ng.p.Choice([True]),
     # unimodal
-    unimodal_loss_application=ng.p.Choice(["leaf_nodes", "all"]),
-    unimodal_loss_node_criteria_method=ng.p.Choice(
-        ["tree_depth", "equal"]
-    ),  # ng.p.Choice(["tree_depth", "time_of_split"]),
+    unimodal_loss_application="leaf_nodes",
+    unimodal_loss_node_criteria_method="equal",  # ng.p.Choice(["tree_depth", "time_of_split", "equal"]),
     unimodal_loss_weight=ng.p.Scalar(
         init=534.3911240634819, lower=1.0, upper=1000.0, mutable_sigma=True
     ),
@@ -130,9 +128,7 @@ search_space = ng.p.Dict(
     loss_weight_function_normalization=-1,  # ng.p.Choice([-1]),
     # multimodal
     mulitmodal_loss_application="all",  # ng.p.Choice(["leaf_nodes", "all"]),
-    mulitmodal_loss_node_criteria_method=ng.p.Choice(
-        ["tree_depth", "time_of_split"]
-    ),  # "time_of_split",  #
+    mulitmodal_loss_node_criteria_method="tree_depth",  # "time_of_split",  #
     mulitmodal_loss_weight_direction="descending",
     mulitmodal_loss_weight_function="exponential",
     multimodal_loss_weight=ng.p.Scalar(

@@ -70,13 +70,13 @@ def kmeans_plus_plus_init(ds, k, random_state=np.random.RandomState(42)):
 def kmeans_init(ds, k, random_state=np.random.RandomState(42)):
     centroids = []
 
-    for _ in range(k // 2):
+    for _ in range(math.ceil(k / 2)):
         cluster = KMeans(
             n_clusters=2, n_init=1, random_state=random_state.randint(1, 262144)
         ).fit(ds)
         centroids.append(cluster.cluster_centers_)
 
-    return np.concatenate(centroids, axis=0)
+    return np.concatenate(centroids, axis=0)[:k, :]
 
 
 def predict_subclusters(embedded_data: np.ndarray, axis: np.ndarray) -> np.array:

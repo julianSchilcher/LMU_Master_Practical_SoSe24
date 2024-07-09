@@ -1529,7 +1529,6 @@ class _DipECT_Module(torch.nn.Module):
         projection_axis_optimizer: torch.optim.Optimizer,
         rec_loss_fn: torch.nn.modules.loss._Loss,
         device: Union[torch.device | str],
-        logging_active: bool,
         unimodal_loss_application: str,
         unimoal_loss_node_criteria_method: str,
         unimodal_loss_weight_function: str,

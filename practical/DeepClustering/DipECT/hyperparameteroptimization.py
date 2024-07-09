@@ -196,7 +196,7 @@ algo = NevergradSearch(
     optimizer=optimizer,
     optimizer_kwargs={"budget": 400, "num_workers": 4},
     space=search_space,
-    metric="combined_metrics",
+    metric="dp",
     mode="max",
     points_to_evaluate=evaluated_points,
 )
@@ -205,7 +205,7 @@ func = tune.with_resources(trainable_function, resources={"cpu": 1, "gpu": 1 / 4
 
 scheduler = AsyncHyperBandScheduler(
     time_attr="training_iteration",
-    metric="combined_metrics",
+    metric="dp",
     mode="max",
     max_t=17000,
     grace_period=6000,

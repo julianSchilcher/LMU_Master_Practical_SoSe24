@@ -363,7 +363,7 @@ class Cluster_Tree:
             Number of assigned samples to cluster 1.
         """
         # init projection axis on full dataset
-        kmeans = KMeans(n_clusters=2, n_init=20, random_state=self.random_seed).fit(
+        kmeans = KMeans(n_clusters=2, n_init=10, random_state=self.random_seed).fit(
             embedded_data
         )
         kmeans_centers = kmeans.cluster_centers_
@@ -1330,7 +1330,7 @@ def transform_cluster_tree_to_pred_tree(tree: Cluster_Tree) -> PredictionCluster
 
 class _DipECT_Module(torch.nn.Module):
     """
-    The _DipECT_Module. Contains most of the algorithm specific procedures like the loss and tree-grow functions.
+    The _DeepECT_Module. Contains most of the algorithm specific procedures like the loss and tree-grow functions.
 
     Parameters
     ----------
@@ -1411,7 +1411,7 @@ class _DipECT_Module(torch.nn.Module):
         evaluate_after_n_epochs: int = 0,
     ) -> "_DipECT_Module":
         """
-        Trains the _DipECT_Module in place.
+        Trains the _DeepECT_Module in place.
 
         Parameters
         ----------
@@ -1512,6 +1512,9 @@ class _DipECT_Module(torch.nn.Module):
             "acc": 0.0,
             "nmi": 0.0,
             "ari": 0.0,
+            "acc-kmeans": 0.0,
+            "nmi-kmeans": 0.0,
+            "ari-kmeans": 0.0,
             "dp": 0.0,
             "lp": 0.0,
         }
@@ -1533,6 +1536,10 @@ class _DipECT_Module(torch.nn.Module):
             )
         classes = np.unique(labels).size
         for epoch in range(max_epochs):
+            if pruning_strategy == "epoch_assessment" and epoch > 0:
+                self.cluster_tree.prune_tree(pruning_threshold, metrics)
+                self.cluster_tree.clear_pruning_values()
+
             # evaluation
             if epoch > 0:
                 if epoch % evaluate_after_n_epochs == 0:
@@ -1540,18 +1547,19 @@ class _DipECT_Module(torch.nn.Module):
                     metrics.update(
                         {
                             "acc": pred_tree.flat_accuracy(labels, classes),
+                            "acc-kmeans": pred_tree.flat_accuracy_kmeans(
+                                labels, classes
+                            ),
                             "nmi": pred_tree.flat_nmi(labels, classes),
+                            "nmi-kmeans": pred_tree.flat_nmi_kmeans(labels, classes),
                             "ari": pred_tree.flat_ari(labels, classes),
+                            "ari-kmeans": pred_tree.flat_ari_kmeans(labels, classes),
                             "dp": pred_tree.dendrogram_purity(labels),
                             "lp": pred_tree.leaf_purity(labels)[0],
                         }
                     )
                     if logging_active:
                         logging.info(metrics)
-
-            if pruning_strategy == "epoch_assessment" and epoch > 0:
-                self.cluster_tree.prune_tree(pruning_threshold, metrics)
-                self.cluster_tree.clear_pruning_values()
 
             with tqdm(
                 trainloader, unit="batch", desc=f"Epoch {epoch+1}/{max_epochs}"
@@ -1662,9 +1670,6 @@ class _DipECT_Module(torch.nn.Module):
                     metrics["loss"] = loss.item()
                     metrics["nodes"] = self.cluster_tree.number_nodes
                     metrics["leaf_nodes"] = len(self.cluster_tree.leaf_nodes)
-                    metrics["combined_metrics"] = (
-                        metrics["acc"] + metrics["dp"] + metrics["lp"]
-                    )
                     iteration += 1
                     train.report(metrics)
                     mov_loss += metrics["loss"]
@@ -1722,7 +1727,9 @@ class _DipECT_Module(torch.nn.Module):
                 self.cluster_tree.assign_to_tree(embeddings.cpu())
                 # use assignment indices for prediction tree
                 for node in self.cluster_tree.leaf_nodes:
-                    pred_tree[node.id].assign_batch(indices, node.assignment_indices)
+                    pred_tree[node.id].assign_batch(
+                        indices, node.assignment_indices, node.assignments
+                    )
                 self.cluster_tree.clear_node_assignments()
 
         return pred_tree
@@ -1773,7 +1780,7 @@ def _dipect(
     evaluate_every_n_epochs,
 ):
     """
-    Start the actual DipECT clustering procedure on the input data set.
+    Start the actual DeepECT clustering procedure on the input data set.
 
     Parameters
     ----------
@@ -1910,6 +1917,7 @@ def _dipect(
         [dummy_param], **projection_axis_optimizer_params
     )
     projection_axis_optimizer.param_groups = []
+    # optimizer.add_param_group({'params': [], 'lr': projection_axis_lr, 'name': 'projection_axes'}) # using just one optimizer (with different lr for projection axis and data)
 
     # Setup DeepECT Module
     dipect_module = _DipECT_Module(
@@ -1964,8 +1972,11 @@ def _dipect(
     classes = np.unique(Y).size
     metrics = {
         "acc": pred_tree.flat_accuracy(Y, classes),
+        "acc-kmeans": pred_tree.flat_accuracy_kmeans(Y, classes),
         "nmi": pred_tree.flat_nmi(Y, classes),
+        "nmi-kmeans": pred_tree.flat_nmi_kmeans(Y, classes),
         "ari": pred_tree.flat_ari(Y, classes),
+        "ari-kmeans": pred_tree.flat_ari_kmeans(Y, classes),
         "dp": pred_tree.dendrogram_purity(Y),
         "lp": pred_tree.leaf_purity(Y)[0],
     }
@@ -1978,9 +1989,9 @@ def _dipect(
 
 class DipECT:
     """
-    A deep hierarchical clustering algorithm based on the dip test for modality.
+    The Deep Embedded Cluster Tree (DeepECT) algorithm.
     First, an autoencoder (AE) will be trained (will be skipped if input autoencoder is given).
-    Afterward, a cluster tree will be grown and the AE will be optimized using the DipECT loss function.
+    Afterward, a cluster tree will be grown and the AE will be optimized using the DeepECT loss function.
 
     Parameters
     ----------
@@ -2091,7 +2102,7 @@ class DipECT:
         autoencoder: _AbstractAutoencoder = None,
         autoencoder_pretrain_n_epochs: int = 50,
         reconstruction_loss_weight: float = None,  # None, float(1e-4, 1e4)
-        autoencoder_param_path: str = "",
+        autoencoder_param_path: str = "pretrained_ae.pth",
         # clustering
         clustering_n_epochs: int = 40,
         embedding_size: int = 10,

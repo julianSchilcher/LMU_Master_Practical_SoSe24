@@ -21,6 +21,7 @@ from clustpy.utils import dip_pval, dip_test
 from clustpy.data import load_fmnist, load_mnist, load_usps, load_reuters, load_cifar10
 from clustpy.deep.autoencoders import FeedforwardAutoencoder, ConvolutionalAutoencoder
 import sklearn
+from itertools import combinations
 from ray import train
 from sklearn.cluster import KMeans
 from tqdm import tqdm
@@ -29,6 +30,91 @@ from practical.DeepClustering.DeepECT.metrics import (
     PredictionClusterTree,
 )
 import practical.DeepClustering.DipECT.metrics_visualization as metrics_visualization
+
+
+def plus_plus(ds, k, random_state=np.random.RandomState(42)):
+    """
+    Create cluster centroids using the k-means++ algorithm.
+    Parameters
+    ----------
+    ds : numpy array
+        The dataset to be used for centroid initialization.
+    k : int
+        The desired number of clusters for which centroids are required.
+    Returns
+    -------
+    centroids : numpy array
+        Collection of k centroids as a numpy array.
+    Inspiration from here: https://stackoverflow.com/questions/5466323/how-could-one-implement-the-k-means-algorithm
+    """
+    centroids = [ds[0]]
+
+    for _ in range(1, k):
+        dist_sq = np.array(
+            [min([np.inner(c - x, c - x) for c in centroids]) for x in ds]
+        )
+        probs = dist_sq / dist_sq.sum()
+        cumulative_probs = probs.cumsum()
+        r = random_state.rand()
+
+        for j, p in enumerate(cumulative_probs):
+            if r < p:
+                i = j
+                break
+
+        centroids.append(ds[i])
+
+    return np.array(centroids)
+
+
+def predict_subclusters(embedded_data: np.ndarray, axis: np.ndarray) -> np.array:
+    """
+    Predicts the 2 subclusters (child assignments) for the given node using properties of the dip test.
+    The threshold is set between the middle coordinate of the modal triangle and the upper/lower modal interval.
+
+    Parameters
+    ----------
+    node : Cluster_Node
+        The node object for which we want to predict 2 subclusters.
+
+    Returns
+    -------
+    labels : np.array
+        A label (0/1) for each data point of the given node, where label 1 indicates the higher projection
+        cluster.
+    """
+
+    if embedded_data.size == 1:
+        warnings.warn(
+            "Node just got 1 sample assigned. Data point will be assigned to higher projection node"
+        )
+        return np.array([1])
+
+    projections: np.ndarray = np.matmul(
+        embedded_data, axis
+    )  # remove second dimension after projection
+    sorted_indices = projections.argsort()
+    _, modal_interval, modal_triangle = dip_test(
+        projections[sorted_indices], is_data_sorted=True, just_dip=False
+    )
+    index_lower, index_upper = modal_interval
+    _, mid_point_triangle, _ = modal_triangle
+    if (
+        projections[sorted_indices[mid_point_triangle]]
+        > projections[sorted_indices[index_upper]]
+    ):
+        threshold = (
+            projections[sorted_indices[mid_point_triangle]]
+            + projections[sorted_indices[index_upper]]
+        ) / 2
+    else:
+        threshold = (
+            projections[sorted_indices[mid_point_triangle]]
+            + projections[sorted_indices[index_lower]]
+        ) / 2
+    labels = np.zeros(len(embedded_data), dtype=np.int32)
+    labels[projections >= threshold] = 1
+    return labels
 
 
 # replaces the dip module
@@ -376,25 +462,29 @@ class Cluster_Tree:
         #     np.sum(labels == 0),
         #     np.sum(labels == 1),
         # )
+        centroids = plus_plus(embedded_data, 6, self.random_seed)
         best_dip_value = -np.inf
-        best_kmeans = None
-        for _ in range(self.number_kmeans_init_projection_axis):
-            kmeans = KMeans(n_clusters=2, n_init=1, random_state=self.random_seed).fit(
-                embedded_data
-            )
-            kmeans_centers = kmeans.cluster_centers_
-            axis = kmeans_centers[0] - kmeans_centers[1]
+        # best_kmeans = None
+        # for _ in range(self.number_kmeans_init_projection_axis):
+        best_axis = None
+        for left, right in combinations(range(len(centroids)), 2):
+            # kmeans = KMeans(n_clusters=2, n_init=1, random_state=self.random_seed).fit(
+            #     embedded_data
+            # )
+            # kmeans_centers = kmeans.cluster_centers_
+            # axis = kmeans_centers[0] - kmeans_centers[1]
+            axis = centroids[left] - centroids[right]
             projections = np.matmul(embedded_data, axis)
             dip_value = dip_test(projections, just_dip=True, is_data_sorted=False)
             if dip_value > best_dip_value:
                 best_dip_value = dip_value
-                best_kmeans = kmeans
-
-        centers = best_kmeans.cluster_centers_
-        labels = best_kmeans.labels_
+                best_axis = (left, right)
+                # best_kmeans = kmeans
+        centers = centroids[best_axis, :]
+        labels = predict_subclusters(embedded_data, axis)
         # higher projection by cluster 1 since axis points to cluster 1
         return (
-            centers[0] - centers[1],
+            centers[0, :] - centers[1, :],
             np.sum(labels == 0),
             np.sum(labels == 1),
         )
@@ -825,13 +915,13 @@ class Cluster_Tree:
             if use_pvalue:
                 nodes_to_split = sorted(
                     [x for x in multimodal_nodes if x[1] <= unimodality_treshold],
-                    key=lambda x: (x[1], -x[5]),
+                    key=lambda x: (-x[5], x[1]),
                 )
                 if len(nodes_to_split) > 0:
                     best_node_to_split = nodes_to_split[0]
             else:
                 nodes_to_split = sorted(
-                    multimodal_nodes, key=lambda x: (x[1], x[3]), reverse=True
+                    multimodal_nodes, key=lambda x: (x[3], -x[1]), reverse=True
                 )
                 if len(nodes_to_split) > 0:
                     best_node_to_split = nodes_to_split[0]
@@ -1381,12 +1471,14 @@ class _DipECT_Module(torch.nn.Module):
         random_state: np.random.RandomState,
         number_kmeans_init_projection_axis: int,
         augmentation_invariance: bool = False,
+        logging_active: bool = False,
     ):
         super().__init__()
 
         self.augmentation_invariance = augmentation_invariance
         self.device = device
         self.random_state = random_state
+        self.logging_active = logging_active
 
         # Create initial cluster tree
         self.cluster_tree = Cluster_Tree(
@@ -1418,7 +1510,6 @@ class _DipECT_Module(torch.nn.Module):
         projection_axis_optimizer: torch.optim.Optimizer,
         rec_loss_fn: torch.nn.modules.loss._Loss,
         device: Union[torch.device | str],
-        logging_active: bool,
         unimodal_loss_application,
         unimoal_loss_node_criteria_method,
         unimodal_loss_weight_function,
@@ -1593,7 +1684,7 @@ class _DipECT_Module(torch.nn.Module):
                             "lp": pred_tree.leaf_purity(labels)[0],
                         }
                     )
-                    if logging_active:
+                    if self.logging_active:
                         logging.info(metrics)
 
             with tqdm(
@@ -1718,7 +1809,7 @@ class _DipECT_Module(torch.nn.Module):
                 if refinement_counter > refinement_epochs:
                     break
 
-            if logging_active:
+            if self.logging_active:
                 log_epoch_nr = epoch + 1  # to avoid division by zero
                 logging.info(
                     f"epoch: {log_epoch_nr} - nodes: {len(self.cluster_tree.nodes)} - leaf nodes: {len(self.cluster_tree.leaf_nodes)} - moving averages: mov_rec_loss: {mov_rec_loss/log_epoch_nr} "
@@ -1775,26 +1866,31 @@ class _DipECT_Module(torch.nn.Module):
                 self.cluster_tree.clear_node_assignments()
 
         all_embeddings = np.concatenate(all_embeddings)
-        pred_tree.aggregate_assignments()  # assign data to all inner nodes
+        if (
+            self.logging_active
+            and plot_storage_path is not None
+            and fig_size is not None
+        ):
+            pred_tree.aggregate_assignments()  # assign data to all inner nodes
 
-        os.makedirs(plot_storage_path, exist_ok=True)
-        # plot current cluster tree
-        filename = f'cluster_tree_epoch_{epoch if epoch != -1 else "final"}.png'
-        filepath_tree = os.path.join(plot_storage_path, filename)
-        metrics_visualization.build_and_visualize_tree(
-            pred_tree.root,
-            autoencoder,
-            all_embeddings,
-            fig_size,
-            embedded=True,
-            path=filepath_tree,
-        )
-        # plot current embedded space
-        filename = f'latent_space_epoch_{epoch if epoch != -1 else "final"}.png'
-        filepath_latent = os.path.join(plot_storage_path, filename)
-        metrics_visualization.plot_umap_embedded_space(
-            all_embeddings, labels, path=filepath_latent
-        )
+            os.makedirs(plot_storage_path, exist_ok=True)
+            # plot current cluster tree
+            filename = f'cluster_tree_epoch_{epoch if epoch != -1 else "final"}.png'
+            filepath_tree = os.path.join(plot_storage_path, filename)
+            metrics_visualization.build_and_visualize_tree(
+                pred_tree.root,
+                autoencoder,
+                all_embeddings,
+                fig_size,
+                embedded=True,
+                path=filepath_tree,
+            )
+            # plot current embedded space
+            filename = f'latent_space_epoch_{epoch if epoch != -1 else "final"}.png'
+            filepath_latent = os.path.join(plot_storage_path, filename)
+            metrics_visualization.plot_umap_embedded_space(
+                all_embeddings, labels, path=filepath_latent
+            )
         return pred_tree
 
 
@@ -1842,8 +1938,8 @@ def _dipect(
     pruning_factor,
     tree_growth_min_cluster_size,
     evaluate_every_n_epochs,
-    plot_storage_path: str,
-    fig_size: Tuple[int, int],
+    plot_storage_path: Union[str, None],
+    fig_size: Union[Tuple[int, int], None],
 ):
     """
     Start the actual DeepECT clustering procedure on the input data set.
@@ -1994,6 +2090,7 @@ def _dipect(
         random_state,
         number_kmeans_init_projection_axis,
         augmentation_invariance,
+        logging_active,
     ).to(device)
 
     # DeepECT Training loop
@@ -2016,7 +2113,6 @@ def _dipect(
         projection_axis_optimizer,
         rec_loss_fn,
         device,
-        logging_active,
         unimodal_loss_application,
         unimoal_loss_node_criteria_method,
         unimodal_loss_weight_function,
@@ -2209,8 +2305,8 @@ class DipECT:
         random_state: np.random.RandomState = np.random.RandomState(42),
         logging_active: bool = False,
         evaluate_every_n_epochs: int = 2,
-        plot_storage_path: str = "practical/DeepClustering/DipECT/plots",
-        fig_size: Tuple[int, int] = (28, 28),
+        plot_storage_path: Union[str, None] = None,
+        fig_size: Union[Tuple[int, int], None] = None,
     ):
         self.batch_size = batch_size
         self.pretrain_optimizer_params = (

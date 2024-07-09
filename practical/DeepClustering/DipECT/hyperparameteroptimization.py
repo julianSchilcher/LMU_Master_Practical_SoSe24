@@ -211,7 +211,7 @@ scheduler = AsyncHyperBandScheduler(
     grace_period=6000,
 )
 
-stage_nr = 13
+stage_nr = 14
 
 tuner = tune.Tuner(
     func,

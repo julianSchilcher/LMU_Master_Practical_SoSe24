@@ -14,7 +14,6 @@ from typing import List, Union
 
 import numpy as np
 import pandas as pd
-import PIL
 import torch
 from clustpy.data import load_fmnist, load_mnist, load_reuters, load_usps
 from clustpy.deep._utils import set_torch_seed
@@ -28,17 +27,15 @@ from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
 from sklearn.preprocessing import minmax_scale
 from sklearn.utils import Bunch
 from torch.utils.data import DataLoader, Dataset
-from torchvision import transforms
 
+# please keep this format to prevent circular imports:
 from practical.DeepClustering.DeepECT.deepect_ours import \
     DeepECT as DeepECTOurs
 from practical.DeepClustering.DipECT.baseline_hierachical.ae_plus import (
     ae_bisecting, ae_complete, ae_single)
 from practical.DeepClustering.DipECT.baseline_hierachical.idec_hierarchical_clustpy import \
     run_idec_hierarchical
-
-# please keep this format to prevent circular imports:
-import practical.DeepClustering.DipECT.dipect as dipect
+from practical.DeepClustering.DipECT.dipect import DipECT
 
 
 class DatasetType(Enum):
@@ -511,7 +508,8 @@ def fit(
                 )
         elif method == ClusteringMethod.DIPECT:
             autoencoder.to(device)
-            dipect = dipect.DipECT(
+            # TODO: Change parameters
+            dipect = DipECT(
                 clustering_n_epochs=max_epochs,
                 autoencoder=autoencoder,
                 clustering_optimizer_params={"lr": 1e-4, "betas": (0.9, 0.999)},

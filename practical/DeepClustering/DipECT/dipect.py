@@ -1,15 +1,35 @@
-import datetime
-import logging
-import math
 import os
+import random
 import sys
+
+for key in os.environ:
+    print(f"{key} - {os.getenv(key)}")
+
+for lib in [
+    "OMP_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "BLIS_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+]:
+    print(f"{lib} - {os.getenv(lib)}")
+    os.environ[lib] = "1"
+os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
+os.environ["KMP_INIT_AT_FORK"] = "FALSE"
+os.environ["KMP_DUPLICATE_LIB_OK"] = "True"
 
 sys.path.append(os.getcwd())
 
 import warnings
 from typing import List, Tuple, Union
+import datetime
+import logging
+import math
 
 import numpy as np
+
+np.__config__.show()
 import torch
 import torch.utils.data
 from clustpy.deep._data_utils import augmentation_invariance_check, get_dataloader
@@ -20,9 +40,13 @@ from clustpy.deep.dipencoder import _Dip_Gradient
 from clustpy.utils import dip_pval, dip_test
 from clustpy.data import load_fmnist, load_mnist, load_usps, load_reuters, load_cifar10
 from clustpy.deep.autoencoders import FeedforwardAutoencoder, ConvolutionalAutoencoder
-import sklearn
 from itertools import combinations
 from ray import train
+import sklearn
+
+sklearn_config = sklearn.get_config()
+for key in sklearn_config:
+    print(f"sklearn: {key} - {sklearn_config[key]}")
 from sklearn.cluster import KMeans
 from tqdm import tqdm
 from practical.DeepClustering.DeepECT.metrics import (
@@ -1927,7 +1951,9 @@ def _dipect(
     number_of_grow_steps: int,
     early_stopping: bool,
     refinement_epochs: int,
-    custom_dataloaders: tuple,
+    custom_dataloaders: Union[
+        None, Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader]
+    ],
     augmentation_invariance: bool,
     random_state: np.random.RandomState,
     logging_active: bool,
@@ -2056,15 +2082,37 @@ def _dipect(
     if os.path.exists(autoencoder_save_param_path):
         autoencoder.load_parameters(autoencoder_save_param_path)
     save_ae_state_dict = not hasattr(autoencoder, "fitted") or not autoencoder.fitted
-    set_torch_seed(random_state)
+    seed = int(random_state.get_state()[1][0])
+    generator = torch.Generator()
+    generator.manual_seed(seed)
+    set_torch_seed(seed)
+
+    def seed_worker(worker_id):
+        set_torch_seed(seed)
 
     device = detect_device()
     # sample random mini-batches from the data -> shuffle = True
     if custom_dataloaders is None:
-        trainloader = get_dataloader(X, batch_size, True, False)
-        testloader = get_dataloader(X, batch_size, False, False)
+        trainloader = get_dataloader(
+            X,
+            batch_size,
+            True,
+            False,
+            dl_kwargs=dict(generator=generator, worker_init_fn=seed_worker),
+        )
+        testloader = get_dataloader(
+            X,
+            batch_size,
+            False,
+            False,
+            dl_kwargs=dict(generator=generator, worker_init_fn=seed_worker),
+        )
     else:
         trainloader, testloader = custom_dataloaders
+        trainloader.worker_init_fn = seed_worker
+        testloader.worker_init_fn = seed_worker
+        trainloader.generator = generator
+        testloader.generator = generator
     # Get initial AE
     autoencoder = get_trained_network(
         trainloader=trainloader,
@@ -2154,6 +2202,9 @@ def _dipect(
         "acc": pred_tree.flat_accuracy(Y, classes),
         "nmi": pred_tree.flat_nmi(Y, classes),
         "ari": pred_tree.flat_ari(Y, classes),
+        "acc-kmeans": pred_tree.flat_accuracy_kmeans(Y, classes),
+        "nmi-kmeans": pred_tree.flat_nmi_kmeans(Y, classes),
+        "ari-kmeans": pred_tree.flat_ari_kmeans(Y, classes),
         "dp": pred_tree.dendrogram_purity(Y),
         "lp": pred_tree.leaf_purity(Y)[0],
     }
@@ -2392,15 +2443,8 @@ class DipECT:
         augmentation_invariance_check(
             self.augmentation_invariance, self.custom_dataloaders
         )
-        for lib in [
-            "OMP_NUM_THREADS",
-            "MKL_NUM_THREADS",
-            "OPENBLAS_NUM_THREADS",
-            "BLIS_NUM_THREADS",
-        ]:
-            print(f"{lib} - {os.getenv(lib)}")
-            os.environ[lib] = "1"
         os.environ["SKLEARN_SEED"] = str(self.random_state.get_state()[1][0])
+        torch.use_deterministic_algorithms(mode=True)
         tree, autoencoder = _dipect(
             X,
             Y,
@@ -2476,31 +2520,33 @@ if __name__ == "__main__":
         random_state=np.random.RandomState(21),
         autoencoder_pretrain_n_epochs=100,
         logging_active=True,
-        clustering_n_epochs=60,
+        clustering_n_epochs=100,
         clustering_optimizer_params={"lr": 1e-4},
         early_stopping=False,
         loss_weight_function_normalization=-1,
         mulitmodal_loss_application="all",
         mulitmodal_loss_node_criteria_method="tree_depth",  # "time_of_split",
-        mulitmodal_loss_weight_direction="ascending",
-        mulitmodal_loss_weight_function="linear",  # "linear",
-        multimodal_loss_weight=1.6529335369273173,
-        projection_axis_learning="only_leaf_nodes",
-        projection_axis_learning_rate=5e-4,
+        mulitmodal_loss_weight_direction="descending",
+        mulitmodal_loss_weight_function="exponential",  # "linear",
+        multimodal_loss_weight=570.8167947839062,
+        projection_axis_learning="all",
+        projection_axis_learning_rate=0.00020688191802901897,
+        projection_axis_init="kmeans",
+        projection_axis_n_init=3,
         pruning_factor=1.0,
         pruning_strategy="epoch_assessment",
-        pruning_threshold=dataset.shape[0] / 35,
-        tree_growth_min_cluster_size=dataset.shape[0] / 35,
-        reconstruction_loss_weight=1,
+        pruning_threshold=2000,
+        tree_growth_min_cluster_size=2000,
+        reconstruction_loss_weight=743.4245987877811,
         refinement_epochs=0,
         tree_growth_amount=3,
         tree_growth_frequency=1.0,
-        tree_growth_unimodality_treshold=0.975,
+        tree_growth_unimodality_treshold=0.9768384573183925,
         tree_growth_upper_bound_leaf_nodes=100,
         tree_growth_use_unimodality_pvalue=True,
-        unimodal_loss_application="all",
-        unimodal_loss_node_criteria_method="tree_depth",
-        unimodal_loss_weight=3.5,
+        unimodal_loss_application="leaf_nodes",
+        unimodal_loss_node_criteria_method="equal",
+        unimodal_loss_weight=400.0431017251117,
         unimodal_loss_weight_direction="descending",
         unimodal_loss_weight_function="log",
     )

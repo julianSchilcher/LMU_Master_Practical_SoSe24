@@ -90,9 +90,10 @@ search_space = ng.p.Dict(
     #     [1 / 510, 1 / 384, 1 / 255, 0.007, 0.1, 1, 10.0, 255.0, 510.0]
     # ),
     # projection axis
-    projection_axis_learning_rate=ng.p.Scalar(
-        lower=1e-6, upper=95e-5, init=0.0003952954333547711, mutable_sigma=True
-    ),  # ng.p.Choice([0.0, 1e-3, 1e-4, 1e-5, 1e-6, 1e-8]),
+    projection_axis_learning_rate=1e-4,
+    # ng.p.Scalar(
+    #     lower=1e-6, upper=95e-5, init=0.0003952954333547711, mutable_sigma=True
+    # ),  # ng.p.Choice([0.0, 1e-3, 1e-4, 1e-5, 1e-6, 1e-8]),
     projection_axis_learning="all",  # ng.p.Choice(["all"]),
     projection_axis_init=ng.p.Choice(["kmeans", "kmeans++"]),
     projection_axis_n_init=ng.p.Scalar(
@@ -114,7 +115,9 @@ search_space = ng.p.Dict(
     tree_growth_use_unimodality_pvalue=True,  # ng.p.Choice([True]),
     # unimodal
     unimodal_loss_application="leaf_nodes",
-    unimodal_loss_node_criteria_method="equal",  # ng.p.Choice(["tree_depth", "time_of_split", "equal"]),
+    unimodal_loss_node_criteria_method=ng.p.Choice(
+        ["tree_depth", "time_of_split", "equal"]
+    ),
     unimodal_loss_weight=ng.p.Scalar(
         init=534.3911240634819, lower=1.0, upper=1000.0, mutable_sigma=True
     ),
@@ -128,7 +131,9 @@ search_space = ng.p.Dict(
     loss_weight_function_normalization=-1,  # ng.p.Choice([-1]),
     # multimodal
     mulitmodal_loss_application="all",  # ng.p.Choice(["leaf_nodes", "all"]),
-    mulitmodal_loss_node_criteria_method="tree_depth",  # "time_of_split",  #
+    mulitmodal_loss_node_criteria_method=ng.p.Choice(
+        ["tree_depth", "time_of_split", "equal"]
+    ),  # "time_of_split",  #
     mulitmodal_loss_weight_direction="descending",
     mulitmodal_loss_weight_function="exponential",
     multimodal_loss_weight=ng.p.Scalar(
@@ -209,7 +214,7 @@ optimizer = ng.optimizers.ConfPortfolio(
 
 algo = NevergradSearch(
     optimizer=optimizer,
-    optimizer_kwargs={"budget": 400, "num_workers": 4},
+    optimizer_kwargs={"budget": 200, "num_workers": 4},
     space=search_space,
     metric="dp",
     mode="max",
@@ -226,11 +231,11 @@ scheduler = AsyncHyperBandScheduler(
     grace_period=6000,
 )
 
-stage_nr = 17
+stage_nr = 18
 
 tuner = tune.Tuner(
     func,
-    tune_config=tune.TuneConfig(search_alg=algo, num_samples=400, scheduler=scheduler),
+    tune_config=tune.TuneConfig(search_alg=algo, num_samples=200, scheduler=scheduler),
     run_config=train.RunConfig(
         name=f"dipect_hpo_stage_{stage_nr}",
         storage_path="/home/loebbert/projects/deepclustering/LMU_Master_Practical_SoSe24/practical/DeepClustering/DipECT/hpo",

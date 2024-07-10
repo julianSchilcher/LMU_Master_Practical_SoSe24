@@ -986,7 +986,7 @@ class _DeepECT_Module(torch.nn.Module):
                 self.cluster_tree.assign_to_nodes(embeddings)
                 # use assignment indices for prediction tree
                 for node in self.cluster_tree.leaf_nodes:
-                    pred_tree[node.id].assign_batch(indices, node.assignment_indices)
+                    pred_tree[node.id].assign_batch(indices, node.assignment_indices, node.assignments)
                 self.cluster_tree.clear_node_assignments()
 
         return pred_tree

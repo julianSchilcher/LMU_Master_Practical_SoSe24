@@ -757,9 +757,7 @@ def build_and_visualize_tree(root, autoencoder, data, fig_size, embedded = False
     for node in G.nodes:
         if len(node.assigned_indices) == 0:
             continue
-        assigned_indices = torch.cat(node.assigned_indices)
-        if len(node.assigned_indices) == 0:  
-            continue    
+        assigned_indices = torch.cat(node.assigned_indices) 
         image = np.mean(autoencoder.decode(embedded_data[assigned_indices]).detach().numpy(), axis=0)
         # normalize to [0,1] for plotting
         image = minmax_scale(image, feature_range=(0, 1))

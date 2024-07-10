@@ -28,14 +28,14 @@ from sklearn.preprocessing import minmax_scale
 from sklearn.utils import Bunch
 from torch.utils.data import DataLoader, Dataset
 
-# please keep this format to prevent circular imports:
 from practical.DeepClustering.DeepECT.deepect_ours import \
     DeepECT as DeepECTOurs
 from practical.DeepClustering.DipECT.baseline_hierachical.ae_plus import (
     ae_bisecting, ae_complete, ae_single)
 from practical.DeepClustering.DipECT.baseline_hierachical.idec_hierarchical_clustpy import \
     run_idec_hierarchical
-from practical.DeepClustering.DipECT.dipect import DipECT
+# please keep this format to prevent circular imports
+import practical.DeepClustering.DipECT.dipect as dipect
 
 
 class DatasetType(Enum):
@@ -509,7 +509,7 @@ def fit(
         elif method == ClusteringMethod.DIPECT:
             autoencoder.to(device)
             # TODO: Change parameters
-            dipect = DipECT(
+            dipect = dipect.DipECT(
                 clustering_n_epochs=max_epochs,
                 autoencoder=autoencoder,
                 clustering_optimizer_params={"lr": 1e-4, "betas": (0.9, 0.999)},

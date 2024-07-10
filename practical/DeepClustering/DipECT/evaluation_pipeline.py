@@ -14,7 +14,6 @@ from typing import List, Union
 
 import numpy as np
 import pandas as pd
-import PIL
 import torch
 from clustpy.data import load_fmnist, load_mnist, load_reuters, load_usps
 from clustpy.deep._utils import set_torch_seed
@@ -28,7 +27,6 @@ from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
 from sklearn.preprocessing import minmax_scale
 from sklearn.utils import Bunch
 from torch.utils.data import DataLoader, Dataset
-from torchvision import transforms
 
 from practical.DeepClustering.DeepECT.deepect_ours import \
     DeepECT as DeepECTOurs
@@ -36,8 +34,7 @@ from practical.DeepClustering.DipECT.baseline_hierachical.ae_plus import (
     ae_bisecting, ae_complete, ae_single)
 from practical.DeepClustering.DipECT.baseline_hierachical.idec_hierarchical_clustpy import \
     run_idec_hierarchical
-
-# please keep this format to prevent circular imports:
+# please keep this format to prevent circular imports
 import practical.DeepClustering.DipECT.dipect as dipect
 
 
@@ -511,6 +508,7 @@ def fit(
                 )
         elif method == ClusteringMethod.DIPECT:
             autoencoder.to(device)
+            # TODO: Change parameters
             dipect = dipect.DipECT(
                 clustering_n_epochs=max_epochs,
                 autoencoder=autoencoder,
@@ -561,62 +559,63 @@ def fit(
                 )
 
         elif method == ClusteringMethod.DEEPECT_AUGMENTED_OURS:
+            raise NotImplementedError
             # Perform flat clustering with DeepECT and augmentation
-            if dataset_type == DatasetType.REUTERS:
-                continue
-            autoencoder.to(device)
+            # if dataset_type == DatasetType.REUTERS:
+            #     continue
+            # autoencoder.to(device)
 
-            custom_dataloaders = get_custom_dataloader_augmentations(data, dataset_type)
+            # custom_dataloaders = get_custom_dataloader_augmentations(data, dataset_type)
 
-            deepect = DeepECTOurs(
-                max_iterations=get_max_iterations(data, max_epochs, batch_size),
-                autoencoder=autoencoder,
-                clustering_optimizer_params={"lr": 1e-4, "betas": (0.9, 0.999)},
-                max_leaf_nodes=max_leaf_nodes,
-                custom_dataloaders=custom_dataloaders,
-                augmentation_invariance=True,
-                random_state=np.random.RandomState(seed),
-            )
-            print(f"fitting {method.name}...")
-            deepect.fit(data)
-            autoencoder = deepect.autoencoder
-            print(f"finished {method.name}...")
-            # Calculate evaluation metrics
-            try:
-                # Calculate evaluation metrics
-                result_df = pd.DataFrame(
-                    [
-                        {
-                            "autoencoder": autoencoder_type.value,
-                            "embedding_dim": embedding_dim,
-                            "dataset": dataset_type.value,
-                            "method": method.value,
-                            "nmi": deepect.tree_.flat_nmi(labels, n_clusters),
-                            "acc": deepect.tree_.flat_accuracy(labels, n_clusters),
-                            "ari": deepect.tree_.flat_ari(labels, n_clusters),
-                            "dp": deepect.tree_.dendrogram_purity(labels),
-                            "lp": deepect.tree_.leaf_purity(labels)[0],
-                            "seed": seed,
-                        }
-                    ]
-                )
-            except:
-                result_df = pd.DataFrame(
-                    [
-                        {
-                            "autoencoder": autoencoder_type.value,
-                            "embedding_dim": embedding_dim,
-                            "dataset": dataset_type.value,
-                            "method": method.value,
-                            "nmi": np.nan,
-                            "acc": np.nan,
-                            "ari": np.nan,
-                            "dp": np.nan,
-                            "lp": np.nan,
-                            "seed": seed,
-                        }
-                    ]
-                )
+            # deepect = DeepECTOurs(
+            #     max_iterations=get_max_iterations(data, max_epochs, batch_size),
+            #     autoencoder=autoencoder,
+            #     clustering_optimizer_params={"lr": 1e-4, "betas": (0.9, 0.999)},
+            #     max_leaf_nodes=max_leaf_nodes,
+            #     custom_dataloaders=custom_dataloaders,
+            #     augmentation_invariance=True,
+            #     random_state=np.random.RandomState(seed),
+            # )
+            # print(f"fitting {method.name}...")
+            # deepect.fit(data)
+            # autoencoder = deepect.autoencoder
+            # print(f"finished {method.name}...")
+            # # Calculate evaluation metrics
+            # try:
+            #     # Calculate evaluation metrics
+            #     result_df = pd.DataFrame(
+            #         [
+            #             {
+            #                 "autoencoder": autoencoder_type.value,
+            #                 "embedding_dim": embedding_dim,
+            #                 "dataset": dataset_type.value,
+            #                 "method": method.value,
+            #                 "nmi": deepect.tree_.flat_nmi(labels, n_clusters),
+            #                 "acc": deepect.tree_.flat_accuracy(labels, n_clusters),
+            #                 "ari": deepect.tree_.flat_ari(labels, n_clusters),
+            #                 "dp": deepect.tree_.dendrogram_purity(labels),
+            #                 "lp": deepect.tree_.leaf_purity(labels)[0],
+            #                 "seed": seed,
+            #             }
+            #         ]
+            #     )
+            # except:
+            #     result_df = pd.DataFrame(
+            #         [
+            #             {
+            #                 "autoencoder": autoencoder_type.value,
+            #                 "embedding_dim": embedding_dim,
+            #                 "dataset": dataset_type.value,
+            #                 "method": method.value,
+            #                 "nmi": np.nan,
+            #                 "acc": np.nan,
+            #                 "ari": np.nan,
+            #                 "dp": np.nan,
+            #                 "lp": np.nan,
+            #                 "seed": seed,
+            #             }
+            #         ]
+                # )
         elif method == ClusteringMethod.IDEC:
             # Perform flat clustering with IDEC
             idec = IDEC(
@@ -844,32 +843,33 @@ def get_custom_dataloader_augmentations(
     tuple
         The train and test dataloaders.
     """
-    degrees = (-15, 15)
-    translation = (
-        0.14 if dataset_type == DatasetType.USPS else 0.08,
-        0.14 if dataset_type == DatasetType.USPS else 0.08,
-    )
+    raise NotImplementedError("Not implemented for dipect evaluation.")
+    # degrees = (-15, 15)
+    # translation = (
+    #     0.14 if dataset_type == DatasetType.USPS else 0.08,
+    #     0.14 if dataset_type == DatasetType.USPS else 0.08,
+    # )
 
-    augmentation_transform = transforms.Compose(
-        [
-            transforms.Lambda(lambda x: x - image_min_value),
-            transforms.Lambda(lambda x: x / image_max_value),  # [0,1]
-            transforms.Lambda(lambda x: x.reshape(image_size, image_size)),
-            transforms.ToPILImage(),  # [0,255]
-            transforms.RandomAffine(
-                degrees=degrees,
-                shear=degrees,
-                translate=translation,
-                interpolation=PIL.Image.BILINEAR,
-            ),
-            transforms.ToTensor(),  # back to [0,1] again
-            transforms.Lambda(lambda x: x.reshape(image_size**2)),
-            transforms.Lambda(
-                lambda x: x * image_max_value
-            ),  # back to original data range
-            transforms.Lambda(lambda x: x + image_min_value),
-        ]
-    )
+    # augmentation_transform = transforms.Compose(
+    #     [
+    #         transforms.Lambda(lambda x: x - image_min_value),
+    #         transforms.Lambda(lambda x: x / image_max_value),  # [0,1]
+    #         transforms.Lambda(lambda x: x.reshape(image_size, image_size)),
+    #         transforms.ToPILImage(),  # [0,255]
+    #         transforms.RandomAffine(
+    #             degrees=degrees,
+    #             shear=degrees,
+    #             translate=translation,
+    #             interpolation=PIL.Image.BILINEAR,
+    #         ),
+    #         transforms.ToTensor(),  # back to [0,1] again
+    #         transforms.Lambda(lambda x: x.reshape(image_size**2)),
+    #         transforms.Lambda(
+    #             lambda x: x * image_max_value
+    #         ),  # back to original data range
+    #         transforms.Lambda(lambda x: x + image_min_value),
+    #     ]
+    # )
 
     class Augmented_Dataset(Dataset):
         """
@@ -1001,9 +1001,7 @@ def get_autoencoder_path(
         autoencoder_params_path is None
         and autoencoder_type == AutoencoderType.DEEPECT_STACKED_AE
     ):
-        params_path = pathlib.Path(
-            f"practical/DeepClustering/DipECT/pretrained_autoencoders/{dataset['dataset_name']}_stacked_ae_{embedding_dim}_pretrained_{seed}.pth"
-        )
+        raise NotImplementedError("Not implemented yet.")
 
     else:
         params_path = pathlib.Path(autoencoder_params_path)

@@ -39,6 +39,7 @@ jobs:
           pip install numpy scikit-learn torch torchvision nltk requests
           pip install git+https://github.com/collinleiber/ClustPy.git
           pip install ray[train]
+          pip install umap-learn
           pip install -e .
 
       - name: Test with pytest

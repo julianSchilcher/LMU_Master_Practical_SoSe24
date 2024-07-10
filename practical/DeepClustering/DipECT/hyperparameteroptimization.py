@@ -1,5 +1,7 @@
 import os
 import sys
+
+
 from ray import tune, train
 import nevergrad as ng
 from ray.tune.schedulers import AsyncHyperBandScheduler
@@ -8,9 +10,7 @@ from ray.tune.search import ConcurrencyLimiter
 
 sys.path.append(os.getcwd())
 
-from practical.DeepClustering.DipECT.dipect import DipECT
-from clustpy.data import load_mnist
-from clustpy.deep.autoencoders import FeedforwardAutoencoder
+
 import numpy as np
 import pickle
 import pathlib
@@ -19,6 +19,27 @@ from sklearn.gaussian_process.kernels import Matern
 
 
 def trainable_function(config: dict):
+    for lib in [
+        "OMP_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "BLIS_NUM_THREADS",
+        "VECLIB_MAXIMUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+    ]:
+        os.environ[lib] = "1"
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
+    random_state = np.random.RandomState(21)
+    import torch
+    from practical.DeepClustering.DipECT.dipect import DipECT
+    from clustpy.data import load_mnist
+    from clustpy.deep.autoencoders import FeedforwardAutoencoder
+    from clustpy.deep._utils import set_torch_seed
+
+    os.environ["SKLEARN_SEED"] = str(random_state.get_state()[1][0])
+    torch.use_deterministic_algorithms(mode=True)
+    set_torch_seed(int(random_state.get_state()[1][0]))
+
     # dataset
     dataset, labels = load_mnist(return_X_y=True)
     dataset = dataset / 255
@@ -32,7 +53,7 @@ def trainable_function(config: dict):
         autoencoder_param_path="/home/loebbert/projects/deepclustering/LMU_Master_Practical_SoSe24/practical/DeepClustering/DipECT/autoencoder/feedforward_mnist_"
         + str(config["autoencoder_pretraining_n_epochs"])
         + "_21.pth",
-        random_state=np.random.RandomState(21),
+        random_state=random_state,
         evaluate_every_n_epochs=4,
         clustering_optimizer_params=config["clustering_optimizer_params"],
         reconstruction_loss_weight=config["reconstruction_loss_weight"],
@@ -90,14 +111,14 @@ search_space = ng.p.Dict(
     #     [1 / 510, 1 / 384, 1 / 255, 0.007, 0.1, 1, 10.0, 255.0, 510.0]
     # ),
     # projection axis
-    projection_axis_learning_rate=1e-4,
+    projection_axis_learning_rate=ng.p.Choice([5e-4, 2e-4, 1e-4, 1e-5, 1e-6, 1e-8]),
     # ng.p.Scalar(
     #     lower=1e-6, upper=95e-5, init=0.0003952954333547711, mutable_sigma=True
     # ),  # ng.p.Choice([0.0, 1e-3, 1e-4, 1e-5, 1e-6, 1e-8]),
     projection_axis_learning="all",  # ng.p.Choice(["all"]),
-    projection_axis_init=ng.p.Choice(["kmeans", "kmeans++"]),
+    projection_axis_init=ng.p.Choice(["kmeans", "kmeans++", "kmeans++2", "kmeansk"]),
     projection_axis_n_init=ng.p.Scalar(
-        init=6, lower=3, upper=8, mutable_sigma=True
+        init=6, lower=6, upper=12, mutable_sigma=True
     ).set_integer_casting(),
     # clustering
     clustering_n_epochs=60,  # ng.p.Choice([60]),
@@ -108,9 +129,10 @@ search_space = ng.p.Dict(
     # tree growth
     tree_growth_frequency=1.0,  # 1.0, ng.p.Choice([, 2.0]),
     tree_growth_amount=3,  # 3, ng.p.Scalar(lower=1, upper=3).set_integer_casting(),
-    tree_growth_unimodality_treshold=ng.p.Scalar(
-        init=0.9954713118040149, lower=0.95, upper=1.0, mutable_sigma=True
-    ),  # ng.p.Choice([0.975]),
+    tree_growth_unimodality_treshold=0.975,
+    # ng.p.Scalar(
+    #     init=0.9768384573183925, lower=0.95, upper=1.0, mutable_sigma=True
+    # ),  # ng.p.Choice([0.975]),
     tree_growth_upper_bound_leaf_nodes=100,  # ng.p.Choice([100]),
     tree_growth_use_unimodality_pvalue=True,  # ng.p.Choice([True]),
     # unimodal
@@ -118,6 +140,9 @@ search_space = ng.p.Dict(
     unimodal_loss_node_criteria_method=ng.p.Choice(
         ["tree_depth", "time_of_split", "equal"]
     ),
+    # ng.p.Choice(
+    #     ["tree_depth", "time_of_split", "equal"]
+    # ),
     unimodal_loss_weight=ng.p.Scalar(
         init=534.3911240634819, lower=1.0, upper=1000.0, mutable_sigma=True
     ),
@@ -134,8 +159,10 @@ search_space = ng.p.Dict(
     mulitmodal_loss_node_criteria_method=ng.p.Choice(
         ["tree_depth", "time_of_split", "equal"]
     ),  # "time_of_split",  #
-    mulitmodal_loss_weight_direction="descending",
-    mulitmodal_loss_weight_function="exponential",
+    mulitmodal_loss_weight_direction=ng.p.Choice(["ascending", "descending"]),
+    mulitmodal_loss_weight_function=ng.p.Choice(
+        ["exponential", "linear", "log", "sqrt"]
+    ),
     multimodal_loss_weight=ng.p.Scalar(
         init=638.2691524389803, lower=1, upper=1000.0, mutable_sigma=True
     ),
@@ -231,7 +258,7 @@ scheduler = AsyncHyperBandScheduler(
     grace_period=6000,
 )
 
-stage_nr = 18
+stage_nr = 21
 
 tuner = tune.Tuner(
     func,

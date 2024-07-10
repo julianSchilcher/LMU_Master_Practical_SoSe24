@@ -1,9 +1,5 @@
 import os
-import random
 import sys
-
-for key in os.environ:
-    print(f"{key} - {os.getenv(key)}")
 
 for lib in [
     "OMP_NUM_THREADS",
@@ -13,7 +9,6 @@ for lib in [
     "VECLIB_MAXIMUM_THREADS",
     "NUMEXPR_NUM_THREADS",
 ]:
-    print(f"{lib} - {os.getenv(lib)}")
     os.environ[lib] = "1"
 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
 os.environ["KMP_INIT_AT_FORK"] = "FALSE"
@@ -31,6 +26,8 @@ import numpy as np
 
 np.__config__.show()
 import torch
+
+torch.set_num_threads(1)
 import torch.utils.data
 from clustpy.deep._data_utils import augmentation_invariance_check, get_dataloader
 from clustpy.deep._train_utils import get_trained_network
@@ -47,7 +44,7 @@ import sklearn
 sklearn_config = sklearn.get_config()
 for key in sklearn_config:
     print(f"sklearn: {key} - {sklearn_config[key]}")
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, kmeans_plusplus
 from tqdm import tqdm
 from practical.DeepClustering.DeepECT.metrics import (
     PredictionClusterNode,
@@ -56,7 +53,9 @@ from practical.DeepClustering.DeepECT.metrics import (
 import practical.DeepClustering.DipECT.metrics_visualization as metrics_visualization
 
 
-def kmeans_plus_plus_init(ds, k, random_state=np.random.RandomState(42)):
+def kmeans_plus_plus_init(
+    ds, k, random_state=np.random.RandomState(42), using_k_center: bool = True
+):
     """
     Create cluster centroids using the k-means++ algorithm.
     Parameters
@@ -71,36 +70,59 @@ def kmeans_plus_plus_init(ds, k, random_state=np.random.RandomState(42)):
         Collection of k centroids as a numpy array.
     Inspiration from here: https://stackoverflow.com/questions/5466323/how-could-one-implement-the-k-means-algorithm
     """
-    centroids = [ds[0]]
-
-    for _ in range(1, k):
-        dist_sq = np.array(
-            [min([np.inner(c - x, c - x) for c in centroids]) for x in ds]
+    if using_k_center:
+        centers, _ = kmeans_plusplus(
+            ds,
+            k,
+            random_state=random_state,
         )
-        probs = dist_sq / dist_sq.sum()
-        cumulative_probs = probs.cumsum()
-        r = random_state.rand()
+        return centers
+    else:
+        centroids = []
+        max_elements = math.ceil(k / 2)
+        for _ in range(max_elements):
+            new_centers, _ = kmeans_plusplus(
+                ds,
+                2,
+                random_state=random_state.randint(low=1, high=2**32),
+            )
+            centroids.append(new_centers[0])
+            centroids.append(new_centers[1])
 
-        for j, p in enumerate(cumulative_probs):
-            if r < p:
-                i = j
-                break
-
-        centroids.append(ds[i])
-
-    return np.array(centroids)
+        return np.array(centroids)[:k, :]
 
 
-def kmeans_init(ds, k, random_state=np.random.RandomState(42)):
-    centroids = []
+def kmeans_init(
+    ds, k, random_state=np.random.RandomState(42), using_k_center: bool = False
+):
+    if using_k_center:
+        new_centers = (
+            KMeans(
+                n_clusters=k,
+                n_init=1,
+                random_state=random_state,
+            )
+            .fit(ds)
+            .cluster_centers_
+        )
+        return new_centers
+    else:
+        centroids = []
+        max_elements = math.ceil(k / 2)
+        for _ in range(max_elements):
+            new_centers = (
+                KMeans(
+                    n_clusters=2,
+                    n_init=1,
+                    random_state=random_state.randint(low=1, high=2**32),
+                )
+                .fit(ds)
+                .cluster_centers_
+            )
+            centroids.append(new_centers[0])
+            centroids.append(new_centers[1])
 
-    for _ in range(math.ceil(k / 2)):
-        cluster = KMeans(
-            n_clusters=2, n_init=1, random_state=random_state.randint(1, 262144)
-        ).fit(ds)
-        centroids.append(cluster.cluster_centers_)
-
-    return np.concatenate(centroids, axis=0)[:k, :]
+        return np.array(centroids)[:k, :]
 
 
 def predict_subclusters(embedded_data: np.ndarray, axis: np.ndarray) -> np.array:
@@ -507,6 +529,20 @@ class Cluster_Tree:
         elif self.projection_axis_init == "kmeans":
             centroids = kmeans_init(
                 embedded_data, self.projection_axis_n_init, self.random_seed
+            )
+        elif self.projection_axis_init == "kmeans++2":
+            centroids = kmeans_plus_plus_init(
+                embedded_data,
+                self.projection_axis_n_init,
+                self.random_seed,
+                using_k_center=False,
+            )
+        elif self.projection_axis_init == "kmeansk":
+            centroids = kmeans_init(
+                embedded_data,
+                self.projection_axis_n_init,
+                self.random_seed,
+                using_k_center=True,
             )
         else:
             raise ValueError(
@@ -1086,11 +1122,11 @@ class Cluster_Tree:
         if len(unimodal_losses) > 0:
             unimodal_loss = torch.mean(torch.stack(unimodal_losses, dim=0))
         else:
-            torch.tensor(0.0, dtype=torch.float)
+            unimodal_loss = torch.tensor(0.0, dtype=torch.float)
         if len(multimodal_losses) > 0:
             multimodal_loss = torch.mean(torch.stack(multimodal_losses, dim=0))
         else:
-            torch.tensor(0.0, dtype=torch.float)
+            multimodal_loss = torch.tensor(0.0, dtype=torch.float)
         return unimodal_loss, multimodal_loss
 
     def _improve_space_recursive(
@@ -1437,7 +1473,7 @@ class Cluster_Tree:
         if node_criteria_method == "equal":
             return 1
         if node_criteria_method == "time_of_split":
-            node_ids = sorted([node.split_id for node in self.nodes])
+            node_ids = sorted([n.split_id for n in self.nodes])
             index = node_ids.index(node.split_id) + 1
             if direction == "ascending":
                 return index / len(node_ids)
@@ -1446,11 +1482,39 @@ class Cluster_Tree:
             else:
                 raise ValueError(f"loss direction {direction} not supported")
         if node_criteria_method == "tree_depth":
-            max_level = max([node.split_level for node in self.nodes]) + 1
+            max_level = max([n.split_level for n in self.nodes]) + 1
             if direction == "ascending":
                 return (node.split_level + 1) / max_level
             elif direction == "descending":
                 return (max_level - node.split_level + 1) / max_level
+            else:
+                raise ValueError(f"loss direction {direction} not supported")
+        if node_criteria_method == "pruning_indicator":
+            max_indicator = max([n.pruning_indicator for n in self.nodes]) + 1e-5
+            indicator = (node.pruning_indicator + 1e-5) / max_indicator
+            if direction == "ascending":
+                return 1 - indicator
+            elif direction == "descending":
+                return indicator
+            else:
+                raise ValueError(f"loss direction {direction} not supported")
+        if node_criteria_method == "assignments":
+            max_indicator = (
+                max(
+                    [
+                        len(n.assignments) if n.assignments is not None else 0
+                        for n in self.nodes
+                    ]
+                )
+                + 1e-5
+            )
+            indicator = (
+                len(node.assignments) if node.assignments is not None else 0 + 1e-5
+            ) / max_indicator
+            if direction == "ascending":
+                return 1 - indicator
+            elif direction == "descending":
+                return indicator
             else:
                 raise ValueError(f"loss direction {direction} not supported")
 
@@ -2526,29 +2590,29 @@ if __name__ == "__main__":
         loss_weight_function_normalization=-1,
         mulitmodal_loss_application="all",
         mulitmodal_loss_node_criteria_method="tree_depth",  # "time_of_split",
-        mulitmodal_loss_weight_direction="descending",
+        mulitmodal_loss_weight_direction="ascending",
         mulitmodal_loss_weight_function="exponential",  # "linear",
-        multimodal_loss_weight=570.8167947839062,
+        multimodal_loss_weight=665.7660913009137,
         projection_axis_learning="all",
-        projection_axis_learning_rate=0.00020688191802901897,
-        projection_axis_init="kmeans",
-        projection_axis_n_init=3,
+        projection_axis_learning_rate=5e-4,
+        projection_axis_init="kmeansk",
+        projection_axis_n_init=7,
         pruning_factor=1.0,
         pruning_strategy="epoch_assessment",
         pruning_threshold=2000,
         tree_growth_min_cluster_size=2000,
-        reconstruction_loss_weight=743.4245987877811,
+        reconstruction_loss_weight=969.2826013612073,
         refinement_epochs=0,
         tree_growth_amount=3,
         tree_growth_frequency=1.0,
-        tree_growth_unimodality_treshold=0.9768384573183925,
+        tree_growth_unimodality_treshold=0.975,
         tree_growth_upper_bound_leaf_nodes=100,
         tree_growth_use_unimodality_pvalue=True,
         unimodal_loss_application="leaf_nodes",
-        unimodal_loss_node_criteria_method="equal",
-        unimodal_loss_weight=400.0431017251117,
-        unimodal_loss_weight_direction="descending",
-        unimodal_loss_weight_function="log",
+        unimodal_loss_node_criteria_method="tree_depth",
+        unimodal_loss_weight=570.7420404153847,
+        unimodal_loss_weight_direction="ascending",
+        unimodal_loss_weight_function="linear",
     )
     dipect.fit_predict(dataset, labels)
     print(

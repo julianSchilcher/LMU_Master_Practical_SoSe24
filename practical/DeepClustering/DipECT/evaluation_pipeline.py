@@ -40,7 +40,7 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
 from sklearn.preprocessing import minmax_scale
 from sklearn.utils import Bunch
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, TensorDataset
 from torchvision import transforms
 import PIL
 
@@ -221,8 +221,21 @@ def pretraining(
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
     os.environ["SKLEARN_SEED"] = str(seed)
     torch.use_deterministic_algorithms(mode=True)
+    # Reproducibility
+    generator = torch.Generator()
+    generator.manual_seed(seed)
+
+    def seed_worker(worker_id):
+        set_torch_seed(seed)
 
     data = torch.tensor(dataset["data"], dtype=torch.float32)
+    dataloader = DataLoader(
+        TensorDataset(data),
+        batch_size=256,
+        shuffle=True,
+        generator=generator,
+        worker_init_fn=seed_worker,
+    )
 
     if not autoencoder_params_path.exists():
         # logging config
@@ -247,7 +260,7 @@ def pretraining(
                     data, 27400, 256
                 ),  # 27400 is the max iterations that we do Mnist for
                 optimizer_params={"lr": 1e-3},
-                data=data,
+                dataloader=dataloader,
                 batch_size=256,
                 device=device,
                 print_step=1,

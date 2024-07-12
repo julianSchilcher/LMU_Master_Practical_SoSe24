@@ -74,10 +74,6 @@ class ClusteringMethod(Enum):
     Enumeration for clustering methods.
     """
 
-    DEEPECT_PAPER = "DeepECT (Paper)"
-    DEEPECT_AUGMENTED_PAPER = "DeepECT + Augmentation (Paper)"
-    DEEPECT_OURS = "DeepECT (Ours)"
-    DEEPECT_AUGMENTED_OURS = "DeepECT + Augmentation (Ours)"
     IDEC = "IDEC"
     KMEANS = "KMeans"
     IDEC_SINGLE = "IDEC + Single"
@@ -85,6 +81,10 @@ class ClusteringMethod(Enum):
     AE_BISECTING = "Autoencoder + Bisection"
     AE_SINGLE = "Autoencoder + Single"
     AE_COMPLETE = "Autoencoder + Complete"
+    DEEPECT_PAPER = "DeepECT (Paper)"
+    DEEPECT_AUGMENTED_PAPER = "DeepECT + Augmentation (Paper)"
+    DEEPECT_OURS = "DeepECT (Ours)"
+    DEEPECT_AUGMENTED_OURS = "DeepECT + Augmentation (Ours)"
 
 
 class AutoencoderType(Enum):

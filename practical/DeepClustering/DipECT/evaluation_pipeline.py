@@ -50,7 +50,7 @@ from practical.DeepClustering.DipECT.baseline_hierachical.ae_plus import (
 )
 
 # please keep this format to prevent circular imports
-from practical.DeepClustering.DipECT.dipect import DipECT
+import practical.DeepClustering.DipECT.dipect as dipect
 
 
 class DatasetType(Enum):
@@ -610,7 +610,7 @@ def fit(
                 )
         elif method == ClusteringMethod.DIPECT:
             autoencoder.to(device)
-            dipect = DipECT(
+            dipect = dipect.DipECT(
                 batch_size=256,
                 autoencoder=autoencoder,
                 random_state=np.random.RandomState(seed),
@@ -687,7 +687,7 @@ def fit(
                 data, dataset_type, seed
             )
 
-            dipect = DipECT(
+            dipect = dipect.DipECT(
                 batch_size=256,
                 autoencoder=autoencoder,
                 random_state=np.random.RandomState(seed),

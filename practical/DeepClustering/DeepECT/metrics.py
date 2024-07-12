@@ -70,8 +70,8 @@ class PredictionClusterNode:
             Indices of the batch assigned to this node.
         """
         if assigned_batch_indices is not None:
-            self.assigned_indices.append(dataset_indices[assigned_batch_indices])
-            self.assigned_samples.append(assigned_samples.clone())
+            self.assigned_indices.append(dataset_indices[assigned_batch_indices].cpu())
+            self.assigned_samples.append(assigned_samples.detach().cpu().clone())
 
     @property
     def assignments(self):
@@ -442,8 +442,6 @@ class PredictionClusterTree:
         float
             The flat accuracy.
         """
-        if n_clusters > len(self.leaf_nodes):
-            return 0.0
         return clustpy.metrics.unsupervised_clustering_accuracy(
             ground_truth,
             self.get_k_cluster_predictions_by_kmeans(ground_truth, n_clusters),
@@ -488,8 +486,6 @@ class PredictionClusterTree:
         float
             The flat NMI.
         """
-        if n_clusters > len(self.leaf_nodes):
-            return 0.0
         return normalized_mutual_info_score(
             ground_truth,
             self.get_k_cluster_predictions_by_kmeans(ground_truth, n_clusters),
@@ -534,8 +530,6 @@ class PredictionClusterTree:
         float
             The flat ARI.
         """
-        if n_clusters > len(self.leaf_nodes):
-            return 0.0
         return adjusted_rand_score(
             ground_truth,
             self.get_k_cluster_predictions_by_kmeans(ground_truth, n_clusters),

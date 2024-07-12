@@ -1,6 +1,6 @@
 import os
 import sys
-from typing import Union
+from typing import List, Union
 
 sys.path.append(os.getcwd())
 
@@ -22,6 +22,7 @@ from practical.DeepClustering.DeepECT.metrics import PredictionClusterTree
 from practical.DeepClustering.DeepECT.utils import (
     Cluster_Tree,
     transform_cluster_tree_to_pred_tree,
+    mean,
 )
 
 
@@ -56,6 +57,7 @@ class _DeepECT_Module(torch.nn.Module):
         # Create initial cluster tree
         self.cluster_tree = Cluster_Tree(
             init_leafnode_centers,
+            random_state,
             device,
         )
         self.device = device
@@ -105,11 +107,11 @@ class _DeepECT_Module(torch.nn.Module):
         self : _DeepECT_Module
             This instance of the _DeepECT_Module
         """
-        mov_dc_loss = 0.0
-        mov_nc_loss = 0.0
-        mov_rec_loss = 0.0
-        mov_rec_loss_aug = 0.0
-        mov_loss = 0.0
+        mov_dc_loss = []
+        mov_nc_loss = []
+        mov_rec_loss = []
+        mov_rec_loss_aug = []
+        mov_loss = []
 
         optimizer.add_param_group({"params": self.cluster_tree.root.left_child.center})
         optimizer.add_param_group({"params": self.cluster_tree.root.right_child.center})
@@ -172,24 +174,30 @@ class _DeepECT_Module(torch.nn.Module):
 
                     if self.augmentation_invariance:
                         loss = nc_loss + dc_loss + rec_loss + rec_loss_aug
-                        mov_rec_loss_aug += rec_loss_aug.item()
+                        mov_rec_loss_aug.append(rec_loss_aug.item())
                     else:
                         loss = nc_loss + dc_loss + rec_loss
 
-                    mov_nc_loss += nc_loss.item()
-                    mov_dc_loss += dc_loss.item()
-                    mov_rec_loss += rec_loss.item()
-                    mov_loss += loss.item()
+                    mov_nc_loss.append(nc_loss.item())
+                    mov_dc_loss.append(dc_loss.item())
+                    mov_rec_loss.append(rec_loss.item())
+                    mov_loss.append(loss.item())
 
                     if (
                         progress_bar.n <= 10 or progress_bar.n % 100 == 0
                     ) and progress_bar.n > 0:
                         logging.info(
-                            f"{progress_bar.n} - moving averages: dc_loss: {mov_dc_loss/progress_bar.n} "
-                            f"nc_loss: {mov_nc_loss/progress_bar.n} rec_loss: {mov_rec_loss/progress_bar.n} "
-                            f"{f'rec_loss_aug: {mov_rec_loss_aug/progress_bar.n}' if self.augmentation_invariance else ''} "
-                            f"total_loss: {mov_loss/progress_bar.n}"
+                            f"{progress_bar.n} - moving averages: dc_loss: {mean(mov_dc_loss)} "
+                            f"nc_loss: {mean(mov_nc_loss)} rec_loss: {mean(mov_rec_loss)} "
+                            f"{f'rec_loss_aug: {mean(mov_rec_loss_aug)}' if self.augmentation_invariance else ''} "
+                            f"total_loss: {mean(mov_loss)} "
+                            f"nodes: {self.cluster_tree.number_nodes} leaf_nodes: {len(self.cluster_tree.leaf_nodes)}"
                         )
+                        mov_dc_loss.clear()
+                        mov_nc_loss.clear()
+                        mov_rec_loss.clear()
+                        mov_rec_loss_aug.clear()
+                        mov_loss.clear()
 
                     loss.backward()
                     optimizer.step()
@@ -233,7 +241,9 @@ class _DeepECT_Module(torch.nn.Module):
                 self.cluster_tree.assign_to_nodes(embeddings)
                 # use assignment indices for prediction tree
                 for node in self.cluster_tree.leaf_nodes:
-                    pred_tree[node.id].assign_batch(indices, node.assignment_indices, node.assignments)
+                    pred_tree[node.id].assign_batch(
+                        indices, node.assignment_indices, node.assignments
+                    )
                 self.cluster_tree.clear_node_assignments()
 
         return pred_tree
@@ -333,7 +343,7 @@ def _deep_ect(
         KMeans,
         {"n_init": 20, "random_state": random_state},
         None,
-        random_state
+        random_state,
     )
 
     print(device)
@@ -514,18 +524,20 @@ if __name__ == "__main__":
         FeedforwardAutoencoder([dataset.shape[1], 500, 500, 2000, 10])
         .to(device)
         .fit(
-            n_epochs=20,
+            n_epochs=2,
             optimizer_params={},
             data=dataset,
             batch_size=256,
-            device=device,
             print_step=1,
         )
     )
-    deepect = DeepECT(autoencoder=autoencoder, max_leaf_nodes=20, max_iterations=10000)
+    deepect = DeepECT(autoencoder=autoencoder, max_leaf_nodes=20, max_iterations=2000)
     deepect.fit_predict(dataset)
-    print(deepect.tree_.flat_accuracy(labels, n_clusters=10))
-    print(deepect.tree_.flat_nmi(labels, n_clusters=10))
-    print(deepect.tree_.flat_ari(labels, n_clusters=10))
+    # print(deepect.tree_.flat_accuracy(labels, n_clusters=10))
+    # print(deepect.tree_.flat_nmi(labels, n_clusters=10))
+    # print(deepect.tree_.flat_ari(labels, n_clusters=10))
+    print(deepect.tree_.flat_accuracy_kmeans(labels, n_clusters=10))
+    print(deepect.tree_.flat_nmi_kmeans(labels, n_clusters=10))
+    print(deepect.tree_.flat_ari_kmeans(labels, n_clusters=10))
     print(deepect.tree_.dendrogram_purity(labels))
     print(deepect.tree_.leaf_purity(labels))

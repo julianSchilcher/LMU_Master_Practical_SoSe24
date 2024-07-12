@@ -15,6 +15,10 @@ from practical.DeepClustering.DeepECT.metrics import (
 )
 
 
+def mean(losses: List[float]):
+    return sum(losses) / len(losses)
+
+
 class Cluster_Node:
     """
     This class represents a cluster node within a binary cluster tree.
@@ -179,6 +183,7 @@ class Cluster_Tree:
     def __init__(
         self,
         init_leafnode_centers: np.ndarray,
+        random_state: np.random.RandomState,
         device: torch.device,
     ) -> "Cluster_Tree":
         """
@@ -194,6 +199,7 @@ class Cluster_Tree:
         """
         # center of root can be a dummy-center since it's never needed
         self.root = Cluster_Node(np.zeros(init_leafnode_centers.shape[1]), device)
+        self.random_state = random_state
         # assign the 2 initial leaf nodes with its initial centers
         self.root.set_childs(
             None,
@@ -781,9 +787,9 @@ class Cluster_Tree:
                     self.assign_to_nodes(embed)
                     if highest_dist_leaf_node.assignments is not None:
                         assignments.append(highest_dist_leaf_node.assignments.cpu())
-                child_assignments = KMeans(n_clusters=2, n_init=20).fit(
-                    torch.cat(assignments, dim=0).numpy()
-                )
+                child_assignments = KMeans(
+                    n_clusters=2, n_init=20, random_state=self.random_state
+                ).fit(torch.cat(assignments, dim=0).numpy())
             else:
                 assignments = []
                 highest_dist_leaf_node = self.root
@@ -791,9 +797,9 @@ class Cluster_Tree:
                     x = batch[1]
                     embed = autoencoder.encode(x.to(device)).cpu()
                     assignments.append(autoencoder.encode(x.to(device)).cpu())
-                child_assignments = KMeans(n_clusters=2, n_init=20).fit(
-                    torch.cat(assignments, dim=0).numpy()
-                )
+                child_assignments = KMeans(
+                    n_clusters=2, n_init=20, random_state=self.random_state
+                ).fit(torch.cat(assignments, dim=0).numpy())
 
             print(f"Leaf assignments: {len(child_assignments.labels_)}")
             child_weight = 10 if len(self.nodes) < 3 else 1

@@ -23,11 +23,9 @@ import logging
 import math
 
 import numpy as np
-
-np.__config__.show()
 import torch
 
-torch.set_num_threads(1)
+# torch.set_num_threads(1)
 import torch.utils.data
 from clustpy.deep._data_utils import augmentation_invariance_check, get_dataloader
 from clustpy.deep._train_utils import get_trained_network
@@ -39,11 +37,6 @@ from clustpy.data import load_fmnist, load_mnist, load_usps, load_reuters, load_
 from clustpy.deep.autoencoders import FeedforwardAutoencoder, ConvolutionalAutoencoder
 from itertools import combinations
 from ray import train
-import sklearn
-
-sklearn_config = sklearn.get_config()
-for key in sklearn_config:
-    print(f"sklearn: {key} - {sklearn_config[key]}")
 from sklearn.cluster import KMeans, kmeans_plusplus
 from tqdm import tqdm
 from practical.DeepClustering.DeepECT.metrics import (
@@ -99,7 +92,7 @@ def kmeans_init(
         new_centers = (
             KMeans(
                 n_clusters=k,
-                n_init=1,
+                n_init=10,
                 random_state=random_state,
             )
             .fit(ds)
@@ -113,7 +106,7 @@ def kmeans_init(
             new_centers = (
                 KMeans(
                     n_clusters=2,
-                    n_init=1,
+                    n_init=10,
                     random_state=random_state.randint(low=1, high=2**32),
                 )
                 .fit(ds)
@@ -1602,7 +1595,7 @@ class _DipECT_Module(torch.nn.Module):
         autoencoder: torch.nn.Module,
         trainloader: torch.utils.data.DataLoader,
         testloader: torch.utils.data.DataLoader,
-        labels: np.ndarray,
+        labels: Union[np.ndarray, None],
         max_epochs: int,
         pruning_threshold: float,
         grow_interval: float,
@@ -1757,7 +1750,11 @@ class _DipECT_Module(torch.nn.Module):
             growing_treshhold_reached = (
                 False  # prevent from immediately ending training
             )
-        classes = np.unique(labels).size
+        if labels is None:
+            classes = 0
+            evaluate_after_n_epochs = 0
+        else:
+            classes = np.unique(labels).size
         for epoch in range(max_epochs):
             if pruning_strategy == "epoch_assessment" and epoch > 0:
                 self.cluster_tree.prune_tree(pruning_threshold, metrics)
@@ -1765,7 +1762,7 @@ class _DipECT_Module(torch.nn.Module):
 
             # evaluation
             if epoch > 0:
-                if epoch % evaluate_after_n_epochs == 0:
+                if evaluate_after_n_epochs > 0 and epoch % evaluate_after_n_epochs == 0:
                     pred_tree = self.predict(
                         testloader,
                         autoencoder,
@@ -1922,9 +1919,9 @@ class _DipECT_Module(torch.nn.Module):
         self,
         dataloader: torch.utils.data.DataLoader,
         autoencoder: torch.nn.Module,
-        fig_size: Tuple[int, int],
-        plot_storage_path: str,
-        labels: np.ndarray,
+        fig_size: Union[Tuple[int, int], None],
+        plot_storage_path: Union[str, None],
+        labels: Union[np.ndarray, None],
         epoch: int = -1,
     ) -> PredictionClusterTree:
         """
@@ -1964,38 +1961,39 @@ class _DipECT_Module(torch.nn.Module):
                     )
                 self.cluster_tree.clear_node_assignments()
 
-        all_embeddings = np.concatenate(all_embeddings)
-        if (
-            self.logging_active
-            and plot_storage_path is not None
-            and fig_size is not None
-        ):
-            pred_tree.aggregate_assignments()  # assign data to all inner nodes
+        if labels is not None:
+            all_embeddings = np.concatenate(all_embeddings)
+            if (
+                self.logging_active
+                and plot_storage_path is not None
+                and fig_size is not None
+            ):
+                pred_tree.aggregate_assignments()  # assign data to all inner nodes
 
-            os.makedirs(plot_storage_path, exist_ok=True)
-            # plot current cluster tree
-            filename = f'cluster_tree_epoch_{epoch if epoch != -1 else "final"}.png'
-            filepath_tree = os.path.join(plot_storage_path, filename)
-            metrics_visualization.build_and_visualize_tree(
-                pred_tree.root,
-                autoencoder,
-                all_embeddings,
-                fig_size,
-                embedded=True,
-                path=filepath_tree,
-            )
-            # plot current embedded space
-            filename = f'latent_space_epoch_{epoch if epoch != -1 else "final"}.png'
-            filepath_latent = os.path.join(plot_storage_path, filename)
-            metrics_visualization.plot_umap_embedded_space(
-                all_embeddings, labels, path=filepath_latent
-            )
+                os.makedirs(plot_storage_path, exist_ok=True)
+                # plot current cluster tree
+                filename = f'cluster_tree_epoch_{epoch if epoch != -1 else "final"}.png'
+                filepath_tree = os.path.join(plot_storage_path, filename)
+                metrics_visualization.build_and_visualize_tree(
+                    pred_tree.root,
+                    autoencoder,
+                    all_embeddings,
+                    fig_size,
+                    embedded=True,
+                    path=filepath_tree,
+                )
+                # plot current embedded space
+                filename = f'latent_space_epoch_{epoch if epoch != -1 else "final"}.png'
+                filepath_latent = os.path.join(plot_storage_path, filename)
+                metrics_visualization.plot_umap_embedded_space(
+                    all_embeddings, labels, path=filepath_latent
+                )
         return pred_tree
 
 
 def _dipect(
     X: np.ndarray,
-    Y: np.ndarray,
+    Y: Union[np.ndarray, None],
     batch_size: int,
     pretrain_optimizer_params: dict,
     clustering_optimizer_params: dict,
@@ -2261,21 +2259,22 @@ def _dipect(
     pred_tree: PredictionClusterTree = dipect_module.predict(
         testloader, autoencoder, fig_size, plot_storage_path, Y
     )
-    classes = np.unique(Y).size
-    metrics = {
-        "acc": pred_tree.flat_accuracy(Y, classes),
-        "nmi": pred_tree.flat_nmi(Y, classes),
-        "ari": pred_tree.flat_ari(Y, classes),
-        "acc-kmeans": pred_tree.flat_accuracy_kmeans(Y, classes),
-        "nmi-kmeans": pred_tree.flat_nmi_kmeans(Y, classes),
-        "ari-kmeans": pred_tree.flat_ari_kmeans(Y, classes),
-        "dp": pred_tree.dendrogram_purity(Y),
-        "lp": pred_tree.leaf_purity(Y)[0],
-    }
-    metrics["combined_metrics"] = metrics["acc"] + metrics["dp"] + metrics["lp"]
-    train.report(metrics)
-    if logging_active:
-        logging.info(metrics)
+    if Y is not None:
+        classes = np.unique(Y).size
+        metrics = {
+            "acc": pred_tree.flat_accuracy(Y, classes),
+            "nmi": pred_tree.flat_nmi(Y, classes),
+            "ari": pred_tree.flat_ari(Y, classes),
+            "acc-kmeans": pred_tree.flat_accuracy_kmeans(Y, classes),
+            "nmi-kmeans": pred_tree.flat_nmi_kmeans(Y, classes),
+            "ari-kmeans": pred_tree.flat_ari_kmeans(Y, classes),
+            "dp": pred_tree.dendrogram_purity(Y),
+            "lp": pred_tree.leaf_purity(Y)[0],
+        }
+        metrics["combined_metrics"] = metrics["acc"] + metrics["dp"] + metrics["lp"]
+        train.report(metrics)
+        if logging_active:
+            logging.info(metrics)
     return pred_tree, autoencoder
 
 
@@ -2386,19 +2385,19 @@ class DipECT:
         # optimizer
         pretrain_optimizer_params: dict = None,
         clustering_optimizer_params: dict = None,
-        projection_axis_learning_rate: float = 1e-4,
+        projection_axis_learning_rate: float = 1e-05,
         projection_axis_learning: str = "all",  # None, "all", "only_leaf_nodes", "partial_leaf_nodes"
-        projection_axis_init: str = "kmeans",  # "kmeans++"
-        projection_axis_n_init: int = 10,
+        projection_axis_init: str = "kmeansk",  # "kmeans++"
+        projection_axis_n_init: int = 7,
         optimizer_class: torch.optim.Optimizer = torch.optim.Adam,
         # autoencoder
         rec_loss_fn: torch.nn.modules.loss._Loss = torch.nn.MSELoss(),
         autoencoder: _AbstractAutoencoder = None,
-        autoencoder_pretrain_n_epochs: int = 50,
-        reconstruction_loss_weight: float = 752.5419334998459,  # None, float(1e-4, 1e4)
+        autoencoder_pretrain_n_epochs: int = 100,
+        reconstruction_loss_weight: float = 737.0094829591326,  # None, float(1e-4, 1e4)
         autoencoder_param_path: str = "",
         # clustering
-        clustering_n_epochs: int = 40,
+        clustering_n_epochs: int = 60,
         embedding_size: int = 10,
         augmentation_invariance: bool = False,
         # pruning
@@ -2406,31 +2405,31 @@ class DipECT:
         pruning_strategy: str = "epoch_assessment",  # "epoch_assessment", "moving_average",
         pruning_factor: float = 1,
         # tree growth
-        tree_growth_frequency: float = 3.0,
-        tree_growth_amount: int = 1,
+        tree_growth_frequency: float = 2.0,
+        tree_growth_amount: int = 5,
         tree_growth_upper_bound_leaf_nodes: int = 100,
         tree_growth_use_unimodality_pvalue: bool = True,
-        tree_growth_unimodality_treshold: float = 0.98,
-        tree_growth_min_cluster_size: int = 1000,
+        tree_growth_unimodality_treshold: float = 0.975,
+        tree_growth_min_cluster_size: int = 2000,
         # unimodal
-        unimodal_loss_application: str = "all",  # None, "leaf_nodes", "all"
-        unimodal_loss_node_criteria_method: str = "tree_depth",  # "tree_depth", "time_of_split"
-        unimodal_loss_weight_function: str = "linear",  # "linear", "exponential", None
-        unimodal_loss_weight_direction: str = "descending",  # "ascending", "descending"
-        unimodal_loss_weight: float = 473.7437531094021,
+        unimodal_loss_application: str = "leaf_nodes",  # None, "leaf_nodes", "all"
+        unimodal_loss_node_criteria_method: str = "equal",  # "tree_depth", "time_of_split"
+        unimodal_loss_weight_function: str = "log",  # "linear", "exponential", None
+        unimodal_loss_weight_direction: str = "ascending",  # "ascending", "descending"
+        unimodal_loss_weight: float = 653.6111443720175,
         loss_weight_function_normalization=-1,  # -1 (no normalization), else normalization term ((np.log2(self.max_leaf_nodes) - 1) works good and was until now always used)
         # multimodal
         mulitmodal_loss_application: str = "all",  # None, "leaf_nodes", "all"
-        mulitmodal_loss_node_criteria_method: str = "time_of_split",  # "tree_depth", "time_of_split"
-        mulitmodal_loss_weight_function: str = "exponential",  # "linear", "exponential", None
+        mulitmodal_loss_node_criteria_method: str = "equal",  # "tree_depth", "time_of_split"
+        mulitmodal_loss_weight_function: str = "linear",  # "linear", "exponential", None
         mulitmodal_loss_weight_direction: str = "ascending",  # "ascending", "descending"
-        multimodal_loss_weight: float = 816.4808800364622,
+        multimodal_loss_weight: float = 836.5918099811238,
         # utility
         early_stopping: bool = False,
         refinement_epochs: int = 0,
         random_state: np.random.RandomState = np.random.RandomState(42),
         logging_active: bool = False,
-        evaluate_every_n_epochs: int = 2,
+        evaluate_every_n_epochs: int = 0,
         plot_storage_path: Union[str, None] = None,
         fig_size: Union[Tuple[int, int], None] = None,
     ):
@@ -2487,7 +2486,7 @@ class DipECT:
         self.plot_storage_path = plot_storage_path
         self.fig_size = fig_size
 
-    def fit_predict(self, X: np.ndarray, Y: np.ndarray) -> "DipECT":
+    def fit_predict(self, X: np.ndarray, Y: Union[np.ndarray, None] = None) -> "DipECT":
         """
         Initiate the actual clustering process on the input data set.
         The resulting cluster labels will be stored in the labels_ attribute.
@@ -2584,7 +2583,7 @@ if __name__ == "__main__":
         random_state=np.random.RandomState(21),
         autoencoder_pretrain_n_epochs=100,
         logging_active=True,
-        clustering_n_epochs=60,
+        clustering_n_epochs=2,
         clustering_optimizer_params={"lr": 1e-4},
         early_stopping=False,
         loss_weight_function_normalization=-1,
@@ -2614,7 +2613,7 @@ if __name__ == "__main__":
         unimodal_loss_weight_direction="ascending",
         unimodal_loss_weight_function="log",
     )
-    dipect.fit_predict(dataset, labels)
+    dipect.fit_predict(dataset)
     print(
         f"-------------------------------------------Time needed: {(datetime.datetime.now()-start).total_seconds()/60}min"
     )

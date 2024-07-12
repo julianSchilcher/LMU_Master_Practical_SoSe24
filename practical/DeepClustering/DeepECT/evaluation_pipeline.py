@@ -6,6 +6,20 @@ import os
 import sys
 import pathlib
 
+# Reproducability - restricting Kmeans to not parallelize
+for lib in [
+    "OMP_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "BLIS_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+]:
+    os.environ[lib] = "1"
+os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
+os.environ["KMP_INIT_AT_FORK"] = "FALSE"
+os.environ["KMP_DUPLICATE_LIB_OK"] = "True"
+
 sys.path.append(os.getcwd())
 
 from enum import Enum
@@ -78,7 +92,6 @@ class AutoencoderType(Enum):
     Enumeration for autoencoder types.
     """
 
-    CLUSTPY_STANDARD = "ClustPy FeedForward"
     DEEPECT_STACKED_AE = "Stacked AE from DeepECT"
 
 
@@ -188,7 +201,7 @@ def pretraining(
     autoencoder : _AbstractAutoencoder
         The pretrained autoencoder.
     """
-    set_torch_seed(np.random.RandomState(seed))
+    set_torch_seed(seed)
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     data = torch.tensor(dataset["data"], dtype=torch.float32)
@@ -196,9 +209,12 @@ def pretraining(
     if not autoencoder_params_path.exists():
         os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
         torch.use_deterministic_algorithms(mode=True)
+        # torch.set_num_threads(1)
         # logging config
         logging.root.handlers = []
-        log_path = pathlib.Path(f"practical/DeepClustering/DeepECT/pretrained_autoencoders_log/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{seed}.txt")
+        log_path = pathlib.Path(
+            f"practical/DeepClustering/DeepECT/pretrained_autoencoders_log/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{seed}.txt"
+        )
         logging.basicConfig(
             level=logging.INFO,
             handlers=[
@@ -206,22 +222,14 @@ def pretraining(
                 logging.StreamHandler(sys.stdout),
             ],
         )
-        if autoencoder_type == AutoencoderType.CLUSTPY_STANDARD:
-            autoencoder = FeedforwardAutoencoder(
-                layers=[data.shape[1], 500, 500, 2000, embedding_dim]
-            )
-            autoencoder.to(device)
-            autoencoder.fit(
-                n_epochs=get_max_epoch_size(data, 50000, 256),
-                optimizer_params={},
-                data=data,
-                batch_size=256,
-                device=device,
-                print_step=1,
-            )
-            autoencoder.fitted = True
-            autoencoder.cpu().save_parameters(autoencoder_params_path)
-        elif autoencoder_type == AutoencoderType.DEEPECT_STACKED_AE:
+        # Reproducibility
+        generator = torch.Generator()
+        generator.manual_seed(seed)
+
+        def seed_worker(worker_id):
+            set_torch_seed(seed)
+
+        if autoencoder_type == AutoencoderType.DEEPECT_STACKED_AE:
             weight_initalizer = torch.nn.init.xavier_normal_
             steps_per_layer = 20000
             refine_training_steps = 50000
@@ -239,12 +247,24 @@ def pretraining(
                 optimizer_fn=lambda parameters: torch.optim.Adam(parameters, lr=0.0001),
             ).to(device)
             autoencoder.pretrain(
-                DataLoader(TensorDataset(data), batch_size=256, shuffle=True),
+                DataLoader(
+                    TensorDataset(data),
+                    batch_size=256,
+                    shuffle=True,
+                    generator=generator,
+                    worker_init_fn=seed_worker,
+                ),
                 steps_per_layer,
                 corruption_fn=add_noise,
             )
             autoencoder.refine_training(
-                DataLoader(TensorDataset(data), batch_size=256, shuffle=True),
+                DataLoader(
+                    TensorDataset(data),
+                    batch_size=256,
+                    shuffle=True,
+                    generator=generator,
+                    worker_init_fn=seed_worker,
+                ),
                 refine_training_steps,
                 corruption_fn=add_noise,
             )
@@ -252,12 +272,7 @@ def pretraining(
             autoencoder.cpu().save_parameters(autoencoder_params_path)
         print("Autoencoder pretraining complete and saved.")
     else:
-        if autoencoder_type == AutoencoderType.CLUSTPY_STANDARD:
-            autoencoder = FeedforwardAutoencoder(
-                layers=[data.shape[1], 500, 500, 2000, embedding_dim], reusable=True
-            )
-            autoencoder.load_parameters(autoencoder_params_path)
-        elif autoencoder_type == AutoencoderType.DEEPECT_STACKED_AE:
+        if autoencoder_type == AutoencoderType.DEEPECT_STACKED_AE:
             autoencoder = DeepECTStackedAutoencoder(
                 data.shape[1],
                 [500, 500, 2000, embedding_dim],
@@ -352,7 +367,9 @@ def fit(
     results = []
     for method in ClusteringMethod:
         # Save path
-        result_path = pathlib.Path(f"practical/DeepClustering/DeepECT/results/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.pq")
+        result_path = pathlib.Path(
+            f"practical/DeepClustering/DeepECT/results/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.pq"
+        )
         if os.path.exists(result_path):
             results.append(pd.read_parquet(result_path))
             continue
@@ -362,7 +379,26 @@ def fit(
         ):
             continue
         # Reproducibility
+        generator = torch.Generator()
+        generator.manual_seed(seed)
         set_torch_seed(seed)
+
+        def seed_worker(worker_id):
+            set_torch_seed(seed)
+
+        for lib in [
+            "OMP_NUM_THREADS",
+            "MKL_NUM_THREADS",
+            "OPENBLAS_NUM_THREADS",
+            "BLIS_NUM_THREADS",
+            "VECLIB_MAXIMUM_THREADS",
+            "NUMEXPR_NUM_THREADS",
+        ]:
+            os.environ[lib] = "1"
+        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
+        os.environ["KMP_INIT_AT_FORK"] = "FALSE"
+        os.environ["KMP_DUPLICATE_LIB_OK"] = "True"
+
         # Load the autoencoder parameters
         autoencoder = autoencoder.load_parameters(autoencoder_params_path).to(device)
         # Load dataloaders
@@ -373,6 +409,8 @@ def fit(
                 shuffle=True,
                 num_workers=5 if can_use_workers else 0,
                 prefetch_factor=200 if can_use_workers else None,
+                generator=generator,
+                worker_init_fn=seed_worker,
             ),
             DataLoader(
                 Original_Dataset(data),
@@ -380,15 +418,21 @@ def fit(
                 shuffle=False,
                 num_workers=5 if can_use_workers else 0,
                 prefetch_factor=200 if can_use_workers else None,
+                generator=generator,
+                worker_init_fn=seed_worker,
             ),
         )
-        
+
         # autoencoder save path
-        autoencoder_save_path = pathlib.Path(f"practical/DeepClustering/DeepECT/results_autoencoder/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.pth")
+        autoencoder_save_path = pathlib.Path(
+            f"practical/DeepClustering/DeepECT/results_autoencoder/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.pth"
+        )
 
         # logging config
         logging.root.handlers = []
-        log_path = pathlib.Path(f"practical/DeepClustering/DeepECT/results_log/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.txt")
+        log_path = pathlib.Path(
+            f"practical/DeepClustering/DeepECT/results_log/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.txt"
+        )
         logging.basicConfig(
             level=logging.INFO,
             handlers=[
@@ -406,7 +450,11 @@ def fit(
                     autoencoder.encode(batch[1].to(device)).detach().cpu().numpy()
                 )
             # Perform flat clustering with KMeans
-            kmeans = KMeans(n_clusters=n_clusters, n_init=20, random_state=seed)
+            kmeans = KMeans(
+                n_clusters=n_clusters,
+                n_init=20,
+                random_state=np.random.RandomState(seed),
+            )
             print("fitting KMeans...")
             predicted_labels = kmeans.fit_predict(
                 np.concatenate(embeddings, dtype=np.float32)
@@ -434,7 +482,7 @@ def fit(
             deepect = DeepECTOurs(
                 max_iterations=max_iterations,
                 autoencoder=autoencoder,
-                clustering_optimizer_params={"lr": 1e-4, "betas": (0.9, 0.999)},
+                clustering_optimizer_params={"lr": 1e-4},
                 max_leaf_nodes=max_leaf_nodes,
                 random_state=np.random.RandomState(seed),
                 custom_dataloaders=dataloaders,
@@ -455,13 +503,22 @@ def fit(
                             "nmi": deepect.tree_.flat_nmi(labels, n_clusters),
                             "acc": deepect.tree_.flat_accuracy(labels, n_clusters),
                             "ari": deepect.tree_.flat_ari(labels, n_clusters),
+                            "nmi-kmeans": deepect.tree_.flat_nmi_kmeans(
+                                labels, n_clusters
+                            ),
+                            "acc-kmeans": deepect.tree_.flat_accuracy_kmeans(
+                                labels, n_clusters
+                            ),
+                            "ari-kmeans": deepect.tree_.flat_ari_kmeans(
+                                labels, n_clusters
+                            ),
                             "dp": deepect.tree_.dendrogram_purity(labels),
                             "lp": deepect.tree_.leaf_purity(labels)[0],
                             "seed": seed,
                         }
                     ]
                 )
-            except:
+            except Exception as e:
                 result_df = pd.DataFrame(
                     [
                         {
@@ -472,12 +529,22 @@ def fit(
                             "nmi": np.nan,
                             "acc": np.nan,
                             "ari": np.nan,
-                            "dp": np.nan,
-                            "lp": np.nan,
+                            "nmi-kmeans": deepect.tree_.flat_nmi_kmeans(
+                                labels, n_clusters
+                            ),
+                            "acc-kmeans": deepect.tree_.flat_accuracy_kmeans(
+                                labels, n_clusters
+                            ),
+                            "ari-kmeans": deepect.tree_.flat_ari_kmeans(
+                                labels, n_clusters
+                            ),
+                            "dp": deepect.tree_.dendrogram_purity(labels),
+                            "lp": deepect.tree_.leaf_purity(labels)[0],
                             "seed": seed,
                         }
                     ]
                 )
+                print(e)
 
         elif method == ClusteringMethod.DEEPECT_AUGMENTED_OURS:
             # Perform flat clustering with DeepECT and augmentation
@@ -485,12 +552,14 @@ def fit(
                 continue
             autoencoder.to(device)
 
-            custom_dataloaders = get_custom_dataloader_augmentations(data, dataset_type)
+            custom_dataloaders = get_custom_dataloader_augmentations(
+                data, dataset_type, seed
+            )
 
             deepect = DeepECTOurs(
                 max_iterations=max_iterations,
                 autoencoder=autoencoder,
-                clustering_optimizer_params={"lr": 1e-4, "betas": (0.9, 0.999)},
+                clustering_optimizer_params={"lr": 1e-4},
                 max_leaf_nodes=max_leaf_nodes,
                 custom_dataloaders=custom_dataloaders,
                 augmentation_invariance=True,
@@ -513,13 +582,22 @@ def fit(
                             "nmi": deepect.tree_.flat_nmi(labels, n_clusters),
                             "acc": deepect.tree_.flat_accuracy(labels, n_clusters),
                             "ari": deepect.tree_.flat_ari(labels, n_clusters),
+                            "nmi-kmeans": deepect.tree_.flat_nmi_kmeans(
+                                labels, n_clusters
+                            ),
+                            "acc-kmeans": deepect.tree_.flat_accuracy_kmeans(
+                                labels, n_clusters
+                            ),
+                            "ari-kmeans": deepect.tree_.flat_ari_kmeans(
+                                labels, n_clusters
+                            ),
                             "dp": deepect.tree_.dendrogram_purity(labels),
                             "lp": deepect.tree_.leaf_purity(labels)[0],
                             "seed": seed,
                         }
                     ]
                 )
-            except:
+            except Exception as e:
                 result_df = pd.DataFrame(
                     [
                         {
@@ -530,19 +608,29 @@ def fit(
                             "nmi": np.nan,
                             "acc": np.nan,
                             "ari": np.nan,
-                            "dp": np.nan,
-                            "lp": np.nan,
+                            "nmi-kmeans": deepect.tree_.flat_nmi_kmeans(
+                                labels, n_clusters
+                            ),
+                            "acc-kmeans": deepect.tree_.flat_accuracy_kmeans(
+                                labels, n_clusters
+                            ),
+                            "ari-kmeans": deepect.tree_.flat_ari_kmeans(
+                                labels, n_clusters
+                            ),
+                            "dp": deepect.tree_.dendrogram_purity(labels),
+                            "lp": deepect.tree_.leaf_purity(labels)[0],
                             "seed": seed,
                         }
                     ]
                 )
+                print(e)
 
         elif method == ClusteringMethod.DEEPECT_PAPER:
             autoencoder.to(device)
             deepect = DeepECTPaper(
                 max_iterations=max_iterations,
                 autoencoder=autoencoder,
-                clustering_optimizer_params={"lr": 1e-4, "betas": (0.9, 0.999)},
+                clustering_optimizer_params={"lr": 1e-4},
                 max_leaf_nodes=max_leaf_nodes,
                 random_state=np.random.RandomState(seed),
                 custom_dataloaders=dataloaders,
@@ -563,13 +651,22 @@ def fit(
                             "nmi": deepect.tree_.flat_nmi(labels, n_clusters),
                             "acc": deepect.tree_.flat_accuracy(labels, n_clusters),
                             "ari": deepect.tree_.flat_ari(labels, n_clusters),
+                            "nmi-kmeans": deepect.tree_.flat_nmi_kmeans(
+                                labels, n_clusters
+                            ),
+                            "acc-kmeans": deepect.tree_.flat_accuracy_kmeans(
+                                labels, n_clusters
+                            ),
+                            "ari-kmeans": deepect.tree_.flat_ari_kmeans(
+                                labels, n_clusters
+                            ),
                             "dp": deepect.tree_.dendrogram_purity(labels),
                             "lp": deepect.tree_.leaf_purity(labels)[0],
                             "seed": seed,
                         }
                     ]
                 )
-            except:
+            except Exception as e:
                 result_df = pd.DataFrame(
                     [
                         {
@@ -580,12 +677,22 @@ def fit(
                             "nmi": np.nan,
                             "acc": np.nan,
                             "ari": np.nan,
-                            "dp": np.nan,
-                            "lp": np.nan,
+                            "nmi-kmeans": deepect.tree_.flat_nmi_kmeans(
+                                labels, n_clusters
+                            ),
+                            "acc-kmeans": deepect.tree_.flat_accuracy_kmeans(
+                                labels, n_clusters
+                            ),
+                            "ari-kmeans": deepect.tree_.flat_ari_kmeans(
+                                labels, n_clusters
+                            ),
+                            "dp": deepect.tree_.dendrogram_purity(labels),
+                            "lp": deepect.tree_.leaf_purity(labels)[0],
                             "seed": seed,
                         }
                     ]
                 )
+                print(e)
 
         elif method == ClusteringMethod.DEEPECT_AUGMENTED_PAPER:
             # Perform flat clustering with DeepECT and augmentation
@@ -594,13 +701,13 @@ def fit(
             autoencoder.to(device)
 
             custom_dataloaders = get_custom_dataloader_augmentations(
-                data, dataset_type, can_use_workers
+                data, dataset_type, seed, can_use_workers
             )
 
             deepect = DeepECTPaper(
                 max_iterations=max_iterations,
                 autoencoder=autoencoder,
-                clustering_optimizer_params={"lr": 1e-4, "betas": (0.9, 0.999)},
+                clustering_optimizer_params={"lr": 1e-4},
                 max_leaf_nodes=max_leaf_nodes,
                 custom_dataloaders=custom_dataloaders,
                 augmentation_invariance=True,
@@ -623,13 +730,22 @@ def fit(
                             "nmi": deepect.tree_.flat_nmi(labels, n_clusters),
                             "acc": deepect.tree_.flat_accuracy(labels, n_clusters),
                             "ari": deepect.tree_.flat_ari(labels, n_clusters),
+                            "nmi-kmeans": deepect.tree_.flat_nmi_kmeans(
+                                labels, n_clusters
+                            ),
+                            "acc-kmeans": deepect.tree_.flat_accuracy_kmeans(
+                                labels, n_clusters
+                            ),
+                            "ari-kmeans": deepect.tree_.flat_ari_kmeans(
+                                labels, n_clusters
+                            ),
                             "dp": deepect.tree_.dendrogram_purity(labels),
                             "lp": deepect.tree_.leaf_purity(labels)[0],
                             "seed": seed,
                         }
                     ]
                 )
-            except:
+            except Exception as e:
                 result_df = pd.DataFrame(
                     [
                         {
@@ -640,12 +756,22 @@ def fit(
                             "nmi": np.nan,
                             "acc": np.nan,
                             "ari": np.nan,
-                            "dp": np.nan,
-                            "lp": np.nan,
+                            "nmi-kmeans": deepect.tree_.flat_nmi_kmeans(
+                                labels, n_clusters
+                            ),
+                            "acc-kmeans": deepect.tree_.flat_accuracy_kmeans(
+                                labels, n_clusters
+                            ),
+                            "ari-kmeans": deepect.tree_.flat_ari_kmeans(
+                                labels, n_clusters
+                            ),
+                            "dp": deepect.tree_.dendrogram_purity(labels),
+                            "lp": deepect.tree_.leaf_purity(labels)[0],
                             "seed": seed,
                         }
                     ]
                 )
+                print(e)
 
         elif method == ClusteringMethod.IDEC:
 
@@ -653,18 +779,21 @@ def fit(
             idec = IDEC(
                 n_clusters=n_clusters,
                 batch_size=batch_size,
-                autoencoder=autoencoder,
-                clustering_optimizer_params={"lr": 1e-4, "betas": (0.9, 0.999)},
+                neural_network=autoencoder,
+                clustering_optimizer_params={"lr": 1e-4},
                 cluster_loss_weight=10.0,  # needs to be 10 to weight cluster loss 10x higher than autoencoder loss like in the paper
                 clustering_epochs=max_clustering_epochs,
                 random_state=seed,
                 initial_clustering_class=KMeans,
-                initial_clustering_params={"n_init": 20, "random_state": seed},
+                initial_clustering_params={
+                    "n_init": 20,
+                    "random_state": np.random.RandomState(seed),
+                },
                 custom_dataloaders=dataloaders,
             )
             print("fitting IDEC...")
             idec.fit(data)
-            autoencoder = idec.autoencoder
+            autoencoder = idec.neural_network
             print("finished fitting IDEC")
 
             # Calculate evaluation metrics
@@ -762,6 +891,8 @@ def fit(
                 Original_Dataset(data_shuffled),
                 batch_size=batch_size,
                 shuffle=False,
+                generator=generator,
+                worker_init_fn=seed_worker,
             )
             # Perform hierarchical clustering with Autoencoder and single
             print("fitting ae_single...")
@@ -799,6 +930,8 @@ def fit(
                 Original_Dataset(data_shuffled),
                 batch_size=batch_size,
                 shuffle=False,
+                generator=generator,
+                worker_init_fn=seed_worker,
             )
             # Perform hierarchical clustering with Autoencoder and complete
             print("fitting ae_complete...")
@@ -856,7 +989,10 @@ def shuffle_dataset(data, labels):
 
 
 def get_custom_dataloader_augmentations(
-    data: np.ndarray, dataset_type: DatasetType, can_use_workers: bool = False
+    data: np.ndarray,
+    dataset_type: DatasetType,
+    seed: int,
+    can_use_workers: bool = False,
 ):
     """
     Get custom dataloaders with augmentations.
@@ -875,19 +1011,16 @@ def get_custom_dataloader_augmentations(
     tuple
         The train and test dataloaders.
     """
+
     degrees = (-15, 15)
     translation = (
         0.14 if dataset_type == DatasetType.USPS else 0.08,
         0.14 if dataset_type == DatasetType.USPS else 0.08,
     )
-    image_min_value = -0.999999 if dataset_type == DatasetType.USPS else 0.0
+    image_min_value = np.min(data)
     image_size = 16 if dataset_type == DatasetType.USPS else 28
 
-    image_max_value = (
-        np.max(data) - image_min_value
-        if dataset_type == DatasetType.USPS
-        else np.max(data)
-    )
+    image_max_value = np.max(data) - image_min_value
 
     augmentation_transform = transforms.Compose(
         [
@@ -945,6 +1078,12 @@ def get_custom_dataloader_augmentations(
     original_dataset = Original_Dataset(data)
     augmented_dataset = Augmented_Dataset(data, augmentation_transform)
 
+    generator = torch.Generator()
+    generator.manual_seed(seed)
+
+    def workers_init(worker_id):
+        set_torch_seed(seed)
+
     # Create the dataloaders
     trainloader = DataLoader(
         augmented_dataset,
@@ -952,6 +1091,8 @@ def get_custom_dataloader_augmentations(
         shuffle=True,
         num_workers=5 if can_use_workers else 0,
         prefetch_factor=200 if can_use_workers else None,
+        worker_init_fn=workers_init,
+        generator=generator,
     )
     testloader = DataLoader(
         original_dataset,
@@ -959,6 +1100,8 @@ def get_custom_dataloader_augmentations(
         shuffle=False,
         num_workers=5 if can_use_workers else 0,
         prefetch_factor=200 if can_use_workers else None,
+        worker_init_fn=workers_init,
+        generator=generator,
     )
 
     return trainloader, testloader
@@ -1031,16 +1174,13 @@ def get_autoencoder_path(
     """
     if (
         autoencoder_params_path is None
-        and autoencoder_type == AutoencoderType.CLUSTPY_STANDARD
-    ):
-        params_path = pathlib.Path(f"practical/DeepClustering/DeepECT/pretrained_autoencoders/{dataset['dataset_name']}_autoencoder_{embedding_dim}_pretrained_{seed}.pth")
-    elif (
-        autoencoder_params_path is None
         and autoencoder_type == AutoencoderType.DEEPECT_STACKED_AE
     ):
-        params_path = pathlib.Path(f"practical/DeepClustering/DeepECT/pretrained_autoencoders/{dataset['dataset_name']}_stacked_ae_{embedding_dim}_pretrained_{seed}.pth")
-    
-    else: 
+        params_path = pathlib.Path(
+            f"practical/DeepClustering/DeepECT/pretrained_autoencoders/{dataset['dataset_name']}_stacked_ae_{embedding_dim}_pretrained_{seed}.pth"
+        )
+
+    else:
         params_path = pathlib.Path(autoencoder_params_path)
     return params_path.resolve()
 
@@ -1082,9 +1222,21 @@ def evaluate(
     print(
         f"-------------------------------------------Run: {dataset_type.name}_{autoencoder_type.name}_{embedding_dim}_{seed}"
     )
-
+    # Reproducability - restricting Kmeans to not parallelize
+    for lib in [
+        "OMP_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "BLIS_NUM_THREADS",
+        "VECLIB_MAXIMUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+    ]:
+        os.environ[lib] = "1"
+    os.environ["KMP_INIT_AT_FORK"] = "FALSE"
+    os.environ["KMP_DUPLICATE_LIB_OK"] = "True"
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
     torch.use_deterministic_algorithms(mode=True)
+    # torch.set_num_threads(1)
 
     dataset = get_dataset(dataset_type)
 
@@ -1277,12 +1429,20 @@ def pretrain_for_multiple_seeds(seeds: List[int], embedding_dims=[10], worker_nu
         result = pool.starmap(pretraining_with_data_load, all_autoencoders)
     return result
 
-def load_precomputed_results(dataset_type: DatasetType, autoencoder_type: AutoencoderType, seeds: List[int], embedding_dims: List[int] = [10]):
+
+def load_precomputed_results(
+    dataset_type: DatasetType,
+    autoencoder_type: AutoencoderType,
+    seeds: List[int],
+    embedding_dims: List[int] = [10],
+):
     results = []
     dataset = get_dataset(dataset_type)
     for method, seed, embedding_dim in product(ClusteringMethod, seeds, embedding_dims):
         # Save path
-        result_path = pathlib.Path(f"practical/DeepClustering/DeepECT/results/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.pq")
+        result_path = pathlib.Path(
+            f"practical/DeepClustering/DeepECT/results/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.pq"
+        )
         if os.path.exists(result_path):
             results.append(pd.read_parquet(result_path))
             continue
@@ -1290,7 +1450,7 @@ def load_precomputed_results(dataset_type: DatasetType, autoencoder_type: Autoen
 
 
 if __name__ == "__main__":
-    seeds = [21, 42]
+    seeds = [21, 42, 63]
     embedding_dims = [10]
     worker_num = 2
     pretrain_for_multiple_seeds(

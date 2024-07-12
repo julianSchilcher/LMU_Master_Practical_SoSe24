@@ -11,16 +11,17 @@ import torch
 import torch.utils.data
 from clustpy.data.real_torchvision_data import load_mnist
 from clustpy.deep._data_utils import augmentation_invariance_check
-from clustpy.deep._train_utils import \
-    get_default_deep_clustering_initialization
+from clustpy.deep._train_utils import get_default_deep_clustering_initialization
 from clustpy.deep._utils import set_torch_seed
-from clustpy.deep.autoencoders._abstract_autoencoder import \
-    _AbstractAutoencoder
+from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
 from sklearn.cluster import KMeans
 from tqdm import tqdm
 
-from practical.DeepClustering.DeepECT.metrics import (PredictionClusterNode,
-                                                      PredictionClusterTree)
+from practical.DeepClustering.DeepECT.metrics import (
+    PredictionClusterNode,
+    PredictionClusterTree,
+)
+from practical.DeepClustering.DeepECT.utils import mean
 
 
 class Cluster_Node:
@@ -184,6 +185,7 @@ class Cluster_Tree:
         self,
         init_leafnode_centers: np.ndarray,
         init_labels: np.ndarray,
+        random_state: np.random.RandomState,
         device: torch.device,
     ) -> "Cluster_Tree":
         """
@@ -205,6 +207,7 @@ class Cluster_Tree:
         """
         # center of root can be a dummy-center since it's never needed
         self.root = Cluster_Node(np.zeros(init_leafnode_centers.shape[1]), device)
+        self.random_state = random_state
         # assign the 2 initial leaf nodes with their initial centers
         self.root.set_childs(
             None,
@@ -336,7 +339,9 @@ class Cluster_Tree:
         for i, node in enumerate(self.leaf_nodes):
             indices = (assignments == i).nonzero()
             if len(indices) < 1:
-                node.assignments = None  # store None (perhaps overwrite previous assignment)
+                node.assignments = (
+                    None  # store None (perhaps overwrite previous assignment)
+                )
                 node.assignment_indices = None
                 node.sum_squared_dist = None
             else:
@@ -344,9 +349,13 @@ class Cluster_Tree:
                 if leafnode_data.ndim == 1:
                     leafnode_data = leafnode_data[None]
                 node.assignments = leafnode_data
-                node.assignment_indices = indices.reshape(indices.nelement())  # one dimensional tensor containing the indices
+                node.assignment_indices = indices.reshape(
+                    indices.nelement()
+                )  # one dimensional tensor containing the indices
                 if compute_sum_dist:
-                    node.sum_squared_dist = torch.sum(min_dists[indices.squeeze()].pow(2))
+                    node.sum_squared_dist = torch.sum(
+                        min_dists[indices.squeeze()].pow(2)
+                    )
 
     def _assign_to_splitnodes(self, node: Cluster_Node):
         """
@@ -361,17 +370,31 @@ class Cluster_Tree:
             return node.assignment_indices, node.assignments
         else:
             # get assignments of left child
-            left_assignment_indices, left_assignments = self._assign_to_splitnodes(node.left_child)
+            left_assignment_indices, left_assignments = self._assign_to_splitnodes(
+                node.left_child
+            )
             # get assignments of right child
-            right_assignment_indices, right_assignments = self._assign_to_splitnodes(node.right_child)
+            right_assignment_indices, right_assignments = self._assign_to_splitnodes(
+                node.right_child
+            )
             # if one of the assignments is empty, then just use the assignments of the other node
             if left_assignments is None or right_assignments is None:
-                node.assignments = left_assignments if right_assignments is None else right_assignments
-                node.assignment_indices = left_assignment_indices if right_assignments is None else right_assignment_indices
+                node.assignments = (
+                    left_assignments if right_assignments is None else right_assignments
+                )
+                node.assignment_indices = (
+                    left_assignment_indices
+                    if right_assignments is None
+                    else right_assignment_indices
+                )
             else:
                 # merge the assignments of the child nodes and store it in the node
-                node.assignments = torch.cat((left_assignments, right_assignments), dim=0)
-                node.assignment_indices = torch.cat((left_assignment_indices, right_assignment_indices), dim=0)
+                node.assignments = torch.cat(
+                    (left_assignments, right_assignments), dim=0
+                )
+                node.assignment_indices = torch.cat(
+                    (left_assignment_indices, right_assignment_indices), dim=0
+                )
             return node.assignment_indices, node.assignments
 
     def nc_loss(self, augmented_batch: torch.Tensor = None) -> torch.Tensor:
@@ -389,16 +412,24 @@ class Cluster_Tree:
             The NC loss.
         """
         # convert the list of leaf nodes to a list of the corresponding leaf node centers as tensors
-        leafnode_centers = [node.center for node in self.leaf_nodes if node.assignments is not None]
+        leafnode_centers = [
+            node.center for node in self.leaf_nodes if node.assignments is not None
+        ]
         if len(leafnode_centers) == 0:
-            return torch.tensor(0.0, dtype=torch.float, device=self.leaf_nodes[0].device)
+            return torch.tensor(
+                0.0, dtype=torch.float, device=self.leaf_nodes[0].device
+            )
         # reformat list of tensors to one single tensor of shape (#leafnodes,#emb_features)
         leafnode_center_tensor = torch.stack(leafnode_centers, dim=0)
 
         # calculate the center of the assignments from the current minibatch for each leaf node
         with torch.no_grad():  # embedded space should not be optimized in this loss
             # get the assignments for each leaf node (from the current minibatch)
-            leafnode_assignments = [(node.assignments, node.assignment_indices) for node in self.leaf_nodes if node.assignments is not None]
+            leafnode_assignments = [
+                (node.assignments, node.assignment_indices)
+                for node in self.leaf_nodes
+                if node.assignments is not None
+            ]
 
             def calc_assignment_center(assignment):
                 assignments, indices = assignment
@@ -410,13 +441,19 @@ class Cluster_Tree:
                 else:
                     return sum_assignments / len(assignments)
 
-            leafnode_minibatch_centers = list(map(calc_assignment_center, leafnode_assignments))
+            leafnode_minibatch_centers = list(
+                map(calc_assignment_center, leafnode_assignments)
+            )
 
         # reformat list of tensors to one single tensor of shape (#leafnodes,#emb_features)
-        leafnode_minibatch_centers_tensor = torch.stack(leafnode_minibatch_centers, dim=0)
+        leafnode_minibatch_centers_tensor = torch.stack(
+            leafnode_minibatch_centers, dim=0
+        )
 
         # calculate the distance between the current leaf node centers and the center of its assigned embeddings averaged over all leaf nodes
-        distance = torch.sum((leafnode_center_tensor - leafnode_minibatch_centers_tensor) ** 2, dim=1)
+        distance = torch.sum(
+            (leafnode_center_tensor - leafnode_minibatch_centers_tensor) ** 2, dim=1
+        )
         distance = torch.sqrt(distance)
         loss = torch.sum(distance) / len(leafnode_center_tensor)
         return loss
@@ -481,9 +518,13 @@ class Cluster_Tree:
         # Calculate lc loss for siblings if they exist
         if root.left_child and root.right_child:
             # calculate dc loss for left child with respect to the right child
-            loss_left = self._single_sibling_loss(root.left_child, root.right_child, augmented_batch)
+            loss_left = self._single_sibling_loss(
+                root.left_child, root.right_child, augmented_batch
+            )
             # calculate dc loss for right child with respect to the left child
-            loss_right = self._single_sibling_loss(root.right_child, root.left_child, augmented_batch)
+            loss_right = self._single_sibling_loss(
+                root.right_child, root.left_child, augmented_batch
+            )
             # store the losses
             sibling_loss.extend([loss_left, loss_right])
 
@@ -731,8 +772,7 @@ class Cluster_Tree:
                 if highest_dist_leaf_node.assignments is not None:
                     assignments.append(highest_dist_leaf_node.assignments.cpu())
             child_assignments = KMeans(
-                n_clusters=2,
-                n_init=20,
+                n_clusters=2, n_init=20, random_state=self.random_state
             ).fit(torch.cat(assignments, dim=0).numpy())
             print(f"Leaf assignments: {len(child_assignments.labels_)}")
             child_weights = np.array(
@@ -770,6 +810,7 @@ def transform_cluster_tree_to_pred_tree(tree: Cluster_Tree) -> PredictionCluster
     PredictionClusterTree
         The transformed prediction cluster tree.
     """
+
     def transform_nodes(node: Cluster_Node):
         pred_node = PredictionClusterNode(
             node.id, node.split_id, node.center.detach().cpu().numpy()
@@ -823,6 +864,7 @@ class _DeepECT_Module(torch.nn.Module):
                     if i >= 0
                 ]
             ),
+            random_state,
             device,
         )
         self.device = device
@@ -874,11 +916,11 @@ class _DeepECT_Module(torch.nn.Module):
         """
         train_iterator = iter(trainloader)
 
-        mov_dc_loss = 0.0
-        mov_nc_loss = 0.0
-        mov_rec_loss = 0.0
-        mov_rec_loss_aug = 0.0
-        mov_loss = 0.0
+        mov_dc_loss = []
+        mov_nc_loss = []
+        mov_rec_loss = []
+        mov_rec_loss_aug = []
+        mov_loss = []
 
         optimizer.add_param_group({"params": self.cluster_tree.root.left_child.center})
         optimizer.add_param_group({"params": self.cluster_tree.root.right_child.center})
@@ -931,20 +973,28 @@ class _DeepECT_Module(torch.nn.Module):
 
             if self.augmentation_invariance:
                 loss = nc_loss + dc_loss + (rec_loss + rec_loss_aug) / 2
-                mov_rec_loss_aug += rec_loss_aug.item()
+                mov_rec_loss_aug.append(rec_loss_aug.item())
             else:
                 loss = nc_loss + dc_loss + rec_loss
 
-            mov_nc_loss += nc_loss.item()
-            mov_dc_loss += dc_loss.item()
-            mov_rec_loss += rec_loss.item()
-            mov_loss += loss.item()
+            mov_nc_loss.append(nc_loss.item())
+            mov_dc_loss.append(dc_loss.item())
+            mov_rec_loss.append(rec_loss.item())
+            mov_loss.append(loss.item())
 
             if (e <= 10 or e % 100 == 0) and e > 0:
                 logging.info(
-                    f"{e} - moving averages: dc_loss: {mov_dc_loss/e} "
-                    f"nc_loss: {mov_nc_loss/e} rec_loss: {mov_rec_loss/e} {f'rec_loss_aug: {mov_rec_loss_aug/e}' if self.augmentation_invariance else ''} total_loss: {mov_loss/e}"
+                    f"{e} - moving averages: dc_loss: {mean(mov_dc_loss)} "
+                    f"nc_loss: {mean(mov_nc_loss)} rec_loss: {mean(mov_rec_loss)} "
+                    f"{f'rec_loss_aug: {mean(mov_rec_loss_aug)}' if self.augmentation_invariance else ''} "
+                    f"total_loss: {mean(mov_loss)} "
+                    f"nodes: {self.cluster_tree.number_nodes} leaf_nodes: {len(self.cluster_tree.leaf_nodes)}"
                 )
+                mov_dc_loss.clear()
+                mov_nc_loss.clear()
+                mov_rec_loss.clear()
+                mov_rec_loss_aug.clear()
+                mov_loss.clear()
 
             loss.backward()
             optimizer.step()
@@ -986,7 +1036,9 @@ class _DeepECT_Module(torch.nn.Module):
                 self.cluster_tree.assign_to_nodes(embeddings)
                 # use assignment indices for prediction tree
                 for node in self.cluster_tree.leaf_nodes:
-                    pred_tree[node.id].assign_batch(indices, node.assignment_indices, node.assignments)
+                    pred_tree[node.id].assign_batch(
+                        indices, node.assignment_indices, node.assignments
+                    )
                 self.cluster_tree.clear_node_assignments()
 
         return pred_tree
@@ -1088,7 +1140,7 @@ def _deep_ect(
         custom_dataloaders,
         KMeans,
         {"random_state": random_state, "n_init": 20},
-        None,  
+        None,
         random_state,
     )
 
@@ -1269,7 +1321,6 @@ if __name__ == "__main__":
             optimizer_params={},
             data=dataset,
             batch_size=256,
-            device=device,
             print_step=1,
         )
     )

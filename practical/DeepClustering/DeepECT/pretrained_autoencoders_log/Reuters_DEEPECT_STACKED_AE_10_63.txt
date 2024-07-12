@@ -1,0 +1,1300 @@
+INFO:root:Layer 1 Round 100 current loss: 3.0499563217163086
+INFO:root:Layer 1 Round 200 current loss: 2.9191854596138
+INFO:root:Layer 1 Round 300 current loss: 2.8428983441988627
+INFO:root:Layer 1 Round 400 current loss: 2.7831545543670653
+INFO:root:Layer 1 Round 500 current loss: 2.7323776812553406
+INFO:root:Layer 1 Round 600 current loss: 2.6860110553105674
+INFO:root:Layer 1 Round 700 current loss: 2.644459982599531
+INFO:root:Layer 1 Round 800 current loss: 2.605331112444401
+INFO:root:Layer 1 Round 900 current loss: 2.569123701784346
+INFO:root:Layer 1 Round 1000 current loss: 2.5345827109813692
+INFO:root:Layer 1 Round 1100 current loss: 2.5010679310018364
+INFO:root:Layer 1 Round 1200 current loss: 2.4687638954321542
+INFO:root:Layer 1 Round 1300 current loss: 2.4364895936158986
+INFO:root:Layer 1 Round 1400 current loss: 2.406224929179464
+INFO:root:Layer 1 Round 1500 current loss: 2.3777031875451407
+INFO:root:Layer 1 Round 1600 current loss: 2.350532470718026
+INFO:root:Layer 1 Round 1700 current loss: 2.324956564131905
+INFO:root:Layer 1 Round 1800 current loss: 2.3004202935430738
+INFO:root:Layer 1 Round 1900 current loss: 2.27763926669171
+INFO:root:Layer 1 Round 2000 current loss: 2.2558926996588706
+INFO:root:Layer 1 Round 2100 current loss: 2.2359477119218734
+INFO:root:Layer 1 Round 2200 current loss: 2.2170927503975957
+INFO:root:Layer 1 Round 2300 current loss: 2.1996842707240063
+INFO:root:Layer 1 Round 2400 current loss: 2.1831556412080926
+INFO:root:Layer 1 Round 2500 current loss: 2.167584551525116
+INFO:root:Layer 1 Round 2600 current loss: 2.1528589148246327
+INFO:root:Layer 1 Round 2700 current loss: 2.1386697392993503
+INFO:root:Layer 1 Round 2800 current loss: 2.1255480750117983
+INFO:root:Layer 1 Round 2900 current loss: 2.1132462771185514
+INFO:root:Layer 1 Round 3000 current loss: 2.101334710876147
+INFO:root:Layer 1 Round 3100 current loss: 2.0903550790202234
+INFO:root:Layer 1 Round 3200 current loss: 2.0797353319823744
+INFO:root:Layer 1 Round 3300 current loss: 2.069636824275508
+INFO:root:Layer 1 Round 3400 current loss: 2.0602064025752687
+INFO:root:Layer 1 Round 3500 current loss: 2.051059091125216
+INFO:root:Layer 1 Round 3600 current loss: 2.0422561337219345
+INFO:root:Layer 1 Round 3700 current loss: 2.033901688214895
+INFO:root:Layer 1 Round 3800 current loss: 2.025929540176141
+INFO:root:Layer 1 Round 3900 current loss: 2.0183464448268595
+INFO:root:Layer 1 Round 4000 current loss: 2.011099156349897
+INFO:root:Layer 1 Round 4100 current loss: 2.004048211138423
+INFO:root:Layer 1 Round 4200 current loss: 1.9974522330931255
+INFO:root:Layer 1 Round 4300 current loss: 1.9910745331298474
+INFO:root:Layer 1 Round 4400 current loss: 1.9849397211183202
+INFO:root:Layer 1 Round 4500 current loss: 1.9789640692340003
+INFO:root:Layer 1 Round 4600 current loss: 1.9733738881608713
+INFO:root:Layer 1 Round 4700 current loss: 1.9677653506207973
+INFO:root:Layer 1 Round 4800 current loss: 1.9623774546136459
+INFO:root:Layer 1 Round 4900 current loss: 1.9572670098713467
+INFO:root:Layer 1 Round 5000 current loss: 1.952207877445221
+INFO:root:Layer 1 Round 5100 current loss: 1.9473513313368256
+INFO:root:Layer 1 Round 5200 current loss: 1.9428426505510623
+INFO:root:Layer 1 Round 5300 current loss: 1.9383505977774567
+INFO:root:Layer 1 Round 5400 current loss: 1.9340402811986428
+INFO:root:Layer 1 Round 5500 current loss: 1.9298434414646841
+INFO:root:Layer 1 Round 5600 current loss: 1.9257049901144845
+INFO:root:Layer 1 Round 5700 current loss: 1.9217875731200502
+INFO:root:Layer 1 Round 5800 current loss: 1.918052931016889
+INFO:root:Layer 1 Round 5900 current loss: 1.914314780053446
+INFO:root:Layer 1 Round 6000 current loss: 1.9106714693903923
+INFO:root:Layer 1 Round 6100 current loss: 1.907254753151878
+INFO:root:Layer 1 Round 6200 current loss: 1.903927913212007
+INFO:root:Layer 1 Round 6300 current loss: 1.9005781868904357
+INFO:root:Layer 1 Round 6400 current loss: 1.8973097117058932
+INFO:root:Layer 1 Round 6500 current loss: 1.8941409945671375
+INFO:root:Layer 1 Round 6600 current loss: 1.891012993256251
+INFO:root:Layer 1 Round 6700 current loss: 1.888029436922785
+INFO:root:Layer 1 Round 6800 current loss: 1.8850421119086882
+INFO:root:Layer 1 Round 6900 current loss: 1.8823007325504137
+INFO:root:Layer 1 Round 7000 current loss: 1.8795352090256554
+INFO:root:Layer 1 Round 7100 current loss: 1.8768411659858597
+INFO:root:Layer 1 Round 7200 current loss: 1.874195607966847
+INFO:root:Layer 1 Round 7300 current loss: 1.8716680375843833
+INFO:root:Layer 1 Round 7400 current loss: 1.8691262541751603
+INFO:root:Layer 1 Round 7500 current loss: 1.8666943995475769
+INFO:root:Layer 1 Round 7600 current loss: 1.864281842175283
+INFO:root:Layer 1 Round 7700 current loss: 1.8619829814310198
+INFO:root:Layer 1 Round 7800 current loss: 1.8596463867639883
+INFO:root:Layer 1 Round 7900 current loss: 1.857444937334785
+INFO:root:Layer 1 Round 8000 current loss: 1.8553055807352066
+INFO:root:Layer 1 Round 8100 current loss: 1.8531958003691684
+INFO:root:Layer 1 Round 8200 current loss: 1.851063313324277
+INFO:root:Layer 1 Round 8300 current loss: 1.848963019445718
+INFO:root:Layer 1 Round 8400 current loss: 1.8469293229069028
+INFO:root:Layer 1 Round 8500 current loss: 1.845020700230318
+INFO:root:Layer 1 Round 8600 current loss: 1.8431700129009956
+INFO:root:Layer 1 Round 8700 current loss: 1.8413028701146443
+INFO:root:Layer 1 Round 8800 current loss: 1.8394605779647828
+INFO:root:Layer 1 Round 8900 current loss: 1.8376632803879427
+INFO:root:Layer 1 Round 9000 current loss: 1.8359265198045307
+INFO:root:Layer 1 Round 9100 current loss: 1.8342184000617856
+INFO:root:Layer 1 Round 9200 current loss: 1.8325111553979956
+INFO:root:Layer 1 Round 9300 current loss: 1.830870177874001
+INFO:root:Layer 1 Round 9400 current loss: 1.8292740279943385
+INFO:root:Layer 1 Round 9500 current loss: 1.8276658460090034
+INFO:root:Layer 1 Round 9600 current loss: 1.8260435307150085
+INFO:root:Layer 1 Round 9700 current loss: 1.8245324664017588
+INFO:root:Layer 1 Round 9800 current loss: 1.823024678485734
+INFO:root:Layer 1 Round 9900 current loss: 1.8214774320823979
+INFO:root:Layer 1 Round 10000 current loss: 1.8200072169184685
+INFO:root:Layer 1 Round 10100 current loss: 1.8184975868050415
+INFO:root:Layer 1 Round 10200 current loss: 1.8171050849498487
+INFO:root:Layer 1 Round 10300 current loss: 1.8156268059975893
+INFO:root:Layer 1 Round 10400 current loss: 1.814272263176166
+INFO:root:Layer 1 Round 10500 current loss: 1.8129579998425076
+INFO:root:Layer 1 Round 10600 current loss: 1.8116119876447714
+INFO:root:Layer 1 Round 10700 current loss: 1.8103049530269943
+INFO:root:Layer 1 Round 10800 current loss: 1.808973412083255
+INFO:root:Layer 1 Round 10900 current loss: 1.8076949527285515
+INFO:root:Layer 1 Round 11000 current loss: 1.8064587684002789
+INFO:root:Layer 1 Round 11100 current loss: 1.8052264211736284
+INFO:root:Layer 1 Round 11200 current loss: 1.8039944520273379
+INFO:root:Layer 1 Round 11300 current loss: 1.8028016357822756
+INFO:root:Layer 1 Round 11400 current loss: 1.8016096175762646
+INFO:root:Layer 1 Round 11500 current loss: 1.8004691263592763
+INFO:root:Layer 1 Round 11600 current loss: 1.7993537169489366
+INFO:root:Layer 1 Round 11700 current loss: 1.7982194447924948
+INFO:root:Layer 1 Round 11800 current loss: 1.7970993850392811
+INFO:root:Layer 1 Round 11900 current loss: 1.7960121183435456
+INFO:root:Layer 1 Round 12000 current loss: 1.7949396961728732
+INFO:root:Layer 1 Round 12100 current loss: 1.7938540710397988
+INFO:root:Layer 1 Round 12200 current loss: 1.7927949809246375
+INFO:root:Layer 1 Round 12300 current loss: 1.7917839334456902
+INFO:root:Layer 1 Round 12400 current loss: 1.7908107337836296
+INFO:root:Layer 1 Round 12500 current loss: 1.789798907623291
+INFO:root:Layer 1 Round 12600 current loss: 1.788823787797065
+INFO:root:Layer 1 Round 12700 current loss: 1.787887362711073
+INFO:root:Layer 1 Round 12800 current loss: 1.7869454585853963
+INFO:root:Layer 1 Round 12900 current loss: 1.7860012090760609
+INFO:root:Layer 1 Round 13000 current loss: 1.7850781795703448
+INFO:root:Layer 1 Round 13100 current loss: 1.7842136160744966
+INFO:root:Layer 1 Round 13200 current loss: 1.7833427912809632
+INFO:root:Layer 1 Round 13300 current loss: 1.782443370397826
+INFO:root:Layer 1 Round 13400 current loss: 1.7815460856459033
+INFO:root:Layer 1 Round 13500 current loss: 1.7807339471534447
+INFO:root:Layer 1 Round 13600 current loss: 1.7798963293959114
+INFO:root:Layer 1 Round 13700 current loss: 1.7790527835466565
+INFO:root:Layer 1 Round 13800 current loss: 1.7782324764521225
+INFO:root:Layer 1 Round 13900 current loss: 1.7773989025122827
+INFO:root:Layer 1 Round 14000 current loss: 1.7765333853874887
+INFO:root:Layer 1 Round 14100 current loss: 1.77568319756934
+INFO:root:Layer 1 Round 14200 current loss: 1.774884156744245
+INFO:root:Layer 1 Round 14300 current loss: 1.7741246003787834
+INFO:root:Layer 1 Round 14400 current loss: 1.7733125224957864
+INFO:root:Layer 1 Round 14500 current loss: 1.7725084881946958
+INFO:root:Layer 1 Round 14600 current loss: 1.7717406843051517
+INFO:root:Layer 1 Round 14700 current loss: 1.7709693690870896
+INFO:root:Layer 1 Round 14800 current loss: 1.770208273844139
+INFO:root:Layer 1 Round 14900 current loss: 1.7694654419118125
+INFO:root:Layer 1 Round 15000 current loss: 1.7687146328051886
+INFO:root:Layer 1 Round 15100 current loss: 1.7680147527464178
+INFO:root:Layer 1 Round 15200 current loss: 1.767319346478111
+INFO:root:Layer 1 Round 15300 current loss: 1.76665390996372
+INFO:root:Layer 1 Round 15400 current loss: 1.7659767075482902
+INFO:root:Layer 1 Round 15500 current loss: 1.765284486562975
+INFO:root:Layer 1 Round 15600 current loss: 1.7646038785118323
+INFO:root:Layer 1 Round 15700 current loss: 1.7639322403130258
+INFO:root:Layer 1 Round 15800 current loss: 1.763273108752468
+INFO:root:Layer 1 Round 15900 current loss: 1.7626059251836261
+INFO:root:Layer 1 Round 16000 current loss: 1.7619411398768425
+INFO:root:Layer 1 Round 16100 current loss: 1.7612940001339645
+INFO:root:Layer 1 Round 16200 current loss: 1.7606359417203032
+INFO:root:Layer 1 Round 16300 current loss: 1.759980413657756
+INFO:root:Layer 1 Round 16400 current loss: 1.7593640238482777
+INFO:root:Layer 1 Round 16500 current loss: 1.7587239025217114
+INFO:root:Layer 1 Round 16600 current loss: 1.7581130074090268
+INFO:root:Layer 1 Round 16700 current loss: 1.7575102208617204
+INFO:root:Layer 1 Round 16800 current loss: 1.7569031789898872
+INFO:root:Layer 1 Round 16900 current loss: 1.7563135882383267
+INFO:root:Layer 1 Round 17000 current loss: 1.7557527083228617
+INFO:root:Layer 1 Round 17100 current loss: 1.7551607088945065
+INFO:root:Layer 1 Round 17200 current loss: 1.7545780181260997
+INFO:root:Layer 1 Round 17300 current loss: 1.753985244056393
+INFO:root:Layer 1 Round 17400 current loss: 1.7534322157947497
+INFO:root:Layer 1 Round 17500 current loss: 1.7528541970797948
+INFO:root:Layer 1 Round 17600 current loss: 1.75231483083557
+INFO:root:Layer 1 Round 17700 current loss: 1.7517532442653247
+INFO:root:Layer 1 Round 17800 current loss: 1.751169007648243
+INFO:root:Layer 1 Round 17900 current loss: 1.750637903060327
+INFO:root:Layer 1 Round 18000 current loss: 1.7501036950482263
+INFO:root:Layer 1 Round 18100 current loss: 1.7495860659680973
+INFO:root:Layer 1 Round 18200 current loss: 1.74910002045579
+INFO:root:Layer 1 Round 18300 current loss: 1.7485924622009361
+INFO:root:Layer 1 Round 18400 current loss: 1.7480442942290202
+INFO:root:Layer 1 Round 18500 current loss: 1.7475492477288117
+INFO:root:Layer 1 Round 18600 current loss: 1.7470243215496821
+INFO:root:Layer 1 Round 18700 current loss: 1.7465205829347519
+INFO:root:Layer 1 Round 18800 current loss: 1.7460181789005056
+INFO:root:Layer 1 Round 18900 current loss: 1.7454869060036997
+INFO:root:Layer 1 Round 19000 current loss: 1.7449849167936726
+INFO:root:Layer 1 Round 19100 current loss: 1.74450642183189
+INFO:root:Layer 1 Round 19200 current loss: 1.7440188104535144
+INFO:root:Layer 1 Round 19300 current loss: 1.7435157574829043
+INFO:root:Layer 1 Round 19400 current loss: 1.7430332862286224
+INFO:root:Layer 1 Round 19500 current loss: 1.7425753795733818
+INFO:root:Layer 1 Round 19600 current loss: 1.7421039432652143
+INFO:root:Layer 1 Round 19700 current loss: 1.7416432892731604
+INFO:root:Layer 1 Round 19800 current loss: 1.7411750294102564
+INFO:root:Layer 1 Round 19900 current loss: 1.7407331619550235
+INFO:root:Layer 1 Round 20000 current loss: 1.7403127198696136
+INFO:root:Layer 2 Round 100 current loss: 2.6829880905151366
+INFO:root:Layer 2 Round 200 current loss: 2.592436091899872
+INFO:root:Layer 2 Round 300 current loss: 2.5269063568115233
+INFO:root:Layer 2 Round 400 current loss: 2.4715572953224183
+INFO:root:Layer 2 Round 500 current loss: 2.427489570617676
+INFO:root:Layer 2 Round 600 current loss: 2.3912681007385252
+INFO:root:Layer 2 Round 700 current loss: 2.359877794129508
+INFO:root:Layer 2 Round 800 current loss: 2.3325319051742555
+INFO:root:Layer 2 Round 900 current loss: 2.3090512290265823
+INFO:root:Layer 2 Round 1000 current loss: 2.287422403216362
+INFO:root:Layer 2 Round 1100 current loss: 2.2687843826684087
+INFO:root:Layer 2 Round 1200 current loss: 2.25176467080911
+INFO:root:Layer 2 Round 1300 current loss: 2.236316566467285
+INFO:root:Layer 2 Round 1400 current loss: 2.222428275687354
+INFO:root:Layer 2 Round 1500 current loss: 2.2097668426831563
+INFO:root:Layer 2 Round 1600 current loss: 2.198149987384677
+INFO:root:Layer 2 Round 1700 current loss: 2.1877453567
+INFO:root:Layer 2 Round 1800 current loss: 2.177714404265086
+INFO:root:Layer 2 Round 1900 current loss: 2.168234001774537
+INFO:root:Layer 2 Round 2000 current loss: 2.1594999830722807
+INFO:root:Layer 2 Round 2100 current loss: 2.151148093541463
+INFO:root:Layer 2 Round 2200 current loss: 2.143623048012907
+INFO:root:Layer 2 Round 2300 current loss: 2.1364528735824253
+INFO:root:Layer 2 Round 2400 current loss: 2.1294127527376014
+INFO:root:Layer 2 Round 2500 current loss: 2.122908835697174
+INFO:root:Layer 2 Round 2600 current loss: 2.1169137145464236
+INFO:root:Layer 2 Round 2700 current loss: 2.111085162030326
+INFO:root:Layer 2 Round 2800 current loss: 2.105438551902771
+INFO:root:Layer 2 Round 2900 current loss: 2.1002768077521488
+INFO:root:Layer 2 Round 3000 current loss: 2.094988685965538
+INFO:root:Layer 2 Round 3100 current loss: 2.0900432195202
+INFO:root:Layer 2 Round 3200 current loss: 2.0852437928691505
+INFO:root:Layer 2 Round 3300 current loss: 2.0807714317422925
+INFO:root:Layer 2 Round 3400 current loss: 2.0766161403235266
+INFO:root:Layer 2 Round 3500 current loss: 2.072449769633157
+INFO:root:Layer 2 Round 3600 current loss: 2.0683918475111325
+INFO:root:Layer 2 Round 3700 current loss: 2.064627780044401
+INFO:root:Layer 2 Round 3800 current loss: 2.061026190707558
+INFO:root:Layer 2 Round 3900 current loss: 2.05734426403657
+INFO:root:Layer 2 Round 4000 current loss: 2.0539267217218877
+INFO:root:Layer 2 Round 4100 current loss: 2.0505021303746758
+INFO:root:Layer 2 Round 4200 current loss: 2.047248741615386
+INFO:root:Layer 2 Round 4300 current loss: 2.044256459197333
+INFO:root:Layer 2 Round 4400 current loss: 2.0411315443028104
+INFO:root:Layer 2 Round 4500 current loss: 2.0381912283367583
+INFO:root:Layer 2 Round 4600 current loss: 2.035366445961206
+INFO:root:Layer 2 Round 4700 current loss: 2.0324929680215553
+INFO:root:Layer 2 Round 4800 current loss: 2.029678075561921
+INFO:root:Layer 2 Round 4900 current loss: 2.027102086398066
+INFO:root:Layer 2 Round 5000 current loss: 2.0245439203739166
+INFO:root:Layer 2 Round 5100 current loss: 2.0220175332415335
+INFO:root:Layer 2 Round 5200 current loss: 2.0194625811622693
+INFO:root:Layer 2 Round 5300 current loss: 2.017196778014021
+INFO:root:Layer 2 Round 5400 current loss: 2.0147693121433257
+INFO:root:Layer 2 Round 5500 current loss: 2.0123921315236526
+INFO:root:Layer 2 Round 5600 current loss: 2.0101685270028455
+INFO:root:Layer 2 Round 5700 current loss: 2.008066096514986
+INFO:root:Layer 2 Round 5800 current loss: 2.0059230000191723
+INFO:root:Layer 2 Round 5900 current loss: 2.003687675746821
+INFO:root:Layer 2 Round 6000 current loss: 2.0015924192269643
+INFO:root:Layer 2 Round 6100 current loss: 1.9995486727698906
+INFO:root:Layer 2 Round 6200 current loss: 1.9976885434312206
+INFO:root:Layer 2 Round 6300 current loss: 1.9956859816256023
+INFO:root:Layer 2 Round 6400 current loss: 1.993809652160853
+INFO:root:Layer 2 Round 6500 current loss: 1.9920282653295076
+INFO:root:Layer 2 Round 6600 current loss: 1.9903370716535684
+INFO:root:Layer 2 Round 6700 current loss: 1.9887109787072708
+INFO:root:Layer 2 Round 6800 current loss: 1.986994013225331
+INFO:root:Layer 2 Round 6900 current loss: 1.985325835995052
+INFO:root:Layer 2 Round 7000 current loss: 1.9836493269886288
+INFO:root:Layer 2 Round 7100 current loss: 1.9820518121417139
+INFO:root:Layer 2 Round 7200 current loss: 1.9803424816164705
+INFO:root:Layer 2 Round 7300 current loss: 1.978795626375773
+INFO:root:Layer 2 Round 7400 current loss: 1.9772473241348525
+INFO:root:Layer 2 Round 7500 current loss: 1.9757061130364737
+INFO:root:Layer 2 Round 7600 current loss: 1.974195545190259
+INFO:root:Layer 2 Round 7700 current loss: 1.9725588559330285
+INFO:root:Layer 2 Round 7800 current loss: 1.971125169243568
+INFO:root:Layer 2 Round 7900 current loss: 1.9696568129636065
+INFO:root:Layer 2 Round 8000 current loss: 1.9681823343038558
+INFO:root:Layer 2 Round 8100 current loss: 1.9668591377911744
+INFO:root:Layer 2 Round 8200 current loss: 1.9654065718592666
+INFO:root:Layer 2 Round 8300 current loss: 1.964002222368516
+INFO:root:Layer 2 Round 8400 current loss: 1.9626117753982544
+INFO:root:Layer 2 Round 8500 current loss: 1.9612706305840437
+INFO:root:Layer 2 Round 8600 current loss: 1.9599718708631604
+INFO:root:Layer 2 Round 8700 current loss: 1.9586569920079462
+INFO:root:Layer 2 Round 8800 current loss: 1.957351935614239
+INFO:root:Layer 2 Round 8900 current loss: 1.9560237111536305
+INFO:root:Layer 2 Round 9000 current loss: 1.954778346909417
+INFO:root:Layer 2 Round 9100 current loss: 1.9536424564005255
+INFO:root:Layer 2 Round 9200 current loss: 1.9524210646489393
+INFO:root:Layer 2 Round 9300 current loss: 1.951208310934805
+INFO:root:Layer 2 Round 9400 current loss: 1.9500992567868942
+INFO:root:Layer 2 Round 9500 current loss: 1.948864538443716
+INFO:root:Layer 2 Round 9600 current loss: 1.947712484424313
+INFO:root:Layer 2 Round 9700 current loss: 1.9466113776521585
+INFO:root:Layer 2 Round 9800 current loss: 1.945566418122272
+INFO:root:Layer 2 Round 9900 current loss: 1.9444246510664622
+INFO:root:Layer 2 Round 10000 current loss: 1.9433794966697693
+INFO:root:Layer 2 Round 10100 current loss: 1.942295249735955
+INFO:root:Layer 2 Round 10200 current loss: 1.941220184973642
+INFO:root:Layer 2 Round 10300 current loss: 1.94020276106677
+INFO:root:Layer 2 Round 10400 current loss: 1.9392368499017678
+INFO:root:Layer 2 Round 10500 current loss: 1.938249369802929
+INFO:root:Layer 2 Round 10600 current loss: 1.9371763017492474
+INFO:root:Layer 2 Round 10700 current loss: 1.9361644375101428
+INFO:root:Layer 2 Round 10800 current loss: 1.9351115676208779
+INFO:root:Layer 2 Round 10900 current loss: 1.9341511763017112
+INFO:root:Layer 2 Round 11000 current loss: 1.9331042044921354
+INFO:root:Layer 2 Round 11100 current loss: 1.9321410700222394
+INFO:root:Layer 2 Round 11200 current loss: 1.9311187918271338
+INFO:root:Layer 2 Round 11300 current loss: 1.9302190335239984
+INFO:root:Layer 2 Round 11400 current loss: 1.9292530889260142
+INFO:root:Layer 2 Round 11500 current loss: 1.9283993731685307
+INFO:root:Layer 2 Round 11600 current loss: 1.9274385751629697
+INFO:root:Layer 2 Round 11700 current loss: 1.9266139456757114
+INFO:root:Layer 2 Round 11800 current loss: 1.925705126534074
+INFO:root:Layer 2 Round 11900 current loss: 1.9248406431755098
+INFO:root:Layer 2 Round 12000 current loss: 1.9239991958936056
+INFO:root:Layer 2 Round 12100 current loss: 1.9231575027477643
+INFO:root:Layer 2 Round 12200 current loss: 1.9223198598232425
+INFO:root:Layer 2 Round 12300 current loss: 1.921402963506497
+INFO:root:Layer 2 Round 12400 current loss: 1.9205824900634827
+INFO:root:Layer 2 Round 12500 current loss: 1.919703542909622
+INFO:root:Layer 2 Round 12600 current loss: 1.918871896730529
+INFO:root:Layer 2 Round 12700 current loss: 1.9180103731343128
+INFO:root:Layer 2 Round 12800 current loss: 1.9172336036060005
+INFO:root:Layer 2 Round 12900 current loss: 1.91643950612046
+INFO:root:Layer 2 Round 13000 current loss: 1.9156427771861737
+INFO:root:Layer 2 Round 13100 current loss: 1.914908441905757
+INFO:root:Layer 2 Round 13200 current loss: 1.9141145406889193
+INFO:root:Layer 2 Round 13300 current loss: 1.9133142322346681
+INFO:root:Layer 2 Round 13400 current loss: 1.9125351196972291
+INFO:root:Layer 2 Round 13500 current loss: 1.911770867921688
+INFO:root:Layer 2 Round 13600 current loss: 1.911024501595427
+INFO:root:Layer 2 Round 13700 current loss: 1.91025269670208
+INFO:root:Layer 2 Round 13800 current loss: 1.909486845774927
+INFO:root:Layer 2 Round 13900 current loss: 1.9086453536860377
+INFO:root:Layer 2 Round 14000 current loss: 1.907887194446155
+INFO:root:Layer 2 Round 14100 current loss: 1.9071706412278169
+INFO:root:Layer 2 Round 14200 current loss: 1.9064129682661781
+INFO:root:Layer 2 Round 14300 current loss: 1.9056727322665128
+INFO:root:Layer 2 Round 14400 current loss: 1.9049760187417268
+INFO:root:Layer 2 Round 14500 current loss: 1.9042202705761482
+INFO:root:Layer 2 Round 14600 current loss: 1.9034986320505403
+INFO:root:Layer 2 Round 14700 current loss: 1.9027559949913804
+INFO:root:Layer 2 Round 14800 current loss: 1.9020667298258962
+INFO:root:Layer 2 Round 14900 current loss: 1.9013579728779377
+INFO:root:Layer 2 Round 15000 current loss: 1.9006894835710526
+INFO:root:Layer 2 Round 15100 current loss: 1.8999806293430708
+INFO:root:Layer 2 Round 15200 current loss: 1.8993159694028527
+INFO:root:Layer 2 Round 15300 current loss: 1.8986784459952435
+INFO:root:Layer 2 Round 15400 current loss: 1.898053258672937
+INFO:root:Layer 2 Round 15500 current loss: 1.8973336355532369
+INFO:root:Layer 2 Round 15600 current loss: 1.8966997233109597
+INFO:root:Layer 2 Round 15700 current loss: 1.89600702474831
+INFO:root:Layer 2 Round 15800 current loss: 1.895372460522229
+INFO:root:Layer 2 Round 15900 current loss: 1.8947416528140975
+INFO:root:Layer 2 Round 16000 current loss: 1.8941581442952156
+INFO:root:Layer 2 Round 16100 current loss: 1.8935482223211608
+INFO:root:Layer 2 Round 16200 current loss: 1.89296560993901
+INFO:root:Layer 2 Round 16300 current loss: 1.892317515618962
+INFO:root:Layer 2 Round 16400 current loss: 1.891671324866574
+INFO:root:Layer 2 Round 16500 current loss: 1.891053082704544
+INFO:root:Layer 2 Round 16600 current loss: 1.8904211749010775
+INFO:root:Layer 2 Round 16700 current loss: 1.8897682736662333
+INFO:root:Layer 2 Round 16800 current loss: 1.8891912282719499
+INFO:root:Layer 2 Round 16900 current loss: 1.8885850058152125
+INFO:root:Layer 2 Round 17000 current loss: 1.8879126439164666
+INFO:root:Layer 2 Round 17100 current loss: 1.8873220075292196
+INFO:root:Layer 2 Round 17200 current loss: 1.8867599945498068
+INFO:root:Layer 2 Round 17300 current loss: 1.8861964385771337
+INFO:root:Layer 2 Round 17400 current loss: 1.8856016665491564
+INFO:root:Layer 2 Round 17500 current loss: 1.884994657598223
+INFO:root:Layer 2 Round 17600 current loss: 1.8844334772296927
+INFO:root:Layer 2 Round 17700 current loss: 1.8838504869722377
+INFO:root:Layer 2 Round 17800 current loss: 1.8832476668478397
+INFO:root:Layer 2 Round 17900 current loss: 1.882692773455348
+INFO:root:Layer 2 Round 18000 current loss: 1.8821223912702667
+INFO:root:Layer 2 Round 18100 current loss: 1.8815423192042673
+INFO:root:Layer 2 Round 18200 current loss: 1.881035888850034
+INFO:root:Layer 2 Round 18300 current loss: 1.880491687619621
+INFO:root:Layer 2 Round 18400 current loss: 1.8799400374552477
+INFO:root:Layer 2 Round 18500 current loss: 1.879363653904683
+INFO:root:Layer 2 Round 18600 current loss: 1.8788225057048182
+INFO:root:Layer 2 Round 18700 current loss: 1.8782923997086
+INFO:root:Layer 2 Round 18800 current loss: 1.877773045339483
+INFO:root:Layer 2 Round 18900 current loss: 1.8772189882444956
+INFO:root:Layer 2 Round 19000 current loss: 1.876705272034595
+INFO:root:Layer 2 Round 19100 current loss: 1.8761924643853571
+INFO:root:Layer 2 Round 19200 current loss: 1.8756660638314981
+INFO:root:Layer 2 Round 19300 current loss: 1.8751287602760631
+INFO:root:Layer 2 Round 19400 current loss: 1.874634940015901
+INFO:root:Layer 2 Round 19500 current loss: 1.8741032576988905
+INFO:root:Layer 2 Round 19600 current loss: 1.8736014399358205
+INFO:root:Layer 2 Round 19700 current loss: 1.8730376687207198
+INFO:root:Layer 2 Round 19800 current loss: 1.8725025762150986
+INFO:root:Layer 2 Round 19900 current loss: 1.8720085360536622
+INFO:root:Layer 2 Round 20000 current loss: 1.871489592319727
+INFO:root:Layer 3 Round 100 current loss: 2.550964632034302
+INFO:root:Layer 3 Round 200 current loss: 2.4118171906471253
+INFO:root:Layer 3 Round 300 current loss: 2.3081047077973684
+INFO:root:Layer 3 Round 400 current loss: 2.231000281870365
+INFO:root:Layer 3 Round 500 current loss: 2.173996366024017
+INFO:root:Layer 3 Round 600 current loss: 2.132577279408773
+INFO:root:Layer 3 Round 700 current loss: 2.099742145197732
+INFO:root:Layer 3 Round 800 current loss: 2.074374351799488
+INFO:root:Layer 3 Round 900 current loss: 2.0531063969930012
+INFO:root:Layer 3 Round 1000 current loss: 2.0349581015110014
+INFO:root:Layer 3 Round 1100 current loss: 2.0208663418076256
+INFO:root:Layer 3 Round 1200 current loss: 2.00764577070872
+INFO:root:Layer 3 Round 1300 current loss: 1.9965128458463228
+INFO:root:Layer 3 Round 1400 current loss: 1.9869737300702504
+INFO:root:Layer 3 Round 1500 current loss: 1.9785625955263773
+INFO:root:Layer 3 Round 1600 current loss: 1.9706928393244743
+INFO:root:Layer 3 Round 1700 current loss: 1.9639923144789304
+INFO:root:Layer 3 Round 1800 current loss: 1.9572376245922511
+INFO:root:Layer 3 Round 1900 current loss: 1.9515669544119585
+INFO:root:Layer 3 Round 2000 current loss: 1.9462801329493522
+INFO:root:Layer 3 Round 2100 current loss: 1.941668651558104
+INFO:root:Layer 3 Round 2200 current loss: 1.9372366496107796
+INFO:root:Layer 3 Round 2300 current loss: 1.9329150275562121
+INFO:root:Layer 3 Round 2400 current loss: 1.9290306143959364
+INFO:root:Layer 3 Round 2500 current loss: 1.9255387928962708
+INFO:root:Layer 3 Round 2600 current loss: 1.9218372931388708
+INFO:root:Layer 3 Round 2700 current loss: 1.9190496151977114
+INFO:root:Layer 3 Round 2800 current loss: 1.9159210705331393
+INFO:root:Layer 3 Round 2900 current loss: 1.9131819512104167
+INFO:root:Layer 3 Round 3000 current loss: 1.9106270786921182
+INFO:root:Layer 3 Round 3100 current loss: 1.9079904011757143
+INFO:root:Layer 3 Round 3200 current loss: 1.9055981781706215
+INFO:root:Layer 3 Round 3300 current loss: 1.9033311359087626
+INFO:root:Layer 3 Round 3400 current loss: 1.901003188070129
+INFO:root:Layer 3 Round 3500 current loss: 1.8990167726448604
+INFO:root:Layer 3 Round 3600 current loss: 1.89709502822823
+INFO:root:Layer 3 Round 3700 current loss: 1.8950308331283363
+INFO:root:Layer 3 Round 3800 current loss: 1.8933117231256082
+INFO:root:Layer 3 Round 3900 current loss: 1.891607929590421
+INFO:root:Layer 3 Round 4000 current loss: 1.890100318789482
+INFO:root:Layer 3 Round 4100 current loss: 1.8884977471828461
+INFO:root:Layer 3 Round 4200 current loss: 1.887046698360216
+INFO:root:Layer 3 Round 4300 current loss: 1.8856902442144794
+INFO:root:Layer 3 Round 4400 current loss: 1.8841602464426648
+INFO:root:Layer 3 Round 4500 current loss: 1.8829722454547881
+INFO:root:Layer 3 Round 4600 current loss: 1.881635204138963
+INFO:root:Layer 3 Round 4700 current loss: 1.8805093945340907
+INFO:root:Layer 3 Round 4800 current loss: 1.8790224489818017
+INFO:root:Layer 3 Round 4900 current loss: 1.8777071060939712
+INFO:root:Layer 3 Round 5000 current loss: 1.8764442191123962
+INFO:root:Layer 3 Round 5100 current loss: 1.8753636139748142
+INFO:root:Layer 3 Round 5200 current loss: 1.8742433157333962
+INFO:root:Layer 3 Round 5300 current loss: 1.8731042475070594
+INFO:root:Layer 3 Round 5400 current loss: 1.872116388016277
+INFO:root:Layer 3 Round 5500 current loss: 1.871005875934254
+INFO:root:Layer 3 Round 5600 current loss: 1.870104365923575
+INFO:root:Layer 3 Round 5700 current loss: 1.8691154493156232
+INFO:root:Layer 3 Round 5800 current loss: 1.8680963446970644
+INFO:root:Layer 3 Round 5900 current loss: 1.8670733801793244
+INFO:root:Layer 3 Round 6000 current loss: 1.8660562540094057
+INFO:root:Layer 3 Round 6100 current loss: 1.8652938252198892
+INFO:root:Layer 3 Round 6200 current loss: 1.8643431926927259
+INFO:root:Layer 3 Round 6300 current loss: 1.863459581893588
+INFO:root:Layer 3 Round 6400 current loss: 1.8626542098633945
+INFO:root:Layer 3 Round 6500 current loss: 1.8619228992828956
+INFO:root:Layer 3 Round 6600 current loss: 1.8611958607218482
+INFO:root:Layer 3 Round 6700 current loss: 1.8603651786562223
+INFO:root:Layer 3 Round 6800 current loss: 1.859633822370978
+INFO:root:Layer 3 Round 6900 current loss: 1.8589343559050906
+INFO:root:Layer 3 Round 7000 current loss: 1.8581716163839612
+INFO:root:Layer 3 Round 7100 current loss: 1.857499687923512
+INFO:root:Layer 3 Round 7200 current loss: 1.8568963349527783
+INFO:root:Layer 3 Round 7300 current loss: 1.8561982036290103
+INFO:root:Layer 3 Round 7400 current loss: 1.8555483782452507
+INFO:root:Layer 3 Round 7500 current loss: 1.8549151820818583
+INFO:root:Layer 3 Round 7600 current loss: 1.8542516882639182
+INFO:root:Layer 3 Round 7700 current loss: 1.853546269388942
+INFO:root:Layer 3 Round 7800 current loss: 1.8528897600601881
+INFO:root:Layer 3 Round 7900 current loss: 1.8522998330412033
+INFO:root:Layer 3 Round 8000 current loss: 1.8517488841414451
+INFO:root:Layer 3 Round 8100 current loss: 1.8510972934446217
+INFO:root:Layer 3 Round 8200 current loss: 1.850524941450212
+INFO:root:Layer 3 Round 8300 current loss: 1.8500143688988973
+INFO:root:Layer 3 Round 8400 current loss: 1.8494624114178475
+INFO:root:Layer 3 Round 8500 current loss: 1.8488771396665011
+INFO:root:Layer 3 Round 8600 current loss: 1.8482990610183672
+INFO:root:Layer 3 Round 8700 current loss: 1.847783024845452
+INFO:root:Layer 3 Round 8800 current loss: 1.8472828177159484
+INFO:root:Layer 3 Round 8900 current loss: 1.8467474036404257
+INFO:root:Layer 3 Round 9000 current loss: 1.8461525174246893
+INFO:root:Layer 3 Round 9100 current loss: 1.8455835251493768
+INFO:root:Layer 3 Round 9200 current loss: 1.8450759846360787
+INFO:root:Layer 3 Round 9300 current loss: 1.8445531698708892
+INFO:root:Layer 3 Round 9400 current loss: 1.844145792887566
+INFO:root:Layer 3 Round 9500 current loss: 1.8436543503811484
+INFO:root:Layer 3 Round 9600 current loss: 1.8431545406331618
+INFO:root:Layer 3 Round 9700 current loss: 1.8427353813844858
+INFO:root:Layer 3 Round 9800 current loss: 1.8422367735784881
+INFO:root:Layer 3 Round 9900 current loss: 1.8417808161359845
+INFO:root:Layer 3 Round 10000 current loss: 1.8412931457042694
+INFO:root:Layer 3 Round 10100 current loss: 1.8408278132665274
+INFO:root:Layer 3 Round 10200 current loss: 1.8403631300318475
+INFO:root:Layer 3 Round 10300 current loss: 1.8399079561464995
+INFO:root:Layer 3 Round 10400 current loss: 1.8394586582137988
+INFO:root:Layer 3 Round 10500 current loss: 1.8390271670250666
+INFO:root:Layer 3 Round 10600 current loss: 1.8385967401850898
+INFO:root:Layer 3 Round 10700 current loss: 1.8382008891462165
+INFO:root:Layer 3 Round 10800 current loss: 1.8377315334810151
+INFO:root:Layer 3 Round 10900 current loss: 1.8372765549716599
+INFO:root:Layer 3 Round 11000 current loss: 1.836853640480475
+INFO:root:Layer 3 Round 11100 current loss: 1.8364863860177565
+INFO:root:Layer 3 Round 11200 current loss: 1.8361129276241575
+INFO:root:Layer 3 Round 11300 current loss: 1.8356872254768304
+INFO:root:Layer 3 Round 11400 current loss: 1.8353085248825842
+INFO:root:Layer 3 Round 11500 current loss: 1.834932758880698
+INFO:root:Layer 3 Round 11600 current loss: 1.8345334810943439
+INFO:root:Layer 3 Round 11700 current loss: 1.8341324126720429
+INFO:root:Layer 3 Round 11800 current loss: 1.8337317890433942
+INFO:root:Layer 3 Round 11900 current loss: 1.8334145460910156
+INFO:root:Layer 3 Round 12000 current loss: 1.8330015016396841
+INFO:root:Layer 3 Round 12100 current loss: 1.8326715398524418
+INFO:root:Layer 3 Round 12200 current loss: 1.8322953983408505
+INFO:root:Layer 3 Round 12300 current loss: 1.8319130667438352
+INFO:root:Layer 3 Round 12400 current loss: 1.8315221177089598
+INFO:root:Layer 3 Round 12500 current loss: 1.8311772849178314
+INFO:root:Layer 3 Round 12600 current loss: 1.8308872789428348
+INFO:root:Layer 3 Round 12700 current loss: 1.8306099821357276
+INFO:root:Layer 3 Round 12800 current loss: 1.8303223729040474
+INFO:root:Layer 3 Round 12900 current loss: 1.830027824917505
+INFO:root:Layer 3 Round 13000 current loss: 1.8296651483957584
+INFO:root:Layer 3 Round 13100 current loss: 1.8293169264574998
+INFO:root:Layer 3 Round 13200 current loss: 1.8289475119655783
+INFO:root:Layer 3 Round 13300 current loss: 1.8285462972096034
+INFO:root:Layer 3 Round 13400 current loss: 1.8282221795729736
+INFO:root:Layer 3 Round 13500 current loss: 1.8278706151026267
+INFO:root:Layer 3 Round 13600 current loss: 1.8275256345464903
+INFO:root:Layer 3 Round 13700 current loss: 1.8271892972236132
+INFO:root:Layer 3 Round 13800 current loss: 1.8268130121973978
+INFO:root:Layer 3 Round 13900 current loss: 1.8265273089717617
+INFO:root:Layer 3 Round 14000 current loss: 1.8261544006211416
+INFO:root:Layer 3 Round 14100 current loss: 1.8258787856541627
+INFO:root:Layer 3 Round 14200 current loss: 1.8255661720709062
+INFO:root:Layer 3 Round 14300 current loss: 1.8252679420851328
+INFO:root:Layer 3 Round 14400 current loss: 1.8249629860619705
+INFO:root:Layer 3 Round 14500 current loss: 1.8246380733457106
+INFO:root:Layer 3 Round 14600 current loss: 1.8243444485288778
+INFO:root:Layer 3 Round 14700 current loss: 1.824030218302798
+INFO:root:Layer 3 Round 14800 current loss: 1.823736103748953
+INFO:root:Layer 3 Round 14900 current loss: 1.823442891548144
+INFO:root:Layer 3 Round 15000 current loss: 1.8231659421126047
+INFO:root:Layer 3 Round 15100 current loss: 1.8229043195579226
+INFO:root:Layer 3 Round 15200 current loss: 1.822665815565147
+INFO:root:Layer 3 Round 15300 current loss: 1.8223965592477835
+INFO:root:Layer 3 Round 15400 current loss: 1.8221098916406755
+INFO:root:Layer 3 Round 15500 current loss: 1.8218109680375745
+INFO:root:Layer 3 Round 15600 current loss: 1.8215408278810672
+INFO:root:Layer 3 Round 15700 current loss: 1.821275058308984
+INFO:root:Layer 3 Round 15800 current loss: 1.8210085190096987
+INFO:root:Layer 3 Round 15900 current loss: 1.8207507734028798
+INFO:root:Layer 3 Round 16000 current loss: 1.8204522227644921
+INFO:root:Layer 3 Round 16100 current loss: 1.8202100643978356
+INFO:root:Layer 3 Round 16200 current loss: 1.819958761614046
+INFO:root:Layer 3 Round 16300 current loss: 1.8197260194468352
+INFO:root:Layer 3 Round 16400 current loss: 1.8194422353840456
+INFO:root:Layer 3 Round 16500 current loss: 1.819161275509632
+INFO:root:Layer 3 Round 16600 current loss: 1.8189286966639828
+INFO:root:Layer 3 Round 16700 current loss: 1.8186779201387646
+INFO:root:Layer 3 Round 16800 current loss: 1.818405117023559
+INFO:root:Layer 3 Round 16900 current loss: 1.818170073004164
+INFO:root:Layer 3 Round 17000 current loss: 1.8179402153772466
+INFO:root:Layer 3 Round 17100 current loss: 1.8176852177039922
+INFO:root:Layer 3 Round 17200 current loss: 1.8174679731421692
+INFO:root:Layer 3 Round 17300 current loss: 1.8171985994942617
+INFO:root:Layer 3 Round 17400 current loss: 1.8169646030664444
+INFO:root:Layer 3 Round 17500 current loss: 1.8167477009500776
+INFO:root:Layer 3 Round 17600 current loss: 1.816528610268777
+INFO:root:Layer 3 Round 17700 current loss: 1.8162819480289847
+INFO:root:Layer 3 Round 17800 current loss: 1.8160599412275165
+INFO:root:Layer 3 Round 17900 current loss: 1.8158192702778224
+INFO:root:Layer 3 Round 18000 current loss: 1.8155290802783437
+INFO:root:Layer 3 Round 18100 current loss: 1.8153131385271062
+INFO:root:Layer 3 Round 18200 current loss: 1.815099513052584
+INFO:root:Layer 3 Round 18300 current loss: 1.814819579176564
+INFO:root:Layer 3 Round 18400 current loss: 1.8146115291766498
+INFO:root:Layer 3 Round 18500 current loss: 1.8143709976479814
+INFO:root:Layer 3 Round 18600 current loss: 1.8141638677607301
+INFO:root:Layer 3 Round 18700 current loss: 1.8139494725918388
+INFO:root:Layer 3 Round 18800 current loss: 1.8137204229324422
+INFO:root:Layer 3 Round 18900 current loss: 1.8134848177243792
+INFO:root:Layer 3 Round 19000 current loss: 1.8132618577731283
+INFO:root:Layer 3 Round 19100 current loss: 1.8129979608133826
+INFO:root:Layer 3 Round 19200 current loss: 1.81279343696932
+INFO:root:Layer 3 Round 19300 current loss: 1.812550417790141
+INFO:root:Layer 3 Round 19400 current loss: 1.8123295674741882
+INFO:root:Layer 3 Round 19500 current loss: 1.8121741555287287
+INFO:root:Layer 3 Round 19600 current loss: 1.811939534046212
+INFO:root:Layer 3 Round 19700 current loss: 1.8117358743660341
+INFO:root:Layer 3 Round 19800 current loss: 1.8115132621924082
+INFO:root:Layer 3 Round 19900 current loss: 1.8112987027575622
+INFO:root:Layer 3 Round 20000 current loss: 1.811043883508444
+INFO:root:Layer 4 Round 100 current loss: 2.545022006034851
+INFO:root:Layer 4 Round 200 current loss: 2.4682284879684446
+INFO:root:Layer 4 Round 300 current loss: 2.417185417811076
+INFO:root:Layer 4 Round 400 current loss: 2.3837019783258437
+INFO:root:Layer 4 Round 500 current loss: 2.356179771900177
+INFO:root:Layer 4 Round 600 current loss: 2.3339006547133128
+INFO:root:Layer 4 Round 700 current loss: 2.3151542258262636
+INFO:root:Layer 4 Round 800 current loss: 2.298830659687519
+INFO:root:Layer 4 Round 900 current loss: 2.2843920323583813
+INFO:root:Layer 4 Round 1000 current loss: 2.2723913946151733
+INFO:root:Layer 4 Round 1100 current loss: 2.2623567990823226
+INFO:root:Layer 4 Round 1200 current loss: 2.2528217711051304
+INFO:root:Layer 4 Round 1300 current loss: 2.2444512442442086
+INFO:root:Layer 4 Round 1400 current loss: 2.236257308891841
+INFO:root:Layer 4 Round 1500 current loss: 2.2284479409853617
+INFO:root:Layer 4 Round 1600 current loss: 2.2209173237532376
+INFO:root:Layer 4 Round 1700 current loss: 2.214522051039864
+INFO:root:Layer 4 Round 1800 current loss: 2.2086690554353927
+INFO:root:Layer 4 Round 1900 current loss: 2.2031181299059015
+INFO:root:Layer 4 Round 2000 current loss: 2.197878871202469
+INFO:root:Layer 4 Round 2100 current loss: 2.1929008416334788
+INFO:root:Layer 4 Round 2200 current loss: 2.1881474713303826
+INFO:root:Layer 4 Round 2300 current loss: 2.1836457425096762
+INFO:root:Layer 4 Round 2400 current loss: 2.1793585579593975
+INFO:root:Layer 4 Round 2500 current loss: 2.175279098701477
+INFO:root:Layer 4 Round 2600 current loss: 2.1713394449765864
+INFO:root:Layer 4 Round 2700 current loss: 2.1678150805720575
+INFO:root:Layer 4 Round 2800 current loss: 2.1641419961197035
+INFO:root:Layer 4 Round 2900 current loss: 2.1610528102825426
+INFO:root:Layer 4 Round 3000 current loss: 2.157762657324473
+INFO:root:Layer 4 Round 3100 current loss: 2.1547737060054657
+INFO:root:Layer 4 Round 3200 current loss: 2.151807134896517
+INFO:root:Layer 4 Round 3300 current loss: 2.1490904465949896
+INFO:root:Layer 4 Round 3400 current loss: 2.146332357315456
+INFO:root:Layer 4 Round 3500 current loss: 2.143460928916931
+INFO:root:Layer 4 Round 3600 current loss: 2.140780444310771
+INFO:root:Layer 4 Round 3700 current loss: 2.1384427821314014
+INFO:root:Layer 4 Round 3800 current loss: 2.1361721282569985
+INFO:root:Layer 4 Round 3900 current loss: 2.133625364609254
+INFO:root:Layer 4 Round 4000 current loss: 2.1313698262572287
+INFO:root:Layer 4 Round 4100 current loss: 2.1289417148508676
+INFO:root:Layer 4 Round 4200 current loss: 2.126919495434988
+INFO:root:Layer 4 Round 4300 current loss: 2.124782197669495
+INFO:root:Layer 4 Round 4400 current loss: 2.122820227931846
+INFO:root:Layer 4 Round 4500 current loss: 2.120840541548199
+INFO:root:Layer 4 Round 4600 current loss: 2.118798017553661
+INFO:root:Layer 4 Round 4700 current loss: 2.1169022602476972
+INFO:root:Layer 4 Round 4800 current loss: 2.1150156919409833
+INFO:root:Layer 4 Round 4900 current loss: 2.1132909144430743
+INFO:root:Layer 4 Round 5000 current loss: 2.111635358572006
+INFO:root:Layer 4 Round 5100 current loss: 2.1100487979486875
+INFO:root:Layer 4 Round 5200 current loss: 2.1082963560177728
+INFO:root:Layer 4 Round 5300 current loss: 2.1065877870568688
+INFO:root:Layer 4 Round 5400 current loss: 2.1050038426231454
+INFO:root:Layer 4 Round 5500 current loss: 2.103296778613871
+INFO:root:Layer 4 Round 5600 current loss: 2.101758447353329
+INFO:root:Layer 4 Round 5700 current loss: 2.1002064345594036
+INFO:root:Layer 4 Round 5800 current loss: 2.0987343788352506
+INFO:root:Layer 4 Round 5900 current loss: 2.0973349111767137
+INFO:root:Layer 4 Round 6000 current loss: 2.0959395831425987
+INFO:root:Layer 4 Round 6100 current loss: 2.0946724255554012
+INFO:root:Layer 4 Round 6200 current loss: 2.0933720669631035
+INFO:root:Layer 4 Round 6300 current loss: 2.0921271386600675
+INFO:root:Layer 4 Round 6400 current loss: 2.0908229559101166
+INFO:root:Layer 4 Round 6500 current loss: 2.08957891367032
+INFO:root:Layer 4 Round 6600 current loss: 2.0882265748941538
+INFO:root:Layer 4 Round 6700 current loss: 2.087023028562318
+INFO:root:Layer 4 Round 6800 current loss: 2.0858652639739654
+INFO:root:Layer 4 Round 6900 current loss: 2.0846683532604273
+INFO:root:Layer 4 Round 7000 current loss: 2.0835706911257335
+INFO:root:Layer 4 Round 7100 current loss: 2.0825023966440015
+INFO:root:Layer 4 Round 7200 current loss: 2.08140712203251
+INFO:root:Layer 4 Round 7300 current loss: 2.080313490008655
+INFO:root:Layer 4 Round 7400 current loss: 2.0792233974385907
+INFO:root:Layer 4 Round 7500 current loss: 2.0781214872519174
+INFO:root:Layer 4 Round 7600 current loss: 2.077102176531365
+INFO:root:Layer 4 Round 7700 current loss: 2.0761344246121194
+INFO:root:Layer 4 Round 7800 current loss: 2.0751156310546093
+INFO:root:Layer 4 Round 7900 current loss: 2.0742030258721944
+INFO:root:Layer 4 Round 8000 current loss: 2.0731913390755654
+INFO:root:Layer 4 Round 8100 current loss: 2.0722480419241354
+INFO:root:Layer 4 Round 8200 current loss: 2.071299418225521
+INFO:root:Layer 4 Round 8300 current loss: 2.0703516490344542
+INFO:root:Layer 4 Round 8400 current loss: 2.0694560758414724
+INFO:root:Layer 4 Round 8500 current loss: 2.068560259356218
+INFO:root:Layer 4 Round 8600 current loss: 2.0676547714998557
+INFO:root:Layer 4 Round 8700 current loss: 2.0668168750713614
+INFO:root:Layer 4 Round 8800 current loss: 2.066018287051808
+INFO:root:Layer 4 Round 8900 current loss: 2.065104725843065
+INFO:root:Layer 4 Round 9000 current loss: 2.0641802842617034
+INFO:root:Layer 4 Round 9100 current loss: 2.0632910726227602
+INFO:root:Layer 4 Round 9200 current loss: 2.0624239959276243
+INFO:root:Layer 4 Round 9300 current loss: 2.0616530821400305
+INFO:root:Layer 4 Round 9400 current loss: 2.060895252646284
+INFO:root:Layer 4 Round 9500 current loss: 2.060118030962191
+INFO:root:Layer 4 Round 9600 current loss: 2.0593224430456756
+INFO:root:Layer 4 Round 9700 current loss: 2.058554309766317
+INFO:root:Layer 4 Round 9800 current loss: 2.057840319725932
+INFO:root:Layer 4 Round 9900 current loss: 2.057102570028016
+INFO:root:Layer 4 Round 10000 current loss: 2.0563196133136747
+INFO:root:Layer 4 Round 10100 current loss: 2.055632952699567
+INFO:root:Layer 4 Round 10200 current loss: 2.054959835655549
+INFO:root:Layer 4 Round 10300 current loss: 2.054293147892628
+INFO:root:Layer 4 Round 10400 current loss: 2.0535610266373707
+INFO:root:Layer 4 Round 10500 current loss: 2.0528632718381425
+INFO:root:Layer 4 Round 10600 current loss: 2.0521782897778276
+INFO:root:Layer 4 Round 10700 current loss: 2.0514834044915493
+INFO:root:Layer 4 Round 10800 current loss: 2.0508180674910546
+INFO:root:Layer 4 Round 10900 current loss: 2.0500985909930063
+INFO:root:Layer 4 Round 11000 current loss: 2.0494553409489717
+INFO:root:Layer 4 Round 11100 current loss: 2.0488402976001705
+INFO:root:Layer 4 Round 11200 current loss: 2.048204839878849
+INFO:root:Layer 4 Round 11300 current loss: 2.047515919366769
+INFO:root:Layer 4 Round 11400 current loss: 2.0469553183359013
+INFO:root:Layer 4 Round 11500 current loss: 2.046348680651706
+INFO:root:Layer 4 Round 11600 current loss: 2.045679468060362
+INFO:root:Layer 4 Round 11700 current loss: 2.0450196086850942
+INFO:root:Layer 4 Round 11800 current loss: 2.044395788412983
+INFO:root:Layer 4 Round 11900 current loss: 2.043838204546135
+INFO:root:Layer 4 Round 12000 current loss: 2.0431475346386434
+INFO:root:Layer 4 Round 12100 current loss: 2.042565114961183
+INFO:root:Layer 4 Round 12200 current loss: 2.0420266753141996
+INFO:root:Layer 4 Round 12300 current loss: 2.0414155678535866
+INFO:root:Layer 4 Round 12400 current loss: 2.040762938760942
+INFO:root:Layer 4 Round 12500 current loss: 2.0401445555591584
+INFO:root:Layer 4 Round 12600 current loss: 2.0396031860415897
+INFO:root:Layer 4 Round 12700 current loss: 2.039072209549701
+INFO:root:Layer 4 Round 12800 current loss: 2.0385235069226475
+INFO:root:Layer 4 Round 12900 current loss: 2.038003369505091
+INFO:root:Layer 4 Round 13000 current loss: 2.037416300672751
+INFO:root:Layer 4 Round 13100 current loss: 2.0369064502406666
+INFO:root:Layer 4 Round 13200 current loss: 2.036390015735771
+INFO:root:Layer 4 Round 13300 current loss: 2.035854599350377
+INFO:root:Layer 4 Round 13400 current loss: 2.0353726714226736
+INFO:root:Layer 4 Round 13500 current loss: 2.0347741658334377
+INFO:root:Layer 4 Round 13600 current loss: 2.0342462983902765
+INFO:root:Layer 4 Round 13700 current loss: 2.0336718040139137
+INFO:root:Layer 4 Round 13800 current loss: 2.033181444130082
+INFO:root:Layer 4 Round 13900 current loss: 2.0326972019586633
+INFO:root:Layer 4 Round 14000 current loss: 2.032170640017305
+INFO:root:Layer 4 Round 14100 current loss: 2.0316718058467758
+INFO:root:Layer 4 Round 14200 current loss: 2.031201533733959
+INFO:root:Layer 4 Round 14300 current loss: 2.0307034967912663
+INFO:root:Layer 4 Round 14400 current loss: 2.0302316140300696
+INFO:root:Layer 4 Round 14500 current loss: 2.0297302600597513
+INFO:root:Layer 4 Round 14600 current loss: 2.0292726172323095
+INFO:root:Layer 4 Round 14700 current loss: 2.028728411019254
+INFO:root:Layer 4 Round 14800 current loss: 2.028276212859798
+INFO:root:Layer 4 Round 14900 current loss: 2.027795936461263
+INFO:root:Layer 4 Round 15000 current loss: 2.0273784364064533
+INFO:root:Layer 4 Round 15100 current loss: 2.0269275427338305
+INFO:root:Layer 4 Round 15200 current loss: 2.026418554633856
+INFO:root:Layer 4 Round 15300 current loss: 2.025966187918108
+INFO:root:Layer 4 Round 15400 current loss: 2.025527658029036
+INFO:root:Layer 4 Round 15500 current loss: 2.025089846534114
+INFO:root:Layer 4 Round 15600 current loss: 2.024679497121236
+INFO:root:Layer 4 Round 15700 current loss: 2.0242368491440064
+INFO:root:Layer 4 Round 15800 current loss: 2.0237812866742098
+INFO:root:Layer 4 Round 15900 current loss: 2.0233454785406964
+INFO:root:Layer 4 Round 16000 current loss: 2.0229224704131483
+INFO:root:Layer 4 Round 16100 current loss: 2.0224938288016348
+INFO:root:Layer 4 Round 16200 current loss: 2.0220367689412315
+INFO:root:Layer 4 Round 16300 current loss: 2.0215990342830588
+INFO:root:Layer 4 Round 16400 current loss: 2.021187620206577
+INFO:root:Layer 4 Round 16500 current loss: 2.0207581015138913
+INFO:root:Layer 4 Round 16600 current loss: 2.020301840879831
+INFO:root:Layer 4 Round 16700 current loss: 2.019871633131347
+INFO:root:Layer 4 Round 16800 current loss: 2.019487574320464
+INFO:root:Layer 4 Round 16900 current loss: 2.0191068366152294
+INFO:root:Layer 4 Round 17000 current loss: 2.0187477999995735
+INFO:root:Layer 4 Round 17100 current loss: 2.018372092728029
+INFO:root:Layer 4 Round 17200 current loss: 2.0179609238616254
+INFO:root:Layer 4 Round 17300 current loss: 2.0175721943516263
+INFO:root:Layer 4 Round 17400 current loss: 2.017170681946579
+INFO:root:Layer 4 Round 17500 current loss: 2.0168214952060155
+INFO:root:Layer 4 Round 17600 current loss: 2.0164997906102378
+INFO:root:Layer 4 Round 17700 current loss: 2.0160822652221397
+INFO:root:Layer 4 Round 17800 current loss: 2.0156809672210994
+INFO:root:Layer 4 Round 17900 current loss: 2.0153044587273836
+INFO:root:Layer 4 Round 18000 current loss: 2.0148996596336364
+INFO:root:Layer 4 Round 18100 current loss: 2.014529475796947
+INFO:root:Layer 4 Round 18200 current loss: 2.0141491545753163
+INFO:root:Layer 4 Round 18300 current loss: 2.0137844429055196
+INFO:root:Layer 4 Round 18400 current loss: 2.0134412919114464
+INFO:root:Layer 4 Round 18500 current loss: 2.013033018427926
+INFO:root:Layer 4 Round 18600 current loss: 2.012664981298549
+INFO:root:Layer 4 Round 18700 current loss: 2.0123157966455674
+INFO:root:Layer 4 Round 18800 current loss: 2.011947431824309
+INFO:root:Layer 4 Round 18900 current loss: 2.0115929880596344
+INFO:root:Layer 4 Round 19000 current loss: 2.0112390554955133
+INFO:root:Layer 4 Round 19100 current loss: 2.0108724928339115
+INFO:root:Layer 4 Round 19200 current loss: 2.010539134070277
+INFO:root:Layer 4 Round 19300 current loss: 2.010143928929314
+INFO:root:Layer 4 Round 19400 current loss: 2.009812925673023
+INFO:root:Layer 4 Round 19500 current loss: 2.009483947564394
+INFO:root:Layer 4 Round 19600 current loss: 2.0091614065851484
+INFO:root:Layer 4 Round 19700 current loss: 2.0088058401545896
+INFO:root:Layer 4 Round 19800 current loss: 2.008431717470439
+INFO:root:Layer 4 Round 19900 current loss: 2.008142352589411
+INFO:root:Layer 4 Round 20000 current loss: 2.0078447939634323
+INFO:root:Finetuning Round 100 average loss: 1.8005693399906157
+INFO:root:Finetuning Round 200 average loss: 1.7978581511974334
+INFO:root:Finetuning Round 300 average loss: 1.7929881163438162
+INFO:root:Finetuning Round 400 average loss: 1.7896861231327057
+INFO:root:Finetuning Round 500 average loss: 1.7889479985237122
+INFO:root:Finetuning Round 600 average loss: 1.7876070288817087
+INFO:root:Finetuning Round 700 average loss: 1.7863559506620679
+INFO:root:Finetuning Round 800 average loss: 1.7859161178767682
+INFO:root:Finetuning Round 900 average loss: 1.785005686150657
+INFO:root:Finetuning Round 1000 average loss: 1.784701842069626
+INFO:root:Finetuning Round 1100 average loss: 1.7834864475510337
+INFO:root:Finetuning Round 1200 average loss: 1.7832185797890028
+INFO:root:Finetuning Round 1300 average loss: 1.7824102433828206
+INFO:root:Finetuning Round 1400 average loss: 1.7824061128071376
+INFO:root:Finetuning Round 1500 average loss: 1.7813024374643962
+INFO:root:Finetuning Round 1600 average loss: 1.780607905909419
+INFO:root:Finetuning Round 1700 average loss: 1.7792843510824092
+INFO:root:Finetuning Round 1800 average loss: 1.778324290977584
+INFO:root:Finetuning Round 1900 average loss: 1.7778707378788998
+INFO:root:Finetuning Round 2000 average loss: 1.7774243814349175
+INFO:root:Finetuning Round 2100 average loss: 1.7767137600126721
+INFO:root:Finetuning Round 2200 average loss: 1.7762318140268325
+INFO:root:Finetuning Round 2300 average loss: 1.7759461994274803
+INFO:root:Finetuning Round 2400 average loss: 1.7752438284953436
+INFO:root:Finetuning Round 2500 average loss: 1.7746444743156433
+INFO:root:Finetuning Round 2600 average loss: 1.7738891356266462
+INFO:root:Finetuning Round 2700 average loss: 1.7733619583536078
+INFO:root:Finetuning Round 2800 average loss: 1.7725619205832481
+INFO:root:Finetuning Round 2900 average loss: 1.7719376838207246
+INFO:root:Finetuning Round 3000 average loss: 1.7709391083717345
+INFO:root:Finetuning Round 3100 average loss: 1.7703377368373256
+INFO:root:Finetuning Round 3200 average loss: 1.7698286172747613
+INFO:root:Finetuning Round 3300 average loss: 1.7694254037828157
+INFO:root:Finetuning Round 3400 average loss: 1.7690685618624968
+INFO:root:Finetuning Round 3500 average loss: 1.7684939111300877
+INFO:root:Finetuning Round 3600 average loss: 1.7679444635907808
+INFO:root:Finetuning Round 3700 average loss: 1.7676258612967826
+INFO:root:Finetuning Round 3800 average loss: 1.7670966410009485
+INFO:root:Finetuning Round 3900 average loss: 1.7664654438923566
+INFO:root:Finetuning Round 4000 average loss: 1.7660530512034893
+INFO:root:Finetuning Round 4100 average loss: 1.7656835519685978
+INFO:root:Finetuning Round 4200 average loss: 1.7652687997477394
+INFO:root:Finetuning Round 4300 average loss: 1.764906216055848
+INFO:root:Finetuning Round 4400 average loss: 1.7645669969374482
+INFO:root:Finetuning Round 4500 average loss: 1.764174098889033
+INFO:root:Finetuning Round 4600 average loss: 1.763781028882317
+INFO:root:Finetuning Round 4700 average loss: 1.7632629564721534
+INFO:root:Finetuning Round 4800 average loss: 1.7628787195682525
+INFO:root:Finetuning Round 4900 average loss: 1.7624424609846
+INFO:root:Finetuning Round 5000 average loss: 1.7621025584697723
+INFO:root:Finetuning Round 5100 average loss: 1.7617059153669021
+INFO:root:Finetuning Round 5200 average loss: 1.761383978334757
+INFO:root:Finetuning Round 5300 average loss: 1.7609906592234126
+INFO:root:Finetuning Round 5400 average loss: 1.760643764204449
+INFO:root:Finetuning Round 5500 average loss: 1.760198433117433
+INFO:root:Finetuning Round 5600 average loss: 1.759645376758916
+INFO:root:Finetuning Round 5700 average loss: 1.7594248599755136
+INFO:root:Finetuning Round 5800 average loss: 1.7591681161831165
+INFO:root:Finetuning Round 5900 average loss: 1.7587262978594183
+INFO:root:Finetuning Round 6000 average loss: 1.7584390699863435
+INFO:root:Finetuning Round 6100 average loss: 1.7580153546567823
+INFO:root:Finetuning Round 6200 average loss: 1.7576632608713643
+INFO:root:Finetuning Round 6300 average loss: 1.7572916794769349
+INFO:root:Finetuning Round 6400 average loss: 1.7569381420128047
+INFO:root:Finetuning Round 6500 average loss: 1.756526298761368
+INFO:root:Finetuning Round 6600 average loss: 1.7562259125890154
+INFO:root:Finetuning Round 6700 average loss: 1.7558892645764708
+INFO:root:Finetuning Round 6800 average loss: 1.7555712957241956
+INFO:root:Finetuning Round 6900 average loss: 1.7553235088223997
+INFO:root:Finetuning Round 7000 average loss: 1.7549169074978148
+INFO:root:Finetuning Round 7100 average loss: 1.7546206391361399
+INFO:root:Finetuning Round 7200 average loss: 1.7542971163822545
+INFO:root:Finetuning Round 7300 average loss: 1.754044325335385
+INFO:root:Finetuning Round 7400 average loss: 1.7537780383309802
+INFO:root:Finetuning Round 7500 average loss: 1.7533645998160043
+INFO:root:Finetuning Round 7600 average loss: 1.753083605389846
+INFO:root:Finetuning Round 7700 average loss: 1.7528311779437127
+INFO:root:Finetuning Round 7800 average loss: 1.7525027228624392
+INFO:root:Finetuning Round 7900 average loss: 1.7521277638628514
+INFO:root:Finetuning Round 8000 average loss: 1.7518746701776982
+INFO:root:Finetuning Round 8100 average loss: 1.7515479233824176
+INFO:root:Finetuning Round 8200 average loss: 1.7511822916385604
+INFO:root:Finetuning Round 8300 average loss: 1.750879234219172
+INFO:root:Finetuning Round 8400 average loss: 1.7505060645796005
+INFO:root:Finetuning Round 8500 average loss: 1.7502995837716495
+INFO:root:Finetuning Round 8600 average loss: 1.7500030150524406
+INFO:root:Finetuning Round 8700 average loss: 1.7496805570454432
+INFO:root:Finetuning Round 8800 average loss: 1.749457172941078
+INFO:root:Finetuning Round 8900 average loss: 1.7491517445880376
+INFO:root:Finetuning Round 9000 average loss: 1.7489012560711967
+INFO:root:Finetuning Round 9100 average loss: 1.7487136726195995
+INFO:root:Finetuning Round 9200 average loss: 1.7484664566361385
+INFO:root:Finetuning Round 9300 average loss: 1.7481884347238847
+INFO:root:Finetuning Round 9400 average loss: 1.7479380410402379
+INFO:root:Finetuning Round 9500 average loss: 1.7476624790367328
+INFO:root:Finetuning Round 9600 average loss: 1.747366318727533
+INFO:root:Finetuning Round 9700 average loss: 1.7470854563442701
+INFO:root:Finetuning Round 9800 average loss: 1.7468383854505967
+INFO:root:Finetuning Round 9900 average loss: 1.7466105731087502
+INFO:root:Finetuning Round 10000 average loss: 1.7463044702529906
+INFO:root:Finetuning Round 10100 average loss: 1.7460782261178045
+INFO:root:Finetuning Round 10200 average loss: 1.7457861658638598
+INFO:root:Finetuning Round 10300 average loss: 1.7455612745678541
+INFO:root:Finetuning Round 10400 average loss: 1.7453633449054682
+INFO:root:Finetuning Round 10500 average loss: 1.7451307364077795
+INFO:root:Finetuning Round 10600 average loss: 1.744958534623092
+INFO:root:Finetuning Round 10700 average loss: 1.7447238429461684
+INFO:root:Finetuning Round 10800 average loss: 1.744430894145259
+INFO:root:Finetuning Round 10900 average loss: 1.7442043522082338
+INFO:root:Finetuning Round 11000 average loss: 1.743979738571427
+INFO:root:Finetuning Round 11100 average loss: 1.7436861984364622
+INFO:root:Finetuning Round 11200 average loss: 1.7434578314317124
+INFO:root:Finetuning Round 11300 average loss: 1.7431988155630838
+INFO:root:Finetuning Round 11400 average loss: 1.7429603717097064
+INFO:root:Finetuning Round 11500 average loss: 1.7427648368814717
+INFO:root:Finetuning Round 11600 average loss: 1.7425587002367808
+INFO:root:Finetuning Round 11700 average loss: 1.742357173577333
+INFO:root:Finetuning Round 11800 average loss: 1.7420965387053409
+INFO:root:Finetuning Round 11900 average loss: 1.7418561887941442
+INFO:root:Finetuning Round 12000 average loss: 1.7415841766198477
+INFO:root:Finetuning Round 12100 average loss: 1.7413469231128693
+INFO:root:Finetuning Round 12200 average loss: 1.7411067221692351
+INFO:root:Finetuning Round 12300 average loss: 1.7408703359840363
+INFO:root:Finetuning Round 12400 average loss: 1.7406628628507737
+INFO:root:Finetuning Round 12500 average loss: 1.7404433223438263
+INFO:root:Finetuning Round 12600 average loss: 1.7402868666819165
+INFO:root:Finetuning Round 12700 average loss: 1.7400576456419126
+INFO:root:Finetuning Round 12800 average loss: 1.739858340676874
+INFO:root:Finetuning Round 12900 average loss: 1.7396135439706404
+INFO:root:Finetuning Round 13000 average loss: 1.7393980523439554
+INFO:root:Finetuning Round 13100 average loss: 1.7392059702181635
+INFO:root:Finetuning Round 13200 average loss: 1.7389893741860534
+INFO:root:Finetuning Round 13300 average loss: 1.7387821115228466
+INFO:root:Finetuning Round 13400 average loss: 1.738587281125695
+INFO:root:Finetuning Round 13500 average loss: 1.738396293401718
+INFO:root:Finetuning Round 13600 average loss: 1.7381647240589646
+INFO:root:Finetuning Round 13700 average loss: 1.7380160539950769
+INFO:root:Finetuning Round 13800 average loss: 1.7377737746031388
+INFO:root:Finetuning Round 13900 average loss: 1.7375689433547232
+INFO:root:Finetuning Round 14000 average loss: 1.7374184558136123
+INFO:root:Finetuning Round 14100 average loss: 1.7372082243574427
+INFO:root:Finetuning Round 14200 average loss: 1.7369399731176
+INFO:root:Finetuning Round 14300 average loss: 1.7367471388670115
+INFO:root:Finetuning Round 14400 average loss: 1.7364979633109436
+INFO:root:Finetuning Round 14500 average loss: 1.7363095420475665
+INFO:root:Finetuning Round 14600 average loss: 1.7361873061689612
+INFO:root:Finetuning Round 14700 average loss: 1.7359463501868604
+INFO:root:Finetuning Round 14800 average loss: 1.7357200770845285
+INFO:root:Finetuning Round 14900 average loss: 1.7355170456035025
+INFO:root:Finetuning Round 15000 average loss: 1.7353059634923935
+INFO:root:Finetuning Round 15100 average loss: 1.7351183318618117
+INFO:root:Finetuning Round 15200 average loss: 1.734921695542963
+INFO:root:Finetuning Round 15300 average loss: 1.7348410546467974
+INFO:root:Finetuning Round 15400 average loss: 1.7346684877206753
+INFO:root:Finetuning Round 15500 average loss: 1.7345239677429198
+INFO:root:Finetuning Round 15600 average loss: 1.7343056406195347
+INFO:root:Finetuning Round 15700 average loss: 1.7341451779976012
+INFO:root:Finetuning Round 15800 average loss: 1.7339362969805923
+INFO:root:Finetuning Round 15900 average loss: 1.7337567473807425
+INFO:root:Finetuning Round 16000 average loss: 1.7334968494996428
+INFO:root:Finetuning Round 16100 average loss: 1.7333445923150697
+INFO:root:Finetuning Round 16200 average loss: 1.733149426366076
+INFO:root:Finetuning Round 16300 average loss: 1.732950785182005
+INFO:root:Finetuning Round 16400 average loss: 1.732760630569807
+INFO:root:Finetuning Round 16500 average loss: 1.7325830018664852
+INFO:root:Finetuning Round 16600 average loss: 1.7324448375242303
+INFO:root:Finetuning Round 16700 average loss: 1.7322594050661533
+INFO:root:Finetuning Round 16800 average loss: 1.7320055447234994
+INFO:root:Finetuning Round 16900 average loss: 1.7318034363921577
+INFO:root:Finetuning Round 17000 average loss: 1.731614151870503
+INFO:root:Finetuning Round 17100 average loss: 1.7314429607795694
+INFO:root:Finetuning Round 17200 average loss: 1.7312623267256937
+INFO:root:Finetuning Round 17300 average loss: 1.7311094357857126
+INFO:root:Finetuning Round 17400 average loss: 1.7309443377283797
+INFO:root:Finetuning Round 17500 average loss: 1.730793059846333
+INFO:root:Finetuning Round 17600 average loss: 1.730616457733241
+INFO:root:Finetuning Round 17700 average loss: 1.7304192723392766
+INFO:root:Finetuning Round 17800 average loss: 1.730287550607424
+INFO:root:Finetuning Round 17900 average loss: 1.7301221458272562
+INFO:root:Finetuning Round 18000 average loss: 1.72994394901726
+INFO:root:Finetuning Round 18100 average loss: 1.7297996714892308
+INFO:root:Finetuning Round 18200 average loss: 1.7296022465202834
+INFO:root:Finetuning Round 18300 average loss: 1.7294357408851875
+INFO:root:Finetuning Round 18400 average loss: 1.729277905776449
+INFO:root:Finetuning Round 18500 average loss: 1.7291538884510864
+INFO:root:Finetuning Round 18600 average loss: 1.729039690539401
+INFO:root:Finetuning Round 18700 average loss: 1.7289196212470213
+INFO:root:Finetuning Round 18800 average loss: 1.728745017590675
+INFO:root:Finetuning Round 18900 average loss: 1.7285953064633426
+INFO:root:Finetuning Round 19000 average loss: 1.728410282254219
+INFO:root:Finetuning Round 19100 average loss: 1.7282133130565365
+INFO:root:Finetuning Round 19200 average loss: 1.7280601316442092
+INFO:root:Finetuning Round 19300 average loss: 1.727871148431857
+INFO:root:Finetuning Round 19400 average loss: 1.727739909530915
+INFO:root:Finetuning Round 19500 average loss: 1.727608329931895
+INFO:root:Finetuning Round 19600 average loss: 1.7274684521738364
+INFO:root:Finetuning Round 19700 average loss: 1.727305422440398
+INFO:root:Finetuning Round 19800 average loss: 1.7271679610856856
+INFO:root:Finetuning Round 19900 average loss: 1.7270564350590634
+INFO:root:Finetuning Round 20000 average loss: 1.7269130453526973
+INFO:root:Finetuning Round 20100 average loss: 1.7267817377628971
+INFO:root:Finetuning Round 20200 average loss: 1.7266402978531206
+INFO:root:Finetuning Round 20300 average loss: 1.7264869811264751
+INFO:root:Finetuning Round 20400 average loss: 1.7263027506365496
+INFO:root:Finetuning Round 20500 average loss: 1.7261260594158638
+INFO:root:Finetuning Round 20600 average loss: 1.7260187277111034
+INFO:root:Finetuning Round 20700 average loss: 1.7258426816048829
+INFO:root:Finetuning Round 20800 average loss: 1.7256661456995286
+INFO:root:Finetuning Round 20900 average loss: 1.7255431513238753
+INFO:root:Finetuning Round 21000 average loss: 1.7253894074928193
+INFO:root:Finetuning Round 21100 average loss: 1.725274819401203
+INFO:root:Finetuning Round 21200 average loss: 1.7251222627680256
+INFO:root:Finetuning Round 21300 average loss: 1.724952105725875
+INFO:root:Finetuning Round 21400 average loss: 1.7248344358606873
+INFO:root:Finetuning Round 21500 average loss: 1.7246600327602652
+INFO:root:Finetuning Round 21600 average loss: 1.7245113346863676
+INFO:root:Finetuning Round 21700 average loss: 1.7244015989325563
+INFO:root:Finetuning Round 21800 average loss: 1.7242460287437527
+INFO:root:Finetuning Round 21900 average loss: 1.7240811973510812
+INFO:root:Finetuning Round 22000 average loss: 1.7239577901634302
+INFO:root:Finetuning Round 22100 average loss: 1.7238028075792131
+INFO:root:Finetuning Round 22200 average loss: 1.7236139250392313
+INFO:root:Finetuning Round 22300 average loss: 1.7234792258547027
+INFO:root:Finetuning Round 22400 average loss: 1.7233542914422495
+INFO:root:Finetuning Round 22500 average loss: 1.7232463625537024
+INFO:root:Finetuning Round 22600 average loss: 1.723117142055942
+INFO:root:Finetuning Round 22700 average loss: 1.722987419351082
+INFO:root:Finetuning Round 22800 average loss: 1.7228473550290393
+INFO:root:Finetuning Round 22900 average loss: 1.7226981060838074
+INFO:root:Finetuning Round 23000 average loss: 1.7226049548491187
+INFO:root:Finetuning Round 23100 average loss: 1.722428475319049
+INFO:root:Finetuning Round 23200 average loss: 1.7223145947476912
+INFO:root:Finetuning Round 23300 average loss: 1.7221805067891216
+INFO:root:Finetuning Round 23400 average loss: 1.7220518659832131
+INFO:root:Finetuning Round 23500 average loss: 1.7218929139299595
+INFO:root:Finetuning Round 23600 average loss: 1.721781365108692
+INFO:root:Finetuning Round 23700 average loss: 1.7216721618728799
+INFO:root:Finetuning Round 23800 average loss: 1.721531087320392
+INFO:root:Finetuning Round 23900 average loss: 1.7213858747432422
+INFO:root:Finetuning Round 24000 average loss: 1.7212816488693157
+INFO:root:Finetuning Round 24100 average loss: 1.7211507149405498
+INFO:root:Finetuning Round 24200 average loss: 1.7210100626748455
+INFO:root:Finetuning Round 24300 average loss: 1.7208869586118454
+INFO:root:Finetuning Round 24400 average loss: 1.7207563017528564
+INFO:root:Finetuning Round 24500 average loss: 1.7206108736213372
+INFO:root:Finetuning Round 24600 average loss: 1.7204908341799325
+INFO:root:Finetuning Round 24700 average loss: 1.7203854487347698
+INFO:root:Finetuning Round 24800 average loss: 1.7202447566390038
+INFO:root:Finetuning Round 24900 average loss: 1.7201158853084686
+INFO:root:Finetuning Round 25000 average loss: 1.719968878927231
+INFO:root:Finetuning Round 25100 average loss: 1.7198333295218022
+INFO:root:Finetuning Round 25200 average loss: 1.7197047540545463
+INFO:root:Finetuning Round 25300 average loss: 1.719579838099687
+INFO:root:Finetuning Round 25400 average loss: 1.7194412592874737
+INFO:root:Finetuning Round 25500 average loss: 1.7192963128510643
+INFO:root:Finetuning Round 25600 average loss: 1.719171860399656
+INFO:root:Finetuning Round 25700 average loss: 1.7190459124819315
+INFO:root:Finetuning Round 25800 average loss: 1.7189294882800228
+INFO:root:Finetuning Round 25900 average loss: 1.7187835750938842
+INFO:root:Finetuning Round 26000 average loss: 1.7186413066112078
+INFO:root:Finetuning Round 26100 average loss: 1.718534447639838
+INFO:root:Finetuning Round 26200 average loss: 1.7184174573284978
+INFO:root:Finetuning Round 26300 average loss: 1.7182897971610154
+INFO:root:Finetuning Round 26400 average loss: 1.7181816549102464
+INFO:root:Finetuning Round 26500 average loss: 1.7180964169862136
+INFO:root:Finetuning Round 26600 average loss: 1.7180035013184511
+INFO:root:Finetuning Round 26700 average loss: 1.7178867768393027
+INFO:root:Finetuning Round 26800 average loss: 1.717765216805152
+INFO:root:Finetuning Round 26900 average loss: 1.7176674268502727
+INFO:root:Finetuning Round 27000 average loss: 1.7175669163023983
+INFO:root:Finetuning Round 27100 average loss: 1.7174506015795183
+INFO:root:Finetuning Round 27200 average loss: 1.7173143093024983
+INFO:root:Finetuning Round 27300 average loss: 1.717181178671973
+INFO:root:Finetuning Round 27400 average loss: 1.717065852671644
+INFO:root:Finetuning Round 27500 average loss: 1.7169211906173012
+INFO:root:Finetuning Round 27600 average loss: 1.7168001830621042
+INFO:root:Finetuning Round 27700 average loss: 1.716683095624731
+INFO:root:Finetuning Round 27800 average loss: 1.7165321030719676
+INFO:root:Finetuning Round 27900 average loss: 1.7164280233374634
+INFO:root:Finetuning Round 28000 average loss: 1.7162992567845754
+INFO:root:Finetuning Round 28100 average loss: 1.7161484717940945
+INFO:root:Finetuning Round 28200 average loss: 1.71605052421279
+INFO:root:Finetuning Round 28300 average loss: 1.7159353138996096
+INFO:root:Finetuning Round 28400 average loss: 1.7158515922830138
+INFO:root:Finetuning Round 28500 average loss: 1.7157524729151474
+INFO:root:Finetuning Round 28600 average loss: 1.7156454430843566
+INFO:root:Finetuning Round 28700 average loss: 1.7155285336331623
+INFO:root:Finetuning Round 28800 average loss: 1.7154024876985285
+INFO:root:Finetuning Round 28900 average loss: 1.7152781747121713
+INFO:root:Finetuning Round 29000 average loss: 1.7151769115349342
+INFO:root:Finetuning Round 29100 average loss: 1.7150599052733981
+INFO:root:Finetuning Round 29200 average loss: 1.7149615033726169
+INFO:root:Finetuning Round 29300 average loss: 1.7148656202542496
+INFO:root:Finetuning Round 29400 average loss: 1.7147505357557413
+INFO:root:Finetuning Round 29500 average loss: 1.714631880085347
+INFO:root:Finetuning Round 29600 average loss: 1.714511689873966
+INFO:root:Finetuning Round 29700 average loss: 1.7144049640857812
+INFO:root:Finetuning Round 29800 average loss: 1.7142935085936681
+INFO:root:Finetuning Round 29900 average loss: 1.7142084853864434
+INFO:root:Finetuning Round 30000 average loss: 1.7140593324820201
+INFO:root:Finetuning Round 30100 average loss: 1.7139388989095277
+INFO:root:Finetuning Round 30200 average loss: 1.7138191541733332
+INFO:root:Finetuning Round 30300 average loss: 1.7136948819640445
+INFO:root:Finetuning Round 30400 average loss: 1.7135970629830108
+INFO:root:Finetuning Round 30500 average loss: 1.713483767998023
+INFO:root:Finetuning Round 30600 average loss: 1.7133821310833388
+INFO:root:Finetuning Round 30700 average loss: 1.7132854499335397
+INFO:root:Finetuning Round 30800 average loss: 1.7132195705639852
+INFO:root:Finetuning Round 30900 average loss: 1.7131037057256235
+INFO:root:Finetuning Round 31000 average loss: 1.713014471304032
+INFO:root:Finetuning Round 31100 average loss: 1.7128989474374765
+INFO:root:Finetuning Round 31200 average loss: 1.7127878715250737
+INFO:root:Finetuning Round 31300 average loss: 1.7126861302692669
+INFO:root:Finetuning Round 31400 average loss: 1.7125797144622559
+INFO:root:Finetuning Round 31500 average loss: 1.712487272701566
+INFO:root:Finetuning Round 31600 average loss: 1.7123693915069857
+INFO:root:Finetuning Round 31700 average loss: 1.7122682296778502
+INFO:root:Finetuning Round 31800 average loss: 1.7121309626927166
+INFO:root:Finetuning Round 31900 average loss: 1.7120274514501745
+INFO:root:Finetuning Round 32000 average loss: 1.7119373624660075
+INFO:root:Finetuning Round 32100 average loss: 1.7118485310998661
+INFO:root:Finetuning Round 32200 average loss: 1.7117597240357665
+INFO:root:Finetuning Round 32300 average loss: 1.711641498438714
+INFO:root:Finetuning Round 32400 average loss: 1.7115551583082587
+INFO:root:Finetuning Round 32500 average loss: 1.7114583810036
+INFO:root:Finetuning Round 32600 average loss: 1.7113477693342725
+INFO:root:Finetuning Round 32700 average loss: 1.7112531946923026
+INFO:root:Finetuning Round 32800 average loss: 1.7111381918300943
+INFO:root:Finetuning Round 32900 average loss: 1.7110235345689722
+INFO:root:Finetuning Round 33000 average loss: 1.710915629325491
+INFO:root:Finetuning Round 33100 average loss: 1.710782058494689
+INFO:root:Finetuning Round 33200 average loss: 1.7106889912127012
+INFO:root:Finetuning Round 33300 average loss: 1.7105660237170555
+INFO:root:Finetuning Round 33400 average loss: 1.7104393687183985
+INFO:root:Finetuning Round 33500 average loss: 1.7103629249138619
+INFO:root:Finetuning Round 33600 average loss: 1.710267931041973
+INFO:root:Finetuning Round 33700 average loss: 1.7101498195785443
+INFO:root:Finetuning Round 33800 average loss: 1.710054237937786
+INFO:root:Finetuning Round 33900 average loss: 1.7099610675963681
+INFO:root:Finetuning Round 34000 average loss: 1.7098830285528126
+INFO:root:Finetuning Round 34100 average loss: 1.709803608005697
+INFO:root:Finetuning Round 34200 average loss: 1.7097348807325141
+INFO:root:Finetuning Round 34300 average loss: 1.7096407611446547
+INFO:root:Finetuning Round 34400 average loss: 1.7095377254901931
+INFO:root:Finetuning Round 34500 average loss: 1.7094183636851932
+INFO:root:Finetuning Round 34600 average loss: 1.709325703478962
+INFO:root:Finetuning Round 34700 average loss: 1.7092433282793082
+INFO:root:Finetuning Round 34800 average loss: 1.7091652163554882
+INFO:root:Finetuning Round 34900 average loss: 1.7090518783259188
+INFO:root:Finetuning Round 35000 average loss: 1.7089391215154104
+INFO:root:Finetuning Round 35100 average loss: 1.7088662139404873
+INFO:root:Finetuning Round 35200 average loss: 1.708778312426399
+INFO:root:Finetuning Round 35300 average loss: 1.7086927881558285
+INFO:root:Finetuning Round 35400 average loss: 1.7085983262930886
+INFO:root:Finetuning Round 35500 average loss: 1.7085089016766615
+INFO:root:Finetuning Round 35600 average loss: 1.7084102664067504
+INFO:root:Finetuning Round 35700 average loss: 1.7083056177178018
+INFO:root:Finetuning Round 35800 average loss: 1.7082261119941093
+INFO:root:Finetuning Round 35900 average loss: 1.7081143896194553
+INFO:root:Finetuning Round 36000 average loss: 1.708021090252532
+INFO:root:Finetuning Round 36100 average loss: 1.7079159253786145
+INFO:root:Finetuning Round 36200 average loss: 1.7078068728012274
+INFO:root:Finetuning Round 36300 average loss: 1.7077124005244126
+INFO:root:Finetuning Round 36400 average loss: 1.7076309325112091
+INFO:root:Finetuning Round 36500 average loss: 1.7075336004903872
+INFO:root:Finetuning Round 36600 average loss: 1.707451910614316
+INFO:root:Finetuning Round 36700 average loss: 1.7073616421060276
+INFO:root:Finetuning Round 36800 average loss: 1.707260510623455
+INFO:root:Finetuning Round 36900 average loss: 1.7071777590535844
+INFO:root:Finetuning Round 37000 average loss: 1.7070790112920708
+INFO:root:Finetuning Round 37100 average loss: 1.706986354432016
+INFO:root:Finetuning Round 37200 average loss: 1.7069042229940814
+INFO:root:Finetuning Round 37300 average loss: 1.7068103288613439
+INFO:root:Finetuning Round 37400 average loss: 1.7067211827301088
+INFO:root:Finetuning Round 37500 average loss: 1.7066414796670277
+INFO:root:Finetuning Round 37600 average loss: 1.7065388764441014
+INFO:root:Finetuning Round 37700 average loss: 1.7064466203681987
+INFO:root:Finetuning Round 37800 average loss: 1.706348771970108
+INFO:root:Finetuning Round 37900 average loss: 1.7062654686162844
+INFO:root:Finetuning Round 38000 average loss: 1.7061721760881574
+INFO:root:Finetuning Round 38100 average loss: 1.706081220768881
+INFO:root:Finetuning Round 38200 average loss: 1.7059805577182021
+INFO:root:Finetuning Round 38300 average loss: 1.7059058484894176
+INFO:root:Finetuning Round 38400 average loss: 1.705808635180195
+INFO:root:Finetuning Round 38500 average loss: 1.7056949963445787
+INFO:root:Finetuning Round 38600 average loss: 1.7056063773903822
+INFO:root:Finetuning Round 38700 average loss: 1.7055051578508176
+INFO:root:Finetuning Round 38800 average loss: 1.7054246862985425
+INFO:root:Finetuning Round 38900 average loss: 1.705349703754435
+INFO:root:Finetuning Round 39000 average loss: 1.7052525140994634
+INFO:root:Finetuning Round 39100 average loss: 1.7051936302069204
+INFO:root:Finetuning Round 39200 average loss: 1.7051028702210407
+INFO:root:Finetuning Round 39300 average loss: 1.705007170193068
+INFO:root:Finetuning Round 39400 average loss: 1.704924437576139
+INFO:root:Finetuning Round 39500 average loss: 1.7048302968453757
+INFO:root:Finetuning Round 39600 average loss: 1.7047626611439868
+INFO:root:Finetuning Round 39700 average loss: 1.7046727056527318
+INFO:root:Finetuning Round 39800 average loss: 1.704591147959532
+INFO:root:Finetuning Round 39900 average loss: 1.7045023267281085
+INFO:root:Finetuning Round 40000 average loss: 1.7044391045749188
+INFO:root:Finetuning Round 40100 average loss: 1.704347089445799
+INFO:root:Finetuning Round 40200 average loss: 1.7042711227331588
+INFO:root:Finetuning Round 40300 average loss: 1.7041819175863384
+INFO:root:Finetuning Round 40400 average loss: 1.7041004130214747
+INFO:root:Finetuning Round 40500 average loss: 1.704017293409065
+INFO:root:Finetuning Round 40600 average loss: 1.7039487861324414
+INFO:root:Finetuning Round 40700 average loss: 1.7038637272760968
+INFO:root:Finetuning Round 40800 average loss: 1.7037634283304215
+INFO:root:Finetuning Round 40900 average loss: 1.7036532975175853
+INFO:root:Finetuning Round 41000 average loss: 1.7035772508121119
+INFO:root:Finetuning Round 41100 average loss: 1.7034813212449242
+INFO:root:Finetuning Round 41200 average loss: 1.703405473264097
+INFO:root:Finetuning Round 41300 average loss: 1.703344440194654
+INFO:root:Finetuning Round 41400 average loss: 1.7032586560848255
+INFO:root:Finetuning Round 41500 average loss: 1.7031687379342964
+INFO:root:Finetuning Round 41600 average loss: 1.7030850149490513
+INFO:root:Finetuning Round 41700 average loss: 1.7030092440263258
+INFO:root:Finetuning Round 41800 average loss: 1.7029372840292716
+INFO:root:Finetuning Round 41900 average loss: 1.7028593715932887
+INFO:root:Finetuning Round 42000 average loss: 1.7027736879416875
+INFO:root:Finetuning Round 42100 average loss: 1.7027063532481568
+INFO:root:Finetuning Round 42200 average loss: 1.702616796939859
+INFO:root:Finetuning Round 42300 average loss: 1.7025366208654769
+INFO:root:Finetuning Round 42400 average loss: 1.7024688147233342
+INFO:root:Finetuning Round 42500 average loss: 1.702378520042756
+INFO:root:Finetuning Round 42600 average loss: 1.7022918086264616
+INFO:root:Finetuning Round 42700 average loss: 1.7022046009550609
+INFO:root:Finetuning Round 42800 average loss: 1.7021196408026686
+INFO:root:Finetuning Round 42900 average loss: 1.7020239424038601
+INFO:root:Finetuning Round 43000 average loss: 1.7019439950599227
+INFO:root:Finetuning Round 43100 average loss: 1.7018669068536736
+INFO:root:Finetuning Round 43200 average loss: 1.7017868443136965
+INFO:root:Finetuning Round 43300 average loss: 1.701703759164788
+INFO:root:Finetuning Round 43400 average loss: 1.7016158379772293
+INFO:root:Finetuning Round 43500 average loss: 1.7015310058429323
+INFO:root:Finetuning Round 43600 average loss: 1.701448963295429
+INFO:root:Finetuning Round 43700 average loss: 1.7013624826721523
+INFO:root:Finetuning Round 43800 average loss: 1.7012653730557934
+INFO:root:Finetuning Round 43900 average loss: 1.7011799493547453
+INFO:root:Finetuning Round 44000 average loss: 1.701107198698954
+INFO:root:Finetuning Round 44100 average loss: 1.7010307971474266
+INFO:root:Finetuning Round 44200 average loss: 1.7009630738043677
+INFO:root:Finetuning Round 44300 average loss: 1.7009034605031628
+INFO:root:Finetuning Round 44400 average loss: 1.700820787796029
+INFO:root:Finetuning Round 44500 average loss: 1.7007423006175608
+INFO:root:Finetuning Round 44600 average loss: 1.7006620674550266
+INFO:root:Finetuning Round 44700 average loss: 1.7005925925146013
+INFO:root:Finetuning Round 44800 average loss: 1.7005126886868052
+INFO:root:Finetuning Round 44900 average loss: 1.7004132132700132
+INFO:root:Finetuning Round 45000 average loss: 1.700335702533192
+INFO:root:Finetuning Round 45100 average loss: 1.7002547333853737
+INFO:root:Finetuning Round 45200 average loss: 1.7001895007385617
+INFO:root:Finetuning Round 45300 average loss: 1.7001309312074127
+INFO:root:Finetuning Round 45400 average loss: 1.7000629889334875
+INFO:root:Finetuning Round 45500 average loss: 1.6999873011479012
+INFO:root:Finetuning Round 45600 average loss: 1.6999148944830684
+INFO:root:Finetuning Round 45700 average loss: 1.6998345195021096
+INFO:root:Finetuning Round 45800 average loss: 1.6997628996700178
+INFO:root:Finetuning Round 45900 average loss: 1.6996888652606208
+INFO:root:Finetuning Round 46000 average loss: 1.6996056756662286
+INFO:root:Finetuning Round 46100 average loss: 1.6995334220191145
+INFO:root:Finetuning Round 46200 average loss: 1.6994547866020369
+INFO:root:Finetuning Round 46300 average loss: 1.6993764025474984
+INFO:root:Finetuning Round 46400 average loss: 1.699298828472865
+INFO:root:Finetuning Round 46500 average loss: 1.6992199158027608
+INFO:root:Finetuning Round 46600 average loss: 1.6991471212590712
+INFO:root:Finetuning Round 46700 average loss: 1.6990576460785223
+INFO:root:Finetuning Round 46800 average loss: 1.6989811225859528
+INFO:root:Finetuning Round 46900 average loss: 1.6989042026503507
+INFO:root:Finetuning Round 47000 average loss: 1.6988351274678049
+INFO:root:Finetuning Round 47100 average loss: 1.698746430405639
+INFO:root:Finetuning Round 47200 average loss: 1.6986710621845924
+INFO:root:Finetuning Round 47300 average loss: 1.6985988219948702
+INFO:root:Finetuning Round 47400 average loss: 1.6985185533258986
+INFO:root:Finetuning Round 47500 average loss: 1.6984530731928975
+INFO:root:Finetuning Round 47600 average loss: 1.6983964687686006
+INFO:root:Finetuning Round 47700 average loss: 1.6983347537107687
+INFO:root:Finetuning Round 47800 average loss: 1.6982741739809764
+INFO:root:Finetuning Round 47900 average loss: 1.6981976536046985
+INFO:root:Finetuning Round 48000 average loss: 1.6981381779437263
+INFO:root:Finetuning Round 48100 average loss: 1.698060017749822
+INFO:root:Finetuning Round 48200 average loss: 1.6979894034521215
+INFO:root:Finetuning Round 48300 average loss: 1.6979108310856434
+INFO:root:Finetuning Round 48400 average loss: 1.6978308501420927
+INFO:root:Finetuning Round 48500 average loss: 1.697748458911463
+INFO:root:Finetuning Round 48600 average loss: 1.6976680724684594
+INFO:root:Finetuning Round 48700 average loss: 1.6975781540385997
+INFO:root:Finetuning Round 48800 average loss: 1.6975174885304247
+INFO:root:Finetuning Round 48900 average loss: 1.6974355655116293
+INFO:root:Finetuning Round 49000 average loss: 1.6973545992155463
+INFO:root:Finetuning Round 49100 average loss: 1.6972809510731164
+INFO:root:Finetuning Round 49200 average loss: 1.6972231441178942
+INFO:root:Finetuning Round 49300 average loss: 1.6971496900752883
+INFO:root:Finetuning Round 49400 average loss: 1.6970845773972962
+INFO:root:Finetuning Round 49500 average loss: 1.697019122875098
+INFO:root:Finetuning Round 49600 average loss: 1.6969477024313904
+INFO:root:Finetuning Round 49700 average loss: 1.6968628502611662
+INFO:root:Finetuning Round 49800 average loss: 1.6967837189766297
+INFO:root:Finetuning Round 49900 average loss: 1.6967184133711224
+INFO:root:Finetuning Round 50000 average loss: 1.6966613672566413

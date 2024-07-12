@@ -974,16 +974,20 @@ def get_dataset(dataset_type: DatasetType):
     if dataset_type == DatasetType.MNIST:
         # data from paper, normalized to [0,1]
         dataset = load_mnist()
-        dataset["data"] = np.asarray(dataset["data"] / 255.0, dtype=np.float32)
+        dataset["data"] = np.asarray(
+            minmax_scale(dataset["data"], feature_range=(0, 1)), dtype=np.float32
+        )
     elif dataset_type == DatasetType.FASHION_MNIST:
         # paper also used fashionmnist from pytorch and scales to [0,1]
         dataset = load_fmnist()
-        dataset["data"] = np.asarray(dataset["data"] / 255.0, dtype=np.float32)
+        dataset["data"] = np.asarray(
+            minmax_scale(dataset["data"], feature_range=(0, 1)), dtype=np.float32
+        )
     elif dataset_type == DatasetType.USPS:
         # usps data from paper normalized to [0,1]
         dataset = load_usps()
         dataset["data"] = np.asarray(
-            dataset["data"] / 255.0,
+            minmax_scale(dataset["data"], feature_range=(0, 1)),
             dtype=np.float32,
         )
     else:

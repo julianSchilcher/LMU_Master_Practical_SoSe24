@@ -987,10 +987,11 @@ def get_dataset(dataset_type: DatasetType):
             dtype=np.float32,
         )
     else:
-        # reuters is loaded the same way in clustpy as in the paper
+        # reuters is loaded the same way in clustpy as in the paper and scaled to [0,1]
         dataset = load_reuters()
-        dataset["data"] = np.asarray(dataset["data"], dtype=np.float32)
-        dataset["target"] = dataset["target"]
+        dataset["data"] = np.asarray(
+            minmax_scale(dataset["data"], feature_range=(0, 1)), dtype=np.float32
+        )
     return dataset
 
 

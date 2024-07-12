@@ -106,7 +106,7 @@ def kmeans_init(
             new_centers = (
                 KMeans(
                     n_clusters=2,
-                    n_init=10,
+                    n_init=1,
                     random_state=random_state.randint(low=1, high=2**32),
                 )
                 .fit(ds)

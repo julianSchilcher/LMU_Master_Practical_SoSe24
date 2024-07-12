@@ -761,11 +761,12 @@ def fit(
             idec = IDEC(
                 n_clusters=n_clusters,
                 batch_size=batch_size,
-                autoencoder=autoencoder,
-                clustering_optimizer_params={"lr": 1e-4, "betas": (0.9, 0.999)},
-                cluster_loss_weight=10.0,  # needs to be 10 to weight cluster loss 10x higher than autoencoder loss like in the paper
+                neural_network=autoencoder.to(device),
+                clustering_optimizer_params={"lr": 1e-4},
+                clustering_loss_weight=10.0,  # needs to be 10 to weight cluster loss 10x higher than autoencoder loss like in the paper
                 clustering_epochs=max_clustering_epochs,
-                random_state=np.random.RandomState(seed),
+                random_state=seed,
+                device=device,
                 initial_clustering_class=KMeans,
                 initial_clustering_params={
                     "n_init": 20,
@@ -775,7 +776,7 @@ def fit(
             )
             print("fitting IDEC...")
             idec.fit(data)
-            autoencoder = idec.autoencoder
+            autoencoder = idec.neural_network
             print("finished fitting IDEC")
 
             # Calculate evaluation metrics

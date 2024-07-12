@@ -7,6 +7,7 @@ import numpy as np
 # The dendogram purity can be computed in a bottom up manner
 # at each node within the tree we need the number of data points in each child and have to weight the cases
 
+
 def weighted_avg_and_std(values, weights):
     """
     Return the weighted average and standard deviation.
@@ -19,12 +20,15 @@ def weighted_avg_and_std(values, weights):
     variance = np.average((values - average) ** 2, weights=weights)
     return (average, np.sqrt(variance))
 
+
 def count_values_in_sequence(seq):
     from collections import defaultdict
-    res = defaultdict(lambda : 0)
+
+    res = defaultdict(lambda: 0)
     for key in seq:
         res[key] += 1
     return dict(res)
+
 
 @attr.s(cmp=False)
 class DpNode(object):
@@ -87,7 +91,8 @@ def leaf_purity(tree_root, ground_truth):
         if node.is_leaf:
             node_total_dp_count = len(node.dp_ids)
             node_per_label_counts = count_values_in_sequence(
-                [ground_truth[id] for id in node.dp_ids])
+                [ground_truth[id] for id in node.dp_ids]
+            )
             if node_total_dp_count > 0:
                 purity_rate = max(node_per_label_counts.values()) / node_total_dp_count
             else:
@@ -105,35 +110,56 @@ def leaf_purity(tree_root, ground_truth):
 
 def dendrogram_purity(tree_root, ground_truth):
     total_per_label_frequencies = count_values_in_sequence(ground_truth)
-    total_per_label_pairs_count = {k: comb(v, 2, True) for k, v in total_per_label_frequencies.items()}
+    total_per_label_pairs_count = {
+        k: comb(v, 2, exact=True) for k, v in total_per_label_frequencies.items()
+    }
     total_n_of_pairs = sum(total_per_label_pairs_count.values())
 
-    one_div_total_n_of_pairs = 1. / total_n_of_pairs
+    one_div_total_n_of_pairs = 1.0 / total_n_of_pairs
 
-    purity = 0.
+    purity = 0.0
 
     def calculate_purity(node, level):
         nonlocal purity
         if node.is_leaf:
             node_total_dp_count = len(node.dp_ids)
             node_per_label_frequencies = count_values_in_sequence(
-                [ground_truth[id] for id in node.dp_ids])
-            node_per_label_pairs_count = {k: comb(v, 2, True) for k, v in node_per_label_frequencies.items()}
+                [ground_truth[id] for id in node.dp_ids]
+            )
+            node_per_label_pairs_count = {
+                k: comb(v, 2, exact=True) for k, v in node_per_label_frequencies.items()
+            }
 
         else:  # it is an inner node
-            left_child_per_label_freq, left_child_total_dp_count = calculate_purity(node.left_child, level + 1)
-            right_child_per_label_freq, right_child_total_dp_count = calculate_purity(node.right_child, level + 1)
+            left_child_per_label_freq, left_child_total_dp_count = calculate_purity(
+                node.left_child, level + 1
+            )
+            right_child_per_label_freq, right_child_total_dp_count = calculate_purity(
+                node.right_child, level + 1
+            )
             node_total_dp_count = left_child_total_dp_count + right_child_total_dp_count
-            node_per_label_frequencies = {k: left_child_per_label_freq.get(k, 0) + right_child_per_label_freq.get(k, 0) \
-                                          for k in set(left_child_per_label_freq) | set(right_child_per_label_freq)}
+            node_per_label_frequencies = {
+                k: left_child_per_label_freq.get(k, 0)
+                + right_child_per_label_freq.get(k, 0)
+                for k in set(left_child_per_label_freq)
+                | set(right_child_per_label_freq)
+            }
 
-            node_per_label_pairs_count = {k: left_child_per_label_freq.get(k) * right_child_per_label_freq.get(k) \
-                                          for k in set(left_child_per_label_freq) & set(right_child_per_label_freq)}
+            node_per_label_pairs_count = {
+                k: left_child_per_label_freq.get(k) * right_child_per_label_freq.get(k)
+                for k in set(left_child_per_label_freq)
+                & set(right_child_per_label_freq)
+            }
 
         for label, pair_count in node_per_label_pairs_count.items():
             label_freq = node_per_label_frequencies[label]
             label_pairs = node_per_label_pairs_count[label]
-            purity += one_div_total_n_of_pairs * label_freq / node_total_dp_count * label_pairs
+            purity += (
+                one_div_total_n_of_pairs
+                * label_freq
+                / node_total_dp_count
+                * label_pairs
+            )
         return node_per_label_frequencies, node_total_dp_count
 
     calculate_purity(tree_root, 0)
@@ -202,7 +228,9 @@ def to_dendrogram_purity_tree(children_array):
         node_map[n_samples + idx] = DpNode(child_a, child_b, next_id)
         next_id -= 1
     if len(node_map) != 1:
-        raise RuntimeError("tree must be fully developed! Use ompute_full_tree=True for AgglomerativeClustering")
+        raise RuntimeError(
+            "tree must be fully developed! Use ompute_full_tree=True for AgglomerativeClustering"
+        )
     root = node_map[n_samples + n_samples - 2]
     return root
 
@@ -276,9 +304,3 @@ def to_dendrogram_purity_tree(children_array):
 #         if highest_measure is None or highest_measure < cur_highest:
 #             highest_measure = cur_highest
 #     return highest_measure
-
-
-
-
-
-

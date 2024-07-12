@@ -1454,15 +1454,15 @@ if __name__ == "__main__":
     seeds = [21, 42, 63]
     embedding_dims = [10]
     worker_num = 2
-    evaluate(AutoencoderType.DEEPECT_STACKED_AE, DatasetType.MNIST, 21, None, 10)
+    # evaluate(AutoencoderType.DEEPECT_STACKED_AE, DatasetType.MNIST, 21, None, 10)
     # pretrain_for_multiple_seeds(
     #     seeds, embedding_dims=embedding_dims, worker_num=worker_num
     # )
-    # all_autoencoders = list(
-    #     product(AutoencoderType, DatasetType, seeds, [None], embedding_dims, [None])
-    # )
-    # with mp.Pool(processes=worker_num) as pool:
-    #     result = pool.starmap(evaluate, all_autoencoders)
-    # # compute autoencoder+complete linkage
-    # for ae_type, dataset_type, seed, ae_path, embedding_dim, _ in all_autoencoders:
-    #     evaluate(ae_type, dataset_type, seed, ae_path, embedding_dim)
+    all_autoencoders = list(
+        product(AutoencoderType, DatasetType, seeds, [None], embedding_dims, [None])
+    )
+    with mp.Pool(processes=worker_num) as pool:
+        result = pool.starmap(evaluate, all_autoencoders)
+    # compute autoencoder+complete linkage
+    for ae_type, dataset_type, seed, ae_path, embedding_dim, _ in all_autoencoders:
+        evaluate(ae_type, dataset_type, seed, ae_path, embedding_dim)

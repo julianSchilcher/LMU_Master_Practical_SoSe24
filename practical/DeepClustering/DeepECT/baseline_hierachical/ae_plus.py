@@ -12,6 +12,7 @@ sys.path.append(os.getcwd())
 from practical.DeepClustering.DeepECT.baseline_hierachical.utils.dendrogram_purity import *
 from practical.DeepClustering.DeepECT.baseline_hierachical.utils.bisceting_kmeans import *
 from sklearn.cluster import AgglomerativeClustering
+import multiprocessing as mp
 
 
 def ae_bisecting(
@@ -71,6 +72,15 @@ def ae_complete(
     n_clusters,
     device,
 ):
+    for lib in [
+        "OMP_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "BLIS_NUM_THREADS",
+        "VECLIB_MAXIMUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+    ]:
+        os.environ[lib] = str(mp.cpu_count())
     embedded_data = []
     for batch_data in dataloader:
         embedded_data.append(

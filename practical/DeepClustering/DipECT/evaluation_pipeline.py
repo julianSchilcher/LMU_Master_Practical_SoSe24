@@ -50,7 +50,7 @@ from practical.DeepClustering.DipECT.baseline_hierachical.ae_plus import (
 )
 
 # please keep this format to prevent circular imports
-from practical.DeepClustering.DipECT.dipect import DipECT
+import practical.DeepClustering.DipECT.dipect as dipect
 
 
 class DatasetType(Enum):
@@ -610,7 +610,7 @@ def fit(
                 )
         elif method == ClusteringMethod.DIPECT:
             autoencoder.to(device)
-            dipect = DipECT(
+            dipect = dipect.DipECT(
                 batch_size=256,
                 autoencoder=autoencoder,
                 random_state=np.random.RandomState(seed),
@@ -687,7 +687,7 @@ def fit(
                 data, dataset_type, seed
             )
 
-            dipect = DipECT(
+            dipect = dipect.DipECT(
                 batch_size=256,
                 autoencoder=autoencoder,
                 random_state=np.random.RandomState(seed),
@@ -875,17 +875,18 @@ def get_custom_dataloader_augmentations(
     tuple
         The train and test dataloaders.
     """
-
+    # raise NotImplementedError("Not implemented for dipect evaluation.")
     degrees = (-15, 15)
     translation = (
         0.14 if dataset_type == DatasetType.USPS else 0.08,
         0.14 if dataset_type == DatasetType.USPS else 0.08,
     )
+
     image_min_value = np.min(data)
+    image_max_value = np.max(data)
     image_size = 16 if dataset_type == DatasetType.USPS else 28
 
-    image_max_value = np.max(data) - image_min_value
-
+    
     augmentation_transform = transforms.Compose(
         [
             transforms.Lambda(lambda x: x - image_min_value),

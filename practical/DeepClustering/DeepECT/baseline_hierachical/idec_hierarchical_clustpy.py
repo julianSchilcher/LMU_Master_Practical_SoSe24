@@ -26,11 +26,14 @@ def run_idec_hierarchical(
     idec = IDEC(
         n_clusters,
         batch_size=batch_size,
-        random_state=np.random.RandomState(seed),
+        random_state=seed,
         neural_network=autoencoder,
         clustering_epochs=epochs,
-        cluster_loss_weight=10.0,  # needs to be 10 to weight cluster loss 10x higher than autoencoder loss like in the paper
-        initial_clustering_params={"n_init": 20},
+        clustering_loss_weight=10.0,  # needs to be 10 to weight cluster loss 10x higher than autoencoder loss like in the paper
+        initial_clustering_params={
+            "n_init": 20,
+            "random_state": np.random.RandomState(seed),
+        },
         custom_dataloaders=custom_dataloaders,
     )
     idec.fit(

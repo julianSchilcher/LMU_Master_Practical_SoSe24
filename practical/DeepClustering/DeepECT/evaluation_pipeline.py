@@ -74,10 +74,10 @@ class ClusteringMethod(Enum):
     Enumeration for clustering methods.
     """
 
-    IDEC = "IDEC"
-    KMEANS = "KMeans"
     IDEC_SINGLE = "IDEC + Single"
     IDEC_COMPLETE = "IDEC + Complete"
+    IDEC = "IDEC"
+    KMEANS = "KMeans"
     AE_BISECTING = "Autoencoder + Bisection"
     AE_SINGLE = "Autoencoder + Single"
     AE_COMPLETE = "Autoencoder + Complete"
@@ -779,11 +779,12 @@ def fit(
             idec = IDEC(
                 n_clusters=n_clusters,
                 batch_size=batch_size,
-                neural_network=autoencoder,
+                neural_network=autoencoder.to(device),
                 clustering_optimizer_params={"lr": 1e-4},
-                cluster_loss_weight=10.0,  # needs to be 10 to weight cluster loss 10x higher than autoencoder loss like in the paper
+                clustering_loss_weight=10.0,  # needs to be 10 to weight cluster loss 10x higher than autoencoder loss like in the paper
                 clustering_epochs=max_clustering_epochs,
                 random_state=seed,
+                device=device,
                 initial_clustering_class=KMeans,
                 initial_clustering_params={
                     "n_init": 20,
@@ -851,7 +852,7 @@ def fit(
                 labels,
                 seed,
                 n_clusters,
-                autoencoder,
+                autoencoder.to(device),
                 epochs=max_clustering_epochs,
                 batch_size=batch_size,
                 custom_dataloaders=dataloaders,
@@ -1453,14 +1454,15 @@ if __name__ == "__main__":
     seeds = [21, 42, 63]
     embedding_dims = [10]
     worker_num = 2
-    pretrain_for_multiple_seeds(
-        seeds, embedding_dims=embedding_dims, worker_num=worker_num
-    )
-    all_autoencoders = list(
-        product(AutoencoderType, DatasetType, seeds, [None], embedding_dims, [None])
-    )
-    with mp.Pool(processes=worker_num) as pool:
-        result = pool.starmap(evaluate, all_autoencoders)
-    # compute autoencoder+complete linkage
-    for ae_type, dataset_type, seed, ae_path, embedding_dim, _ in all_autoencoders:
-        evaluate(ae_type, dataset_type, seed, ae_path, embedding_dim)
+    evaluate(AutoencoderType.DEEPECT_STACKED_AE, DatasetType.MNIST, 21, None, 10)
+    # pretrain_for_multiple_seeds(
+    #     seeds, embedding_dims=embedding_dims, worker_num=worker_num
+    # )
+    # all_autoencoders = list(
+    #     product(AutoencoderType, DatasetType, seeds, [None], embedding_dims, [None])
+    # )
+    # with mp.Pool(processes=worker_num) as pool:
+    #     result = pool.starmap(evaluate, all_autoencoders)
+    # # compute autoencoder+complete linkage
+    # for ae_type, dataset_type, seed, ae_path, embedding_dim, _ in all_autoencoders:
+    #     evaluate(ae_type, dataset_type, seed, ae_path, embedding_dim)

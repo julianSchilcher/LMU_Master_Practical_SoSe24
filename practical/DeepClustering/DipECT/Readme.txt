@@ -43,7 +43,7 @@ data, labels = load_mnist(return_X_y=True)
 dataloaders_with_augmentation = get_custom_dataloader_augmentations(data, DatasetType.MNIST)
 # run algorithm with default settings (autoencoder will be pretrained)
 dipect = DipECT(autoencoder_param_path="path/to/store/pretrained/autoencoder", custom_dataloaders=dataloaders_with_augmentation, augmentation_invariance=True)
-dipect.fit_predict(data, labels)
+dipect.fit_predict(None, labels)
 # evaluation
 dipect.tree_.flat_accuracy(labels, 10)
 dipect.tree_.flat_nmi(labels, 10)

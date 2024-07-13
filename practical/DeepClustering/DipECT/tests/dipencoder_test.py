@@ -2,13 +2,18 @@ from sklearn.datasets import make_blobs
 from clustpy.deep._data_utils import get_dataloader
 from clustpy.deep._utils import encode_batchwise
 from clustpy.metrics import unsupervised_clustering_accuracy
-from practical.DeepClustering.DipECT.dipect import Cluster_Tree
+from clustpy.deep.autoencoders import FeedforwardAutoencoder
+from sklearn.preprocessing import minmax_scale
+from practical.DeepClustering.DipECT.dipect import Cluster_Tree, DipECT
 import torch
 import numpy as np
 
-def _gen_artificial_dataset(number_clusters):
-    X, y = make_blobs(n_samples=600, centers=number_clusters, random_state=10)
-    return get_dataloader(X, 50), y
+def _gen_artificial_dataset(number_clusters, n_features = 2, return_dataloader=True, n_samples=600):
+    X, y = make_blobs(n_samples=n_samples, centers=number_clusters, random_state=10, n_features=n_features)
+    if return_dataloader:
+        return get_dataloader(X, 50), y
+    else:
+        return X, y
 
 def _get_mock_autoencoder(fkt_object=None):
     if fkt_object is None:
@@ -39,6 +44,7 @@ def test_grow_assign():
 
     pred_labels = np.ones(len(X))*-1
     if tree.root.lower_projection_child.is_leaf_node():
+        # consistency check if merging of child samples result in parent samples
         X_combined = torch.cat((tree.root.higher_projection_child.lower_projection_child.assignments, tree.root.higher_projection_child.higher_projection_child.assignments), dim=0)
         X_combined_sorted, _ = torch.sort(X_combined, dim=0)
         X_sorted, _ = torch.sort(tree.root.higher_projection_child.assignments, dim=0)
@@ -49,6 +55,7 @@ def test_grow_assign():
         pred_labels[tree.root.higher_projection_child.higher_projection_child.assignment_indices] = 1
         pred_labels[tree.root.lower_projection_child.assignment_indices] = 2
     else:
+        # consistency check if merging of child samples result in parent samples
         X_combined = torch.cat((tree.root.lower_projection_child.lower_projection_child.assignments, tree.root.lower_projection_child.higher_projection_child.assignments), dim=0)
         X_combined_sorted, _ = torch.sort(X_combined, dim=0)
         X_sorted, _ = torch.sort(tree.root.lower_projection_child.assignments, dim=0)
@@ -59,6 +66,17 @@ def test_grow_assign():
         pred_labels[tree.root.lower_projection_child.higher_projection_child.assignment_indices] = 1
         pred_labels[tree.root.higher_projection_child.assignment_indices] = 2
     
+    # for the simple make_bloobs data set, we should get a good accuracy with a simple tree split
     assert is_identical
     assert sum(pred_labels == -1) == 0 # each point got a label
     assert unsupervised_clustering_accuracy(labels, pred_labels) == 1.0
+
+
+def test_whole_algorithm():
+    # test "whole" dipect algorithm on simple higher dimensinal data 
+    X, labels = _gen_artificial_dataset(3, 50, return_dataloader=False, n_samples=1000)
+    X = minmax_scale(X, feature_range=(0, 1), axis=1)
+    autoencoder = FeedforwardAutoencoder([50, 5])
+    dipect = DipECT(autoencoder=autoencoder, autoencoder_pretrain_n_epochs=5, random_state=np.random.RandomState(15), clustering_n_epochs=3, tree_growth_frequency=1, tree_growth_unimodality_treshold=1.0, tree_growth_min_cluster_size=50, pruning_threshold=20, embedding_size=5)
+    dipect = dipect.fit_predict(X)
+    assert dipect.tree_.flat_accuracy(labels, 3) > 0.95

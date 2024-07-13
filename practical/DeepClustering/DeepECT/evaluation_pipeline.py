@@ -1445,6 +1445,8 @@ def load_precomputed_results(
             f"practical/DeepClustering/DeepECT/results/{dataset['dataset_name']}_{autoencoder_type.name}_{embedding_dim}_{method.name}_{seed}.pq"
         )
         if os.path.exists(result_path):
+            df = pd.read_parquet(result_path)
+            df["seed"] = seed
             results.append(pd.read_parquet(result_path))
             continue
     return pd.concat(results, axis=0, ignore_index=True)

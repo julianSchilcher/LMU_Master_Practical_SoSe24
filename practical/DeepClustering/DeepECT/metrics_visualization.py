@@ -387,13 +387,8 @@ def visualize_peformance_AE(
 
 
 def load_results():
-    seeds = [21, 42]
+    seeds = [21, 42, 63]
     # MNIST
-    mnist_multiple_seeds_clustpy_ae = load_precomputed_results(
-        autoencoder_type=AutoencoderType.CLUSTPY_STANDARD,
-        dataset_type=DatasetType.MNIST,
-        seeds=seeds,
-    )
     mnist_multiple_seeds_stacked_ae = load_precomputed_results(
         autoencoder_type=AutoencoderType.DEEPECT_STACKED_AE,
         dataset_type=DatasetType.MNIST,
@@ -401,24 +396,13 @@ def load_results():
     )
 
     mean_flat_mnist = calculate_flat_mean_for_multiple_seeds(
-        pd.concat(
-            [mnist_multiple_seeds_clustpy_ae, mnist_multiple_seeds_stacked_ae],
-            ignore_index=True,
-        )
+        mnist_multiple_seeds_stacked_ae
     )
     mean_hierarchical_mnist = calculate_hierarchical_mean_for_multiple_seeds(
-        pd.concat(
-            [mnist_multiple_seeds_clustpy_ae, mnist_multiple_seeds_stacked_ae],
-            ignore_index=True,
-        )
+        mnist_multiple_seeds_stacked_ae
     )
 
     # USPS
-    usps_multiple_seeds_clustpy_ae = load_precomputed_results(
-        autoencoder_type=AutoencoderType.CLUSTPY_STANDARD,
-        dataset_type=DatasetType.USPS,
-        seeds=seeds,
-    )
 
     usps_multiple_seeds_stacked_ae = load_precomputed_results(
         autoencoder_type=AutoencoderType.DEEPECT_STACKED_AE,
@@ -427,24 +411,13 @@ def load_results():
     )
 
     mean_flat_usps = calculate_flat_mean_for_multiple_seeds(
-        pd.concat(
-            [usps_multiple_seeds_clustpy_ae, usps_multiple_seeds_stacked_ae],
-            ignore_index=True,
-        )
+        usps_multiple_seeds_stacked_ae
     )
     mean_hierarchical_usps = calculate_hierarchical_mean_for_multiple_seeds(
-        pd.concat(
-            [usps_multiple_seeds_clustpy_ae, usps_multiple_seeds_stacked_ae],
-            ignore_index=True,
-        )
+        usps_multiple_seeds_stacked_ae
     )
 
     # FashionMNIST
-    fashion_multiple_seeds_clustpy_ae = load_precomputed_results(
-        autoencoder_type=AutoencoderType.CLUSTPY_STANDARD,
-        dataset_type=DatasetType.FASHION_MNIST,
-        seeds=seeds,
-    )
 
     fashion_multiple_seeds_stacked_ae = load_precomputed_results(
         autoencoder_type=AutoencoderType.DEEPECT_STACKED_AE,
@@ -453,25 +426,13 @@ def load_results():
     )
 
     mean_flat_fashion = calculate_flat_mean_for_multiple_seeds(
-        pd.concat(
-            [fashion_multiple_seeds_clustpy_ae, fashion_multiple_seeds_stacked_ae],
-            ignore_index=True,
-        )
+        fashion_multiple_seeds_stacked_ae
     )
     mean_hierarchical_fashion = calculate_hierarchical_mean_for_multiple_seeds(
-        pd.concat(
-            [fashion_multiple_seeds_clustpy_ae, fashion_multiple_seeds_stacked_ae],
-            ignore_index=True,
-        )
+        fashion_multiple_seeds_stacked_ae
     )
 
     # Reuters
-    reuters_multiple_seeds_clustpy_ae = load_precomputed_results(
-        autoencoder_type=AutoencoderType.CLUSTPY_STANDARD,
-        dataset_type=DatasetType.REUTERS,
-        seeds=seeds,
-    )
-
     reuters_multiple_seeds_stacked_ae = load_precomputed_results(
         autoencoder_type=AutoencoderType.DEEPECT_STACKED_AE,
         dataset_type=DatasetType.REUTERS,
@@ -479,53 +440,71 @@ def load_results():
     )
 
     mean_flat_reuters = calculate_flat_mean_for_multiple_seeds(
-        pd.concat(
-            [reuters_multiple_seeds_clustpy_ae, reuters_multiple_seeds_stacked_ae],
-            ignore_index=True,
-        )
+        reuters_multiple_seeds_stacked_ae
     )
     mean_hierarchical_reuters = calculate_hierarchical_mean_for_multiple_seeds(
-        pd.concat(
-            [reuters_multiple_seeds_clustpy_ae, reuters_multiple_seeds_stacked_ae],
-            ignore_index=True,
-        )
+        reuters_multiple_seeds_stacked_ae
     )
 
     ## Flat metrics
     flat_combined_df = pd.concat(
-        [mean_flat_mnist, mean_flat_usps, mean_flat_fashion, mean_flat_reuters],
+        [
+            mnist_multiple_seeds_stacked_ae,
+            usps_multiple_seeds_stacked_ae,
+            fashion_multiple_seeds_stacked_ae,
+            reuters_multiple_seeds_stacked_ae,
+        ],
         ignore_index=True,
     )
+    flat_combined_df.fillna(0)
     # Pivot the DataFrame to match the desired format
-    flat_pivot_df = flat_combined_df.pivot(
-        index=[
-            "autoencoder",
-            "method",
-        ],
-        columns="dataset",
-        values=[
-            "nmi",
-            "acc",
-            "ari",
-        ],
-    ).dropna(how="all")
-
+    flat_pivot_df = (
+        flat_combined_df.pivot_table(
+            index=[
+                "autoencoder",
+                "method",
+            ],
+            columns="dataset",
+            values=[
+                "nmi",
+                "acc",
+                "ari",
+            ],
+            aggfunc=[np.mean, lambda x: np.std(x, ddof=0)],
+            fill_value=0,
+        )
+        .dropna(how="all")
+        .round(2)
+    )
+    flat_pivot_df.rename(columns={"<lambda>": "std"}, level=0, inplace=True)
     # Reorder the columns to match the order in the image
-    flat_pivot_df.columns = flat_pivot_df.columns.swaplevel(0, 1)
+    flat_pivot_df.columns = flat_pivot_df.columns.swaplevel(0, 2)
     flat_pivot_df = flat_pivot_df.reindex(
         columns=[
-            (DatasetType.MNIST.value, "nmi"),
-            (DatasetType.MNIST.value, "acc"),
-            (DatasetType.MNIST.value, "ari"),
-            (DatasetType.USPS.value, "nmi"),
-            (DatasetType.USPS.value, "acc"),
-            (DatasetType.USPS.value, "ari"),
-            (DatasetType.FASHION_MNIST.value, "nmi"),
-            (DatasetType.FASHION_MNIST.value, "acc"),
-            (DatasetType.FASHION_MNIST.value, "ari"),
-            (DatasetType.REUTERS.value, "nmi"),
-            (DatasetType.REUTERS.value, "acc"),
-            (DatasetType.REUTERS.value, "ari"),
+            (DatasetType.MNIST.value, "nmi", "mean"),
+            (DatasetType.MNIST.value, "nmi", "std"),
+            (DatasetType.MNIST.value, "acc", "mean"),
+            (DatasetType.MNIST.value, "acc", "std"),
+            (DatasetType.MNIST.value, "ari", "mean"),
+            (DatasetType.MNIST.value, "ari", "std"),
+            (DatasetType.USPS.value, "nmi", "mean"),
+            (DatasetType.USPS.value, "nmi", "std"),
+            (DatasetType.USPS.value, "acc", "mean"),
+            (DatasetType.USPS.value, "acc", "std"),
+            (DatasetType.USPS.value, "ari", "mean"),
+            (DatasetType.USPS.value, "ari", "std"),
+            (DatasetType.FASHION_MNIST.value, "nmi", "mean"),
+            (DatasetType.FASHION_MNIST.value, "nmi", "std"),
+            (DatasetType.FASHION_MNIST.value, "acc", "mean"),
+            (DatasetType.FASHION_MNIST.value, "acc", "std"),
+            (DatasetType.FASHION_MNIST.value, "ari", "mean"),
+            (DatasetType.FASHION_MNIST.value, "ari", "std"),
+            (DatasetType.REUTERS.value, "nmi", "mean"),
+            (DatasetType.REUTERS.value, "nmi", "std"),
+            (DatasetType.REUTERS.value, "acc", "mean"),
+            (DatasetType.REUTERS.value, "acc", "std"),
+            (DatasetType.REUTERS.value, "ari", "mean"),
+            (DatasetType.REUTERS.value, "ari", "std"),
         ]
     )
 
@@ -554,32 +533,48 @@ def load_results():
     ## Hierarchical clustering
     hierarchical_combined = pd.concat(
         [
-            mean_hierarchical_mnist,
-            mean_hierarchical_usps,
-            mean_hierarchical_fashion,
-            mean_hierarchical_reuters,
+            mnist_multiple_seeds_stacked_ae,
+            usps_multiple_seeds_stacked_ae,
+            fashion_multiple_seeds_stacked_ae,
+            reuters_multiple_seeds_stacked_ae,
         ],
         ignore_index=True,
     )
+    hierarchical_combined.fillna(0)
     # Pivot the DataFrame to match the desired format
-    hierarchical_pivot_df = hierarchical_combined.pivot(
-        index=["autoencoder", "method"],
-        columns="dataset",
-        values=["dp", "lp"],
-    ).dropna(how="all")
+    hierarchical_pivot_df = (
+        hierarchical_combined.pivot_table(
+            index=["autoencoder", "method"],
+            columns="dataset",
+            values=["dp", "lp"],
+            aggfunc=[np.mean, lambda x: np.std(x, ddof=0)],
+            fill_value=0,
+        )
+        .dropna(how="all")
+        .round(2)
+    )
+    hierarchical_pivot_df.rename(columns={"<lambda>": "std"}, level=0, inplace=True)
 
     # Reorder the columns to match the order in the image
-    hierarchical_pivot_df.columns = hierarchical_pivot_df.columns.swaplevel(0, 1)
+    hierarchical_pivot_df.columns = hierarchical_pivot_df.columns.swaplevel(0, 2)
     hierarchical_pivot_df = hierarchical_pivot_df.reindex(
         columns=[
-            (DatasetType.MNIST.value, "dp"),
-            (DatasetType.MNIST.value, "lp"),
-            (DatasetType.USPS.value, "dp"),
-            (DatasetType.USPS.value, "lp"),
-            (DatasetType.FASHION_MNIST.value, "dp"),
-            (DatasetType.FASHION_MNIST.value, "lp"),
-            (DatasetType.REUTERS.value, "dp"),
-            (DatasetType.REUTERS.value, "lp"),
+            (DatasetType.MNIST.value, "dp", "mean"),
+            (DatasetType.MNIST.value, "dp", "std"),
+            (DatasetType.MNIST.value, "lp", "mean"),
+            (DatasetType.MNIST.value, "lp", "std"),
+            (DatasetType.USPS.value, "dp", "mean"),
+            (DatasetType.USPS.value, "dp", "std"),
+            (DatasetType.USPS.value, "lp", "mean"),
+            (DatasetType.USPS.value, "lp", "std"),
+            (DatasetType.FASHION_MNIST.value, "dp", "mean"),
+            (DatasetType.FASHION_MNIST.value, "dp", "std"),
+            (DatasetType.FASHION_MNIST.value, "lp", "mean"),
+            (DatasetType.FASHION_MNIST.value, "lp", "std"),
+            (DatasetType.REUTERS.value, "dp", "mean"),
+            (DatasetType.REUTERS.value, "dp", "std"),
+            (DatasetType.REUTERS.value, "lp", "mean"),
+            (DatasetType.REUTERS.value, "lp", "std"),
         ]
     )
 

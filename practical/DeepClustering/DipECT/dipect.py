@@ -765,7 +765,7 @@ class Cluster_Tree:
                 del child_node
                 del parent
 
-                logging.info(
+                print(
                     f"Tree size after pruning: {self.number_nodes}, leaf nodes: {len(self.leaf_nodes)}"
                 )
 
@@ -929,8 +929,8 @@ class Cluster_Tree:
                         number_assign_lower_projection_cluster,
                     )
                 )
-                
-                logging.info(
+
+                print(
                     f"checking node {node.id} with #assignments: {len(node.assignments)} - pvalue: {pvalue} - dip value: {dip_value}"
                 )
 
@@ -955,7 +955,7 @@ class Cluster_Tree:
                 return True
 
             # split best node
-            logging.info(
+            print(
                 f"split node {best_node_to_split[0].id} with #assignments: {len(best_node_to_split[0].assignments)} "
             )
             best_node_to_split[0].expand_tree(
@@ -1758,7 +1758,7 @@ class _DipECT_Module(torch.nn.Module):
                             metrics,
                         )
                         if growing_treshhold_reached and early_stopping:
-                            logging.info(
+                            print(
                                 "Stopped algorithm earlier since unimodality threshold is reached. Eventually refinement epochs starting..."
                             )
                             break
@@ -2104,9 +2104,13 @@ def _dipect(
         The final autoencoder.
     """
     # Get initial setting (device, dataloaders, pretrained AE and initial clustering result)
-    if autoencoder_save_param_path is not None and os.path.exists(autoencoder_save_param_path):
+    if autoencoder_save_param_path is not None and os.path.exists(
+        autoencoder_save_param_path
+    ):
         autoencoder.load_parameters(autoencoder_save_param_path)
-    save_ae_state_dict = (not hasattr(autoencoder, "fitted") or not autoencoder.fitted) and autoencoder_save_param_path is not None
+    save_ae_state_dict = (
+        not hasattr(autoencoder, "fitted") or not autoencoder.fitted
+    ) and autoencoder_save_param_path is not None
     seed = int(random_state.get_state()[1][0])
     generator = torch.Generator()
     generator.manual_seed(seed)
@@ -2237,7 +2241,7 @@ def _dipect(
         metrics["combined_metrics"] = metrics["acc"] + metrics["dp"] + metrics["lp"]
         train.report(metrics)
         if logging_active:
-            logging.info(metrics)
+            print(metrics)
     return pred_tree, autoencoder
 
 
@@ -2542,11 +2546,11 @@ if __name__ == "__main__":
     dipect = DipECT(
         batch_size=256,
         autoencoder=autoencoder,
-        autoencoder_param_path="practical/DeepClustering/DipECT/autoencoder/feedforward_mnist_100_21.pth",
+        autoencoder_param_path="/home/loebbert/projects/deepclustering/LMU_Master_Practical_SoSe24/practical/DeepClustering/DipECT/pretrained_autoencoders/MNIST_autoencoder_10_pretrained_63.pth",
         random_state=np.random.RandomState(21),
         autoencoder_pretrain_n_epochs=100,
         logging_active=True,
-        clustering_n_epochs=2,
+        clustering_n_epochs=60,
         clustering_optimizer_params={"lr": 1e-4},
         early_stopping=False,
         loss_weight_function_normalization=-1,
@@ -2575,8 +2579,9 @@ if __name__ == "__main__":
         unimodal_loss_weight=653.6111443720175,
         unimodal_loss_weight_direction="ascending",
         unimodal_loss_weight_function="log",
+        evaluate_every_n_epochs=4,
     )
-    dipect.fit_predict(dataset)
+    dipect.fit_predict(dataset, labels)
     print(
         f"-------------------------------------------Time needed: {(datetime.datetime.now()-start).total_seconds()/60}min"
     )

@@ -1,7 +1,5 @@
 import datetime
 import logging
-import math
-import multiprocessing as mp
 import os
 import pathlib
 import sys
@@ -19,6 +17,8 @@ for lib in [
 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
 os.environ["KMP_INIT_AT_FORK"] = "FALSE"
 os.environ["KMP_DUPLICATE_LIB_OK"] = "True"
+import math
+import multiprocessing as mp
 
 sys.path.append(os.getcwd())
 os.chdir(os.getcwd())
@@ -36,6 +36,8 @@ from clustpy.deep.autoencoders import FeedforwardAutoencoder
 from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
 from clustpy.deep.dec import IDEC
 from clustpy.metrics import unsupervised_clustering_accuracy
+from clustpy.deep._train_utils import get_trained_network
+from clustpy.deep._data_utils import get_dataloader
 from sklearn.cluster import KMeans
 from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
 from sklearn.preprocessing import minmax_scale
@@ -231,12 +233,12 @@ def pretraining(
         set_torch_seed(seed)
 
     data = torch.tensor(dataset["data"], dtype=torch.float32)
-    dataloader = DataLoader(
-        TensorDataset(data),
-        batch_size=256,
-        shuffle=True,
-        generator=generator,
-        worker_init_fn=seed_worker,
+    dataloader = get_dataloader(
+        data,
+        256,
+        True,
+        False,
+        dl_kwargs=dict(generator=generator, worker_init_fn=seed_worker),
     )
 
     if not autoencoder_params_path.exists():
@@ -257,15 +259,15 @@ def pretraining(
                 layers=[data.shape[1], 500, 500, 2000, embedding_dim]
             )
             autoencoder.to(device)
-            autoencoder.fit(
-                n_epochs=get_max_epoch_size(
-                    data, 27400, 256
-                ),  # 27400 is the max iterations that we do Mnist for
+            # Get initial AE
+            autoencoder = get_trained_network(
+                trainloader=dataloader,
                 optimizer_params={"lr": 1e-3},
-                dataloader=dataloader,
+                n_epochs=get_max_epoch_size(data, 27400, 256),
                 batch_size=256,
                 device=device,
-                print_step=1,
+                embedding_size=embedding_dim,
+                neural_network=autoencoder,
             )
             autoencoder.fitted = True
             autoencoder.cpu().save_parameters(autoencoder_params_path)
@@ -618,9 +620,9 @@ def fit(
                 random_state=np.random.RandomState(seed),
                 logging_active=True,
                 clustering_n_epochs=max_clustering_epochs,
-                pruning_threshold=len(data) // 35,  # 2000 for MNIST
+                pruning_threshold=len(data) / 35,  # 2000 for MNIST
                 tree_growth_min_cluster_size=len(data) // 35,
-                tree_growth_frequency=548 / (len(data) / batch_size),  # 2.0 for MNIST
+                tree_growth_frequency=max_clustering_epochs * (2 / 61),  # 2.0 for MNIST
                 custom_dataloaders=dataloaders,
             )
             print(f"fitting {method.name}...")
@@ -696,9 +698,9 @@ def fit(
                 random_state=np.random.RandomState(seed),
                 logging_active=True,
                 clustering_n_epochs=max_clustering_epochs,
-                pruning_threshold=len(data) // 35,  # 2000 for MNIST
+                pruning_threshold=len(data) / 35,  # 2000 for MNIST
                 tree_growth_min_cluster_size=len(data) // 35,
-                tree_growth_frequency=548 / (len(data) / batch_size),  # 2.0 for MNIST
+                tree_growth_frequency=max_clustering_epochs * (2 / 61),  # 2.0 for MNIST
                 augmentation_invariance=True,
                 custom_dataloaders=custom_dataloaders,
             )
@@ -1325,9 +1327,11 @@ if __name__ == "__main__":
     seeds = [21, 42, 63]
     embedding_dims = [10]
     worker_num = 2
-    pretrain_for_multiple_seeds(
-        seeds, embedding_dims=embedding_dims, worker_num=worker_num
-    )
+
+    # pretrain_for_multiple_seeds(
+    #     seeds, embedding_dims=embedding_dims, worker_num=worker_num
+    # )
+    # evaluate(AutoencoderType.CLUSTPY_STANDARD, DatasetType.MNIST, 21, None, 10)
     all_autoencoders = list(
         product(AutoencoderType, DatasetType, seeds, [None], embedding_dims, [None])
     )

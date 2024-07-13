@@ -50,7 +50,9 @@ from practical.DeepClustering.DipECT.baseline_hierachical.ae_plus import (
 )
 
 # please keep this format to prevent circular imports
-import practical.DeepClustering.DipECT.dipect as dipect
+import practical.DeepClustering.DipECT.dipect as dipect_module
+
+# from practical.DeepClustering.DipECT.dipect import DipECT
 
 
 class DatasetType(Enum):
@@ -610,14 +612,15 @@ def fit(
                 )
         elif method == ClusteringMethod.DIPECT:
             autoencoder.to(device)
-            dipect = dipect.DipECT(
+            dipect = dipect_module.DipECT(
                 batch_size=256,
                 autoencoder=autoencoder,
                 random_state=np.random.RandomState(seed),
                 logging_active=True,
                 clustering_n_epochs=max_clustering_epochs,
-                pruning_threshold=len(data) // 35,
+                pruning_threshold=len(data) // 35,  # 2000 for MNIST
                 tree_growth_min_cluster_size=len(data) // 35,
+                tree_growth_frequency=548 / (len(data) / batch_size),  # 2.0 for MNIST
                 custom_dataloaders=dataloaders,
             )
             print(f"fitting {method.name}...")
@@ -687,7 +690,7 @@ def fit(
                 data, dataset_type, seed
             )
 
-            dipect = dipect.DipECT(
+            dipect = dipect_module.DipECT(
                 batch_size=256,
                 autoencoder=autoencoder,
                 random_state=np.random.RandomState(seed),
@@ -695,6 +698,7 @@ def fit(
                 clustering_n_epochs=max_clustering_epochs,
                 pruning_threshold=len(data) // 35,  # 2000 for MNIST
                 tree_growth_min_cluster_size=len(data) // 35,
+                tree_growth_frequency=548 / (len(data) / batch_size),  # 2.0 for MNIST
                 augmentation_invariance=True,
                 custom_dataloaders=custom_dataloaders,
             )
@@ -886,7 +890,6 @@ def get_custom_dataloader_augmentations(
     image_max_value = np.max(data)
     image_size = 16 if dataset_type == DatasetType.USPS else 28
 
-    
     augmentation_transform = transforms.Compose(
         [
             transforms.Lambda(lambda x: x - image_min_value),

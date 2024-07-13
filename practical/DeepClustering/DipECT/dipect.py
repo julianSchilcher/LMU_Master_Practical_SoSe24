@@ -43,6 +43,7 @@ from practical.DeepClustering.DeepECT.metrics import (
     PredictionClusterNode,
     PredictionClusterTree,
 )
+from practical.DeepClustering.DeepECT.utils import mean
 import practical.DeepClustering.DipECT.metrics_visualization as metrics_visualization
 
 
@@ -1029,10 +1030,10 @@ class Cluster_Tree:
         unimodal_loss_weight_direction: str,
         unimodal_loss_weight: float,
         loss_weight_function_normalization: int,
-        mulitmodal_loss_application: str,
-        mulitmodal_loss_node_criteria_method: str,
-        mulitmodal_loss_weight_function: str,
-        mulitmodal_loss_weight_direction: str,
+        multimodal_loss_application: str,
+        multimodal_loss_node_criteria_method: str,
+        multimodal_loss_weight_function: str,
+        multimodal_loss_weight_direction: str,
         multimodal_loss_weight: float,
         projection_axis_learning: str,
         pruning_strategy: str,
@@ -1062,13 +1063,13 @@ class Cluster_Tree:
             The weight for unimodal loss.
         loss_weight_function_normalization : float
             The normalization factor for the loss weight function.
-        mulitmodal_loss_application : str
+        multimodal_loss_application : str
             Specifies where the multimodal loss should be applied.
-        mulitmodal_loss_node_criteria_method : str
+        multimodal_loss_node_criteria_method : str
             Specifies the method to use for node criteria for multimodal loss.
-        mulitmodal_loss_weight_function : str
+        multimodal_loss_weight_function : str
             Specifies the weight function for multimodal loss.
-        mulitmodal_loss_weight_direction : str
+        multimodal_loss_weight_direction : str
             Specifies the weight direction for multimodal loss.
         multimodal_loss_weight : float
             The weight for multimodal loss.
@@ -1105,10 +1106,10 @@ class Cluster_Tree:
             unimodal_loss_weight_direction,
             unimodal_loss_weight,
             loss_weight_function_normalization,
-            mulitmodal_loss_application,
-            mulitmodal_loss_node_criteria_method,
-            mulitmodal_loss_weight_function,
-            mulitmodal_loss_weight_direction,
+            multimodal_loss_application,
+            multimodal_loss_node_criteria_method,
+            multimodal_loss_weight_function,
+            multimodal_loss_weight_direction,
             multimodal_loss_weight,
             projection_axis_learning,
         )
@@ -1135,10 +1136,10 @@ class Cluster_Tree:
         unimodal_loss_weight_direction: str,
         unimodal_loss_weight: float,
         loss_weight_function_normalization: int,
-        mulitmodal_loss_application: str,
-        mulitmodal_loss_node_criteria_method: str,
-        mulitmodal_loss_weight_function: str,
-        mulitmodal_loss_weight_direction: str,
+        multimodal_loss_application: str,
+        multimodal_loss_node_criteria_method: str,
+        multimodal_loss_weight_function: str,
+        multimodal_loss_weight_direction: str,
         multimodal_loss_weight: float,
         projection_axis_learning: str,
     ):
@@ -1171,13 +1172,13 @@ class Cluster_Tree:
             The weight for unimodal loss.
         loss_weight_function_normalization : float
             The normalization factor for the loss weight function.
-        mulitmodal_loss_application : str
+        multimodal_loss_application : str
             Specifies where the multimodal loss should be applied.
-        mulitmodal_loss_node_criteria_method : str
+        multimodal_loss_node_criteria_method : str
             Specifies the method to use for node criteria for multimodal loss.
-        mulitmodal_loss_weight_function : str
+        multimodal_loss_weight_function : str
             Specifies the weight function for multimodal loss.
-        mulitmodal_loss_weight_direction : str
+        multimodal_loss_weight_direction : str
             Specifies the weight direction for multimodal loss.
         multimodal_loss_weight : float
             The weight for multimodal loss.
@@ -1233,10 +1234,10 @@ class Cluster_Tree:
             )
             calc_multi_loss_weight = self._calc_loss_weight(
                 node,
-                mulitmodal_loss_application,
-                mulitmodal_loss_node_criteria_method,
-                mulitmodal_loss_weight_function,
-                mulitmodal_loss_weight_direction,
+                multimodal_loss_application,
+                multimodal_loss_node_criteria_method,
+                multimodal_loss_weight_function,
+                multimodal_loss_weight_direction,
                 multimodal_loss_weight,
                 loss_weight_function_normalization,
                 multimodal=True,
@@ -1303,10 +1304,10 @@ class Cluster_Tree:
                 unimodal_loss_weight_direction,
                 unimodal_loss_weight,
                 loss_weight_function_normalization,
-                mulitmodal_loss_application,
-                mulitmodal_loss_node_criteria_method,
-                mulitmodal_loss_weight_function,
-                mulitmodal_loss_weight_direction,
+                multimodal_loss_application,
+                multimodal_loss_node_criteria_method,
+                multimodal_loss_weight_function,
+                multimodal_loss_weight_direction,
                 multimodal_loss_weight,
                 projection_axis_learning,
             )
@@ -1326,10 +1327,10 @@ class Cluster_Tree:
                 unimodal_loss_weight_direction,
                 unimodal_loss_weight,
                 loss_weight_function_normalization,
-                mulitmodal_loss_application,
-                mulitmodal_loss_node_criteria_method,
-                mulitmodal_loss_weight_function,
-                mulitmodal_loss_weight_direction,
+                multimodal_loss_application,
+                multimodal_loss_node_criteria_method,
+                multimodal_loss_weight_function,
+                multimodal_loss_weight_direction,
                 multimodal_loss_weight,
                 projection_axis_learning,
             )
@@ -1616,10 +1617,10 @@ class _DipECT_Module(torch.nn.Module):
         unimodal_loss_weight_direction: str,
         unimodal_loss_weight: float,
         loss_weight_function_normalization: int,
-        mulitmodal_loss_application: str,
-        mulitmodal_loss_node_criteria_method: str,
-        mulitmodal_loss_weight_function: str,
-        mulitmodal_loss_weight_direction: str,
+        multimodal_loss_application: str,
+        multimodal_loss_node_criteria_method: str,
+        multimodal_loss_weight_function: str,
+        multimodal_loss_weight_direction: str,
         multimodal_loss_weight: float,
         projection_axis_learning: str,
         pruning_strategy: str,
@@ -1684,13 +1685,13 @@ class _DipECT_Module(torch.nn.Module):
             The weight for unimodal loss.
         loss_weight_function_normalization : float
             The normalization factor for the loss weight function.
-        mulitmodal_loss_application : str
+        multimodal_loss_application : str
             Specifies where the multimodal loss should be applied.
-        mulitmodal_loss_node_criteria_method : str
+        multimodal_loss_node_criteria_method : str
             Specifies the method to use for node criteria for multimodal loss.
-        mulitmodal_loss_weight_function : str
+        multimodal_loss_weight_function : str
             Specifies the weight function for multimodal loss.
-        mulitmodal_loss_weight_direction : str
+        multimodal_loss_weight_direction : str
             Specifies the weight direction for multimodal loss.
         multimodal_loss_weight : float
             The weight for multimodal loss.
@@ -1715,12 +1716,12 @@ class _DipECT_Module(torch.nn.Module):
         self = self.to(device)
         autoencoder = autoencoder.to(device)
 
-        mov_rec_loss = 0.0
-        mov_rec_loss_aug = 0.0
-        mov_cluster_loss = 0.0
-        mov_unimodal_loss = 0.0
-        mov_multimodal_loss = 0.0
-        mov_loss = 0.0
+        mov_rec_loss = []
+        mov_rec_loss_aug = []
+        mov_cluster_loss = []
+        mov_unimodal_loss = []
+        mov_multimodal_loss = []
+        mov_loss = []
 
         growing_treshhold_reached = False
         refinement_counter = 0
@@ -1840,10 +1841,10 @@ class _DipECT_Module(torch.nn.Module):
                         unimodal_loss_weight_direction,
                         unimodal_loss_weight,
                         loss_weight_function_normalization,
-                        mulitmodal_loss_application,
-                        mulitmodal_loss_node_criteria_method,
-                        mulitmodal_loss_weight_function,
-                        mulitmodal_loss_weight_direction,
+                        multimodal_loss_application,
+                        multimodal_loss_node_criteria_method,
+                        multimodal_loss_weight_function,
+                        multimodal_loss_weight_direction,
                         multimodal_loss_weight,
                         projection_axis_learning,
                         pruning_strategy,
@@ -1878,7 +1879,7 @@ class _DipECT_Module(torch.nn.Module):
                             rec_loss + rec_loss_aug
                         )
                         metrics["rec_loss_aug"] = rec_loss_aug.item()
-                        mov_rec_loss_aug += metrics["rec_loss_aug"]
+                        mov_rec_loss_aug.append(metrics["rec_loss_aug"])
                     else:
                         loss = cluster_loss + rec_loss * reconstruction_loss_weight
 
@@ -1894,24 +1895,34 @@ class _DipECT_Module(torch.nn.Module):
                     metrics["leaf_nodes"] = len(self.cluster_tree.leaf_nodes)
                     iteration += 1
                     train.report(metrics)
-                    mov_loss += metrics["loss"]
-                    mov_rec_loss += metrics["rec_loss"]
-                    mov_cluster_loss += metrics["cluster_loss"]
-                    mov_unimodal_loss += metrics["unimodal_loss"]
-                    mov_multimodal_loss += metrics["multimodal_loss"]
+                    mov_loss.append(metrics["loss"])
+                    mov_rec_loss.append(metrics["rec_loss"])
+                    mov_cluster_loss.append(metrics["cluster_loss"])
+                    mov_unimodal_loss.append(metrics["unimodal_loss"])
+                    mov_multimodal_loss.append(metrics["multimodal_loss"])
+
+                    if (
+                        self.logging_active
+                        and iteration > 0
+                        and (iteration <= 10 or iteration % 100 == 0)
+                    ):
+                        log_epoch_nr = epoch + 1
+                        logging.info(
+                            f"{iteration} - epoch: {log_epoch_nr} - moving averages: unimodal_loss: {mean(mov_unimodal_loss)} "
+                            f"multimodal_loss: {mean(mov_multimodal_loss)} cluster_loss {mean(mov_cluster_loss)} rec_loss: {mean(mov_rec_loss)} "
+                            f"{f'rec_loss_aug: {mean(mov_rec_loss_aug)}' if self.augmentation_invariance else ''} "
+                            f"total_loss: {mean(mov_loss)} "
+                            f"nodes: {self.cluster_tree.number_nodes} leaf_nodes: {len(self.cluster_tree.leaf_nodes)}"
+                        )
+
+                mov_rec_loss.clear()
+                mov_rec_loss_aug.clear()
+                mov_loss.clear()
 
             if growing_treshhold_reached and early_stopping:
                 refinement_counter += 1
                 if refinement_counter > refinement_epochs:
                     break
-
-            if self.logging_active:
-                log_epoch_nr = epoch + 1  # to avoid division by zero
-                logging.info(
-                    f"epoch: {log_epoch_nr} - nodes: {len(self.cluster_tree.nodes)} - leaf nodes: {len(self.cluster_tree.leaf_nodes)} - moving averages: mov_rec_loss: {mov_rec_loss/log_epoch_nr} "
-                    + f"mov_multimodal_loss: {mov_multimodal_loss/log_epoch_nr} mov_unimodal_loss: {mov_unimodal_loss/log_epoch_nr} "
-                    + f"mov_cluster_loss: {mov_cluster_loss/log_epoch_nr} {f'rec_loss_aug: {mov_rec_loss_aug/log_epoch_nr}' if self.augmentation_invariance else ''} total_loss: {mov_loss/log_epoch_nr}",
-                )
 
         return self
 
@@ -2026,10 +2037,10 @@ def _dipect(
     unimodal_loss_weight_direction: str,
     unimodal_loss_weight: float,
     loss_weight_function_normalization: int,
-    mulitmodal_loss_application: str,
-    mulitmodal_loss_node_criteria_method: str,
-    mulitmodal_loss_weight_function: str,
-    mulitmodal_loss_weight_direction: str,
+    multimodal_loss_application: str,
+    multimodal_loss_node_criteria_method: str,
+    multimodal_loss_weight_function: str,
+    multimodal_loss_weight_direction: str,
     multimodal_loss_weight: float,
     projection_axis_learning: str,
     projection_axis_init: str,
@@ -2110,13 +2121,13 @@ def _dipect(
         The weight for unimodal loss.
     loss_weight_function_normalization : float
         The normalization factor for the loss weight function.
-    mulitmodal_loss_application : str
+    multimodal_loss_application : str
         Specifies where the multimodal loss should be applied.
-    mulitmodal_loss_node_criteria_method : str
+    multimodal_loss_node_criteria_method : str
         Specifies the method to use for node criteria for multimodal loss.
-    mulitmodal_loss_weight_function : str
+    multimodal_loss_weight_function : str
         Specifies the weight function for multimodal loss.
-    mulitmodal_loss_weight_direction : str
+    multimodal_loss_weight_direction : str
         Specifies the weight direction for multimodal loss.
     multimodal_loss_weight : float
         The weight for multimodal loss.
@@ -2242,10 +2253,10 @@ def _dipect(
         unimodal_loss_weight_direction,
         unimodal_loss_weight,
         loss_weight_function_normalization,
-        mulitmodal_loss_application,
-        mulitmodal_loss_node_criteria_method,
-        mulitmodal_loss_weight_function,
-        mulitmodal_loss_weight_direction,
+        multimodal_loss_application,
+        multimodal_loss_node_criteria_method,
+        multimodal_loss_weight_function,
+        multimodal_loss_weight_direction,
         multimodal_loss_weight,
         projection_axis_learning,
         pruning_strategy,
@@ -2348,13 +2359,13 @@ class DipECT:
         Weight for unimodal loss (default: 1.0).
     loss_weight_function_normalization : float
         Normalization factor for the loss weight function (default: -1).
-    mulitmodal_loss_application : str
+    multimodal_loss_application : str
         Specifies where the multimodal loss should be applied, options are None, "leaf_nodes", "all" (default: "all").
-    mulitmodal_loss_node_criteria_method : str
+    multimodal_loss_node_criteria_method : str
         Method for node criteria for multimodal loss, options are "tree_depth", "time_of_split" (default: "tree_depth").
-    mulitmodal_loss_weight_function : str
+    multimodal_loss_weight_function : str
         Weight function for multimodal loss, options are "linear", "exponential", None (default: None).
-    mulitmodal_loss_weight_direction : str
+    multimodal_loss_weight_direction : str
         Weight direction for multimodal loss, options are "ascending", "descending" (default: "ascending").
     multimodal_loss_weight : float
         Weight for multimodal loss (default: 1.0).
@@ -2419,10 +2430,10 @@ class DipECT:
         unimodal_loss_weight: float = 653.6111443720175,
         loss_weight_function_normalization=-1,  # -1 (no normalization), else normalization term ((np.log2(self.max_leaf_nodes) - 1) works good and was until now always used)
         # multimodal
-        mulitmodal_loss_application: str = "all",  # None, "leaf_nodes", "all"
-        mulitmodal_loss_node_criteria_method: str = "equal",  # "tree_depth", "time_of_split"
-        mulitmodal_loss_weight_function: str = "linear",  # "linear", "exponential", None
-        mulitmodal_loss_weight_direction: str = "ascending",  # "ascending", "descending"
+        multimodal_loss_application: str = "all",  # None, "leaf_nodes", "all"
+        multimodal_loss_node_criteria_method: str = "equal",  # "tree_depth", "time_of_split"
+        multimodal_loss_weight_function: str = "linear",  # "linear", "exponential", None
+        multimodal_loss_weight_direction: str = "ascending",  # "ascending", "descending"
         multimodal_loss_weight: float = 836.5918099811238,
         # utility
         early_stopping: bool = False,
@@ -2471,10 +2482,10 @@ class DipECT:
         self.unimodal_loss_weight_direction = unimodal_loss_weight_direction
         self.unimodal_loss_weight = unimodal_loss_weight
         self.loss_weight_function_normalization = loss_weight_function_normalization
-        self.mulitmodal_loss_application = mulitmodal_loss_application
-        self.mulitmodal_loss_node_criteria_method = mulitmodal_loss_node_criteria_method
-        self.mulitmodal_loss_weight_function = mulitmodal_loss_weight_function
-        self.mulitmodal_loss_weight_direction = mulitmodal_loss_weight_direction
+        self.multimodal_loss_application = multimodal_loss_application
+        self.multimodal_loss_node_criteria_method = multimodal_loss_node_criteria_method
+        self.multimodal_loss_weight_function = multimodal_loss_weight_function
+        self.multimodal_loss_weight_direction = multimodal_loss_weight_direction
         self.multimodal_loss_weight = multimodal_loss_weight
         self.projection_axis_learning = projection_axis_learning
         self.projection_axis_init = projection_axis_init
@@ -2541,10 +2552,10 @@ class DipECT:
             self.unimodal_loss_weight_direction,
             self.unimodal_loss_weight,
             self.loss_weight_function_normalization,
-            self.mulitmodal_loss_application,
-            self.mulitmodal_loss_node_criteria_method,
-            self.mulitmodal_loss_weight_function,
-            self.mulitmodal_loss_weight_direction,
+            self.multimodal_loss_application,
+            self.multimodal_loss_node_criteria_method,
+            self.multimodal_loss_weight_function,
+            self.multimodal_loss_weight_direction,
             self.multimodal_loss_weight,
             self.projection_axis_learning,
             self.projection_axis_init,
@@ -2587,10 +2598,10 @@ if __name__ == "__main__":
         clustering_optimizer_params={"lr": 1e-4},
         early_stopping=False,
         loss_weight_function_normalization=-1,
-        mulitmodal_loss_application="all",
-        mulitmodal_loss_node_criteria_method="equal",  # "time_of_split",
-        mulitmodal_loss_weight_direction="ascending",
-        mulitmodal_loss_weight_function="linear",  # "linear",
+        multimodal_loss_application="all",
+        multimodal_loss_node_criteria_method="equal",  # "time_of_split",
+        multimodal_loss_weight_direction="ascending",
+        multimodal_loss_weight_function="linear",  # "linear",
         multimodal_loss_weight=836.5918099811238,
         projection_axis_learning="all",
         projection_axis_learning_rate=1e-05,

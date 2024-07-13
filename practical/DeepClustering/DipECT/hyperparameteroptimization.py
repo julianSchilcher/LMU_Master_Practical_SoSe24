@@ -83,12 +83,12 @@ def trainable_function(config: dict):
         unimodal_loss_weight_function=config["unimodal_loss_weight_function"],
         loss_weight_function_normalization=config["loss_weight_function_normalization"],
         # multimodal
-        mulitmodal_loss_application=config["mulitmodal_loss_application"],
-        mulitmodal_loss_node_criteria_method=config[
-            "mulitmodal_loss_node_criteria_method"
+        multimodal_loss_application=config["multimodal_loss_application"],
+        multimodal_loss_node_criteria_method=config[
+            "multimodal_loss_node_criteria_method"
         ],
-        mulitmodal_loss_weight_direction=config["mulitmodal_loss_weight_direction"],
-        mulitmodal_loss_weight_function=config["mulitmodal_loss_weight_function"],
+        multimodal_loss_weight_direction=config["multimodal_loss_weight_direction"],
+        multimodal_loss_weight_function=config["multimodal_loss_weight_function"],
         multimodal_loss_weight=config["multimodal_loss_weight"],
         # utility
         early_stopping=config["early_stopping"],
@@ -155,12 +155,12 @@ search_space = ng.p.Dict(
     ),  # ng.p.Choice(["linear", "log", "sqrt"]),
     loss_weight_function_normalization=-1,  # ng.p.Choice([-1]),
     # multimodal
-    mulitmodal_loss_application="all",  # ng.p.Choice(["leaf_nodes", "all"]),
-    mulitmodal_loss_node_criteria_method=ng.p.Choice(
+    multimodal_loss_application="all",  # ng.p.Choice(["leaf_nodes", "all"]),
+    multimodal_loss_node_criteria_method=ng.p.Choice(
         ["tree_depth", "time_of_split", "equal"]
     ),  # "time_of_split",  #
-    mulitmodal_loss_weight_direction=ng.p.Choice(["ascending", "descending"]),
-    mulitmodal_loss_weight_function=ng.p.Choice(
+    multimodal_loss_weight_direction=ng.p.Choice(["ascending", "descending"]),
+    multimodal_loss_weight_function=ng.p.Choice(
         ["exponential", "linear", "log", "sqrt"]
     ),
     multimodal_loss_weight=ng.p.Scalar(

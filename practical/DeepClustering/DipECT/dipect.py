@@ -2141,9 +2141,9 @@ def _dipect(
         The final autoencoder.
     """
     # Get initial setting (device, dataloaders, pretrained AE and initial clustering result)
-    if os.path.exists(autoencoder_save_param_path):
+    if autoencoder_save_param_path is not None and os.path.exists(autoencoder_save_param_path):
         autoencoder.load_parameters(autoencoder_save_param_path)
-    save_ae_state_dict = not hasattr(autoencoder, "fitted") or not autoencoder.fitted
+    save_ae_state_dict = (not hasattr(autoencoder, "fitted") or not autoencoder.fitted) and autoencoder_save_param_path is not None
     seed = int(random_state.get_state()[1][0])
     generator = torch.Generator()
     generator.manual_seed(seed)
@@ -2395,7 +2395,7 @@ class DipECT:
         autoencoder: _AbstractAutoencoder = None,
         autoencoder_pretrain_n_epochs: int = 100,
         reconstruction_loss_weight: float = 737.0094829591326,  # None, float(1e-4, 1e4)
-        autoencoder_param_path: str = "",
+        autoencoder_param_path: str = None,
         # clustering
         clustering_n_epochs: int = 60,
         embedding_size: int = 10,

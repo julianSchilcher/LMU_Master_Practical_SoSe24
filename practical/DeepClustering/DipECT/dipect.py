@@ -503,18 +503,6 @@ class Cluster_Tree:
         number_of_samples_cluster_1 : int
             Number of assigned samples to cluster 1.
         """
-        # # init projection axis on full dataset
-        # kmeans = KMeans(n_clusters=2, n_init=20, random_state=self.random_seed).fit(
-        #     embedded_data
-        # )
-        # kmeans_centers = kmeans.cluster_centers_
-        # labels = kmeans.labels_
-        # # higher projection by cluster 1 since axis points to cluster 1
-        # return (
-        #     kmeans_centers[0] - kmeans_centers[1],
-        #     np.sum(labels == 0),
-        #     np.sum(labels == 1),
-        # )
         if self.projection_axis_init == "kmeans++":
             centroids = kmeans_plus_plus_init(
                 embedded_data, self.projection_axis_n_init, self.random_seed
@@ -940,47 +928,11 @@ class Cluster_Tree:
                         number_assign_lower_projection_cluster,
                     )
                 )
-                # if use_pvalue:
-                #     current_value = pvalue
-                #     better = False
-                #     if (
-                #         best_value > unimodality_treshhold
-                #         and current_value < best_value
-                #     ):
-                #         # if best_value is above unimodality_treshhold, it is sufficient to be smaller than
-                #         # best_value
-                #         max_assignments = len(node_data)
-                #         better = True
-                #     elif (
-                #         current_value <= unimodality_treshhold
-                #         and len(node_data) > max_assignments
-                #     ):
-                #         # if best_value is also already smaller than unimodality_treshhold, the current
-                #         # node must have more assignments in order to be accepted
-                #         max_assignments = len(node_data)
-                #         better = True
-                # else:
-                #     current_value = dip_value + 0.5 * len(node.assignments) / (
-                #         4 * total_assignments
-                #     )
-                #     better = current_value > best_value
-
+                
                 logging.info(
                     f"checking node {node.id} with #assignments: {len(node.assignments)} - pvalue: {pvalue} - dip value: {dip_value}"
                 )
 
-                # if pvalue > unimodality_treshhold:
-                #     continue
-                # if better:
-                #     best_value = current_value
-                #     best_node_axis = axis
-                #     best_node_to_split = node
-                #     best_node_number_assign_lower_projection_cluster = (
-                #         number_assign_lower_projection_cluster
-                #     )
-                #     best_node_number_assign_higher_projection_cluster = (
-                #         number_assign_higher_projection_cluster
-                #     )
             best_node_to_split = None
             if use_pvalue:
                 nodes_to_split = sorted(

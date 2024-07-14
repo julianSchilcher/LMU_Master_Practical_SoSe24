@@ -45,6 +45,7 @@ from practical.DeepClustering.DeepECT.metrics import (
 )
 from practical.DeepClustering.DeepECT.utils import mean
 import practical.DeepClustering.DipECT.metrics_visualization as metrics_visualization
+from torchvision import transforms
 
 
 def kmeans_plus_plus_init(
@@ -2243,7 +2244,7 @@ def _dipect(
         metrics["combined_metrics"] = metrics["acc"] + metrics["dp"] + metrics["lp"]
         train.report(metrics)
         if logging_active:
-            print(metrics)
+            logging.info(metrics)
     return pred_tree, autoencoder
 
 
@@ -2355,52 +2356,56 @@ class DipECT:
         pretrain_optimizer_params: dict = None,
         clustering_optimizer_params: dict = None,
         projection_axis_learning_rate: float = 1e-05,
-        projection_axis_learning: str = "all",  # None, "all", "only_leaf_nodes", "partial_leaf_nodes"
-        projection_axis_init: str = "kmeansk",  # "kmeans++"
-        projection_axis_n_init: int = 7,
+        projection_axis_learning: str = "all",  # None, "only_leaf_nodes", "partial_leaf_nodes"
+        projection_axis_init: str = "kmeansk",  # "kmeans++", "kmeans++2", "kmeans"
+        projection_axis_n_init: int = 7,  # number of different initialization points
         optimizer_class: torch.optim.Optimizer = torch.optim.Adam,
         # autoencoder
         rec_loss_fn: torch.nn.modules.loss._Loss = torch.nn.MSELoss(),
         autoencoder: _AbstractAutoencoder = None,
         autoencoder_pretrain_n_epochs: int = 100,
-        reconstruction_loss_weight: float = 737.0094829591326,  # None, float(1e-4, 1e4)
+        reconstruction_loss_weight: float = 737.0094829591326,
         autoencoder_param_path: str = None,
         # clustering
         clustering_n_epochs: int = 60,
         embedding_size: int = 10,
         augmentation_invariance: bool = False,
         # pruning
-        pruning_threshold: float = 2000,
+        pruning_threshold: float = 2000,  # threshold when a node has to be pruned
         pruning_strategy: str = "epoch_assessment",  # "epoch_assessment", "moving_average",
-        pruning_factor: float = 1,
+        pruning_factor: float = 1,  # pruning factor is for moving average the decay; for epoch assessment set to 1, to ensure that the count will be correct for each epoch
         # tree growth
-        tree_growth_frequency: float = 2.0,
-        tree_growth_amount: int = 5,
-        tree_growth_upper_bound_leaf_nodes: int = 100,
-        tree_growth_use_unimodality_pvalue: bool = True,
-        tree_growth_unimodality_treshold: float = 0.975,
-        tree_growth_min_cluster_size: int = 2000,
+        tree_growth_frequency: float = 2.0,  # determines the frequency based on epochs
+        tree_growth_amount: int = 5,  # how many times can we grow per growth step
+        tree_growth_upper_bound_leaf_nodes: int = 100,  # maximum of leaf nodes allowed
+        tree_growth_use_unimodality_pvalue: bool = True,  # if True, uses pvalue to determine probability of unimodality
+        tree_growth_unimodality_treshold: float = 0.975,  # the higher, the greedier the algorithm - threshold for the probability of unimodality (if pvalue above threshold, assignments are unimodal)
+        tree_growth_min_cluster_size: int = 2000,  # ensures that only nodes can be split that have 2x assignments
         # unimodal
-        unimodal_loss_application: str = "leaf_nodes",  # None, "leaf_nodes", "all"
+        unimodal_loss_application: str = "leaf_nodes",  # None, "all"
         unimodal_loss_node_criteria_method: str = "equal",  # "tree_depth", "time_of_split"
-        unimodal_loss_weight_function: str = "log",  # "linear", "exponential", None
-        unimodal_loss_weight_direction: str = "ascending",  # "ascending", "descending"
+        unimodal_loss_weight_function: str = "log",  # "linear", "exponential", "sqrt", None
+        unimodal_loss_weight_direction: str = "ascending",  #  "descending"
         unimodal_loss_weight: float = 653.6111443720175,
         loss_weight_function_normalization=-1,  # -1 (no normalization), else normalization term ((np.log2(self.max_leaf_nodes) - 1) works good and was until now always used)
         # multimodal
-        multimodal_loss_application: str = "all",  # None, "leaf_nodes", "all"
+        multimodal_loss_application: str = "all",  # None, "leaf_nodes"
         multimodal_loss_node_criteria_method: str = "equal",  # "tree_depth", "time_of_split"
-        multimodal_loss_weight_function: str = "linear",  # "linear", "exponential", None
-        multimodal_loss_weight_direction: str = "ascending",  # "ascending", "descending"
+        multimodal_loss_weight_function: str = "linear",  # "log", "exponential", "sqrt", None
+        multimodal_loss_weight_direction: str = "ascending",  # "descending"
         multimodal_loss_weight: float = 836.5918099811238,
         # utility
-        early_stopping: bool = False,
-        refinement_epochs: int = 0,
+        early_stopping: bool = False,  # after no new multimodality found start counting down the refinement epochs
+        refinement_epochs: int = 0,  # if zero, it will stop the training instantly if early stopping = True
         random_state: np.random.RandomState = np.random.RandomState(42),
         logging_active: bool = False,
-        evaluate_every_n_epochs: int = 0,
-        plot_storage_path: Union[str, None] = None,
-        fig_size: Union[Tuple[int, int], None] = None,
+        evaluate_every_n_epochs: int = 0,  # requires to add labels to the fit_predict method
+        plot_storage_path: Union[
+            str, None
+        ] = None,  # requires to add labels to the fit_predict method
+        fig_size: Union[
+            Tuple[int, int], None
+        ] = None,  # requires to add labels to the fit_predict method
     ):
         self.batch_size = batch_size
         self.pretrain_optimizer_params = (
@@ -2531,29 +2536,50 @@ class DipECT:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
+    import pathlib
+
     start = datetime.datetime.now()
-    dataset, labels = load_mnist(return_X_y=True)
-    dataset = dataset / 255.0
+    # dataset, labels = load_mnist(return_X_y=True)
+    # dataset = dataset / 255.0
     # dataset = dataset.reshape(-1, 32, 32, 3).astype("float32")
     # dataset = dataset.transpose((0, 3, 1, 2)) / 255.0
     # autoencoder = ConvolutionalAutoencoder(32, [512, 10])
-    autoencoder = FeedforwardAutoencoder([dataset.shape[1], 500, 500, 2000, 10])
+    # autoencoder = FeedforwardAutoencoder([dataset.shape[1], 500, 500, 2000, 10])
+    dataset, labels = load_cifar10(return_X_y=True)
+    print(dataset.shape)
+    dataset = dataset / np.max(dataset)
+    # dataset = train_transforms(dataset).numpy()
+    dataset = dataset.reshape(-1, 32, 32, 3).transpose(0, 3, 1, 2)
+
+    print(dataset.shape)
+    print(dataset.mean(axis=(0, 2, 3)))
+    print(dataset.std(axis=(0, 2, 3)))
+
+    emb_size = 30
+    epochs = 300
+    layers = [512, 500, 500, 2000, emb_size]
+    autoencoder = ConvolutionalAutoencoder(32, layers)
+
+    log_path = pathlib.Path(
+        f"practical/DeepClustering/DipECT/conv_cifar_{epochs}_{'_'.join([str(l) for l in layers])}_21.txt"
+    )
+    logging.basicConfig(
+        level=logging.INFO,
+        handlers=[
+            logging.FileHandler(log_path),
+            logging.StreamHandler(sys.stdout),
+        ],
+    )
 
     dipect = DipECT(
         batch_size=256,
         autoencoder=autoencoder,
-        autoencoder_param_path="/home/loebbert/projects/deepclustering/LMU_Master_Practical_SoSe24/practical/DeepClustering/DipECT/pretrained_autoencoders/MNIST_autoencoder_10_pretrained_63.pth",
+        autoencoder_param_path=f"/home/loebbert/projects/deepclustering/LMU_Master_Practical_SoSe24/practical/DeepClustering/DipECT/autoencoder/conv_cifar_{epochs}_{'_'.join([str(l) for l in layers])}_21.pth",
         random_state=np.random.RandomState(21),
-        autoencoder_pretrain_n_epochs=100,
+        autoencoder_pretrain_n_epochs=epochs,
+        embedding_size=emb_size,
         logging_active=True,
-        clustering_n_epochs=60,
-        clustering_optimizer_params={"lr": 1e-4},
+        clustering_n_epochs=100,
         early_stopping=False,
         loss_weight_function_normalization=-1,
         multimodal_loss_application="all",

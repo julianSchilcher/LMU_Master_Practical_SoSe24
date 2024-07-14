@@ -414,23 +414,19 @@ def plot_accuracy_comparison(log_file_path1, log_file_path2):
 
 
 def visualize_peformance_AE(
-    param_path_autoencoder: str,
-    autoencoder_class: torch.nn.Module,
-    dataset: Bunch,
+    autoencoder,
+    samples,
+    labels,
     image_size: tuple,
     number_samples: int,
     seed: int = None,
 ):
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
 
     if seed is not None and type(seed) == int:
         random.seed(seed)
 
-    autoencoder = pretraining(
-        autoencoder_class, param_path_autoencoder, dataset, seed, 10
-    ).to(device)
-    samples = dataset["data"]
-    labels = dataset["target"]
+   
     fig, ax = plt.subplots(2, number_samples)
     fig.tight_layout()
     ax = ax.flatten()
@@ -442,7 +438,7 @@ def visualize_peformance_AE(
             if img.ndim == 1:
                 img = np.expand_dims(img, 0)
             img_rec = (
-                autoencoder.decode(autoencoder.encode(torch.from_numpy(img).to(device)))
+                autoencoder.decode(autoencoder.encode(torch.from_numpy(img)))
                 .cpu()
                 .numpy()
             )
@@ -461,17 +457,11 @@ def visualize_peformance_AE(
             torch.utils.data.TensorDataset(torch.tensor(samples, dtype=torch.float32)),
             batch_size=256,
         ):
-            embeddings.append(autoencoder.encode(batch[0].to(device)).cpu().numpy())
+            embeddings.append(autoencoder.encode(batch[0]).cpu().numpy())
 
     embeddings = np.concatenate(embeddings)
-    # PCA of embedded space
-    print("fitting pca")
-    plot_pca_embedded_space(embeddings, labels)
-    print("fitted pca")
 
-    print("fitting umap")
     plot_umap_embedded_space(embeddings, labels)
-    print("fitted umap")
 
 
 def plot_pca_embedded_space(embeddings, labels, path=None):
@@ -482,7 +472,7 @@ def plot_pca_embedded_space(embeddings, labels, path=None):
     plt.xlabel("Principal Component 1")
     plt.ylabel("Principal Component 2")
     plt.title("PCA of embedded space")
-    plt.colorbar(label="Digit")
+    plt.colorbar(label="Class")
     if path is None:
         plt.show()
     else:
@@ -497,7 +487,7 @@ def plot_umap_embedded_space(embeddings, labels, path=None):
     plt.xlabel("umap feature 1")
     plt.ylabel("umap feature 2")
     plt.title("umap of embedded space")
-    plt.colorbar(label="Digit")
+    plt.colorbar(label="Class")
     if path is None:
         plt.show()
     else:
@@ -701,10 +691,10 @@ def load_results():
 
 
 def show_augmented_data(
-    data: np.ndarray, dataset_type: DatasetType, image_size: tuple, number_samples: int
+    data: np.ndarray, dataset_type: DatasetType, image_size: tuple, number_samples: int, seed: int = 0
 ):
 
-    (trainloader, _) = get_custom_dataloader_augmentations(data, dataset_type)
+    (trainloader, _) = get_custom_dataloader_augmentations(data, dataset_type, seed)
     idx, M, M_aug = next(iter(trainloader))
 
     print(torch.max(M_aug))
@@ -785,7 +775,7 @@ def build_and_visualize_tree(
         image = minmax_scale(image, feature_range=(0, 1))
 
         image = image.reshape(fig_size)
-        imagebox = OffsetImage(image, zoom=1.5, cmap="gray")
+        imagebox = OffsetImage(image, zoom=1.3, cmap="gray")
         ab = AnnotationBbox(imagebox, pos[node], frameon=False)
         ax.add_artist(ab)
 

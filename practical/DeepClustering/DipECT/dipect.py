@@ -45,6 +45,7 @@ from practical.DeepClustering.DeepECT.metrics import (
 )
 from practical.DeepClustering.DeepECT.utils import mean
 import practical.DeepClustering.DipECT.metrics_visualization as metrics_visualization
+from torchvision import transforms
 
 
 def kmeans_plus_plus_init(
@@ -2531,29 +2532,50 @@ class DipECT:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
+    import pathlib
+
     start = datetime.datetime.now()
-    dataset, labels = load_mnist(return_X_y=True)
-    dataset = dataset / 255.0
+    # dataset, labels = load_mnist(return_X_y=True)
+    # dataset = dataset / 255.0
     # dataset = dataset.reshape(-1, 32, 32, 3).astype("float32")
     # dataset = dataset.transpose((0, 3, 1, 2)) / 255.0
     # autoencoder = ConvolutionalAutoencoder(32, [512, 10])
-    autoencoder = FeedforwardAutoencoder([dataset.shape[1], 500, 500, 2000, 10])
+    # autoencoder = FeedforwardAutoencoder([dataset.shape[1], 500, 500, 2000, 10])
+    dataset, labels = load_cifar10(return_X_y=True)
+    print(dataset.shape)
+    dataset = dataset / np.max(dataset)
+    # dataset = train_transforms(dataset).numpy()
+    dataset = dataset.reshape(-1, 32, 32, 3).transpose(0, 3, 1, 2)
+
+    print(dataset.shape)
+    print(dataset.mean(axis=(0, 2, 3)))
+    print(dataset.std(axis=(0, 2, 3)))
+
+    emb_size = 50
+    epochs = 300
+    layers = [512, 2000, emb_size]
+    autoencoder = ConvolutionalAutoencoder(32, layers)
+
+    log_path = pathlib.Path(
+        f"practical/DeepClustering/DipECT/conv_cifar_{epochs}_{'_'.join([str(l) for l in layers])}_21.txt"
+    )
+    logging.basicConfig(
+        level=logging.INFO,
+        handlers=[
+            logging.FileHandler(log_path),
+            logging.StreamHandler(sys.stdout),
+        ],
+    )
 
     dipect = DipECT(
         batch_size=256,
         autoencoder=autoencoder,
-        autoencoder_param_path="/home/loebbert/projects/deepclustering/LMU_Master_Practical_SoSe24/practical/DeepClustering/DipECT/pretrained_autoencoders/MNIST_autoencoder_10_pretrained_63.pth",
+        autoencoder_param_path=f"/home/loebbert/projects/deepclustering/LMU_Master_Practical_SoSe24/practical/DeepClustering/DipECT/autoencoder/conv_cifar_{epochs}_{'_'.join([str(l) for l in layers])}_21.pth",
         random_state=np.random.RandomState(21),
-        autoencoder_pretrain_n_epochs=100,
+        autoencoder_pretrain_n_epochs=epochs,
+        embedding_size=emb_size,
         logging_active=True,
-        clustering_n_epochs=60,
-        clustering_optimizer_params={"lr": 1e-4},
+        clustering_n_epochs=100,
         early_stopping=False,
         loss_weight_function_normalization=-1,
         multimodal_loss_application="all",

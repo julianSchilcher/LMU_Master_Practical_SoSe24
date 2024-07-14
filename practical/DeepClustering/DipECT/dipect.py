@@ -2244,7 +2244,7 @@ def _dipect(
         metrics["combined_metrics"] = metrics["acc"] + metrics["dp"] + metrics["lp"]
         train.report(metrics)
         if logging_active:
-            print(metrics)
+            logging.info(metrics)
     return pred_tree, autoencoder
 
 
@@ -2551,9 +2551,9 @@ if __name__ == "__main__":
     print(dataset.mean(axis=(0, 2, 3)))
     print(dataset.std(axis=(0, 2, 3)))
 
-    emb_size = 50
+    emb_size = 30
     epochs = 300
-    layers = [512, 2000, emb_size]
+    layers = [512, 500, 500, 2000, emb_size]
     autoencoder = ConvolutionalAutoencoder(32, layers)
 
     log_path = pathlib.Path(

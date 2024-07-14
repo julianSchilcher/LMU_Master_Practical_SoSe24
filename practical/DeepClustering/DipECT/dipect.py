@@ -1301,13 +1301,15 @@ class Cluster_Tree:
             The optimizer handling the projection axes.
         """
         # data gradients should not be stored
-        projection_axis_optimizer.zero_grad()
-        data = (
-            node.assignments.detach().cpu()
-        )  # cpu() already creates a copy, no cloning necessary
-        loss = -_Dip_Gradient.apply(data, node.projection_axis)
-        loss.backward()
-        projection_axis_optimizer.step()
+        if node.assignments is not None and node.assignments.size(dim=0) > 0:
+            node.projection_axis.requires_grad = True
+            projection_axis_optimizer.zero_grad()
+            data = (
+                node.assignments.detach().cpu()
+            )  # cpu() already creates a copy, no cloning necessary
+            loss = -_Dip_Gradient.apply(data, node.projection_axis)
+            loss.backward()
+            projection_axis_optimizer.step()
 
     def _calc_loss_weight(
         self,

@@ -356,19 +356,21 @@ class PredictionClusterTree:
     ):
         samples = []
         for node in self.leaf_nodes:
-            samples.append(node.samples)
+            if node.samples is not None and len(node.assignments) > 0:
+                samples.append(node.samples)
         clusters = KMeans(n_clusters=k, n_init=10, random_state=random_state).fit(
             np.concatenate(samples, axis=0)
         )
         predictions = np.zeros_like(ground_truth, dtype=np.int32)
         start = 0
         for node in self.leaf_nodes:
-            for label, idx in zip(
-                clusters.labels_[start : start + len(node.assignments)],
-                node.assignments,
-            ):
-                predictions[idx] = label
-            start += len(node.assignments)
+            if len(node.assignments) > 0:
+                for label, idx in zip(
+                    clusters.labels_[start : start + len(node.assignments)],
+                    node.assignments,
+                ):
+                    predictions[idx] = label
+                start += len(node.assignments)
         return predictions
 
     def dendrogram_purity(self, ground_truth: np.ndarray):

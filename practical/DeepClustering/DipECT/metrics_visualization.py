@@ -2,6 +2,7 @@ import glob
 import os
 import random
 import re
+from typing import Tuple, List
 
 import networkx as nx
 import numpy as np
@@ -18,6 +19,8 @@ from sklearn.decomposition import PCA
 from sklearn.utils import Bunch
 from sklearn.preprocessing import minmax_scale
 from PIL import Image, ImageDraw, ImageFont
+from clustpy.deep.autoencoders._abstract_autoencoder import _AbstractAutoencoder
+from clustpy.deep.autoencoders.feedforward_autoencoder import FeedforwardAutoencoder
 
 
 from practical.DeepClustering.DipECT.evaluation_pipeline import (
@@ -28,6 +31,7 @@ from practical.DeepClustering.DipECT.evaluation_pipeline import (
     get_custom_dataloader_augmentations,
     load_precomputed_results,
     pretraining,
+    get_dataset
 )
 
 
@@ -420,14 +424,15 @@ def visualize_peformance_AE(
     image_size: tuple,
     number_samples: int,
     seed: int = None,
+    title: str = None,
 ):
-
 
     if seed is not None and type(seed) == int:
         random.seed(seed)
 
-   
     fig, ax = plt.subplots(2, number_samples)
+    if title is not None:
+        fig.suptitle(title, fontsize=16)
     fig.tight_layout()
     ax = ax.flatten()
     with torch.no_grad():
@@ -461,7 +466,33 @@ def visualize_peformance_AE(
 
     embeddings = np.concatenate(embeddings)
 
-    plot_umap_embedded_space(embeddings, labels)
+    plot_umap_embedded_space(embeddings, labels, title=title)
+
+
+def visualize_perfomance_multiple_AE(dataset_types: List[DatasetType], autoencoders: List[str], autoencoder_type: _AbstractAutoencoder = FeedforwardAutoencoder):
+    
+    def get_title(filepath):
+        after_dipect = filepath.split('DipECT/')[1]
+        
+        title = after_dipect.split('.pth')[0]
+    
+        return title
+    
+    def load_ae(index, path: str):
+        autoencoder = autoencoder_type([16*16 if dataset_types[index] == DatasetType.USPS else 28*28, 500, 500, 2000, 10])
+        autoencoder.load_state_dict(torch.load(path))
+        return autoencoder
+    
+    autoencoder_objects = map(lambda x: load_ae(x[0], x[1]), enumerate(autoencoders))
+
+    for i, autoencoder in enumerate(autoencoder_objects):
+        dataset = get_dataset(dataset_types[i])
+        visualize_peformance_AE(autoencoder, dataset["data"], dataset["target"], (16, 16) if dataset_types[i] == DatasetType.USPS else (28,28), 5, 0, get_title(autoencoders[i]))
+
+        
+
+
+
 
 
 def plot_pca_embedded_space(embeddings, labels, path=None):
@@ -480,13 +511,13 @@ def plot_pca_embedded_space(embeddings, labels, path=None):
         plt.close()
 
 
-def plot_umap_embedded_space(embeddings, labels, path=None):
+def plot_umap_embedded_space(embeddings, labels, path=None, title=None):
     plt.figure()
     projected_data = umap.UMAP().fit_transform(embeddings)
     plt.scatter(projected_data[:, 0], projected_data[:, 1], c=labels, cmap="viridis")
     plt.xlabel("umap feature 1")
     plt.ylabel("umap feature 2")
-    plt.title("umap of embedded space")
+    plt.title(f"umap of embedded space {title if title is not None else ''}")
     plt.colorbar(label="Class")
     if path is None:
         plt.show()

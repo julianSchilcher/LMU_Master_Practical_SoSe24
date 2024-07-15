@@ -6,6 +6,8 @@ from sklearn.decomposition import PCA
 from sklearn.utils import Bunch
 import torch.utils.data
 import umap
+from typing import Tuple, List
+import pathlib
 
 from matplotlib import pyplot as plt
 
@@ -16,6 +18,7 @@ from practical.DeepClustering.DeepECT.evaluation_pipeline import (
     calculate_hierarchical_mean_for_multiple_seeds,
     load_precomputed_results,
     pretraining,
+    get_dataset
 )
 
 
@@ -279,6 +282,7 @@ def visualize_peformance_AE(
     image_size: tuple,
     number_samples: int,
     seed: int = None,
+    title: str = None
 ):
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
@@ -291,6 +295,8 @@ def visualize_peformance_AE(
     samples = dataset["data"]
     labels = dataset["target"]
     fig, ax = plt.subplots(2, number_samples)
+    if title is not None:
+        fig.suptitle(title, fontsize=16)
     fig.tight_layout()
     ax = ax.flatten()
     with torch.no_grad():
@@ -331,7 +337,7 @@ def visualize_peformance_AE(
     plt.scatter(projected_data[:, 0], projected_data[:, 1], c=labels, cmap="viridis")
     plt.xlabel("Principal Component 1")
     plt.ylabel("Principal Component 2")
-    plt.title("PCA of embedded space")
+    plt.title(f"PCA of embedded space  {title if title is not None else ''}")
     if dataset["dataset_name"] == "FashionMNIST":
         cbar = plt.colorbar()
         cbar.set_ticks(np.arange(10))
@@ -361,7 +367,7 @@ def visualize_peformance_AE(
     plt.scatter(projected_data[:, 0], projected_data[:, 1], c=labels, cmap="viridis")
     plt.xlabel("umap feature 1")
     plt.ylabel("umap feature 2")
-    plt.title("umap of embedded space")
+    plt.title(f"umap of embedded space  {title if title is not None else ''}")
     if dataset["dataset_name"] == "FashionMNIST":
         cbar = plt.colorbar()
         cbar.set_ticks(np.arange(10))
@@ -384,6 +390,23 @@ def visualize_peformance_AE(
         plt.colorbar(label="Digit")
     plt.show()
     print("fitted umap")
+
+
+def visualize_perfomance_multiple_AE(dataset_types: List[DatasetType], autoencoders: List[str], autoencoder_type: AutoencoderType = AutoencoderType.DEEPECT_STACKED_AE):
+    
+    def get_title(filepath):
+        after_dipect = filepath.split('DeepECT/')[1]
+        
+        title = after_dipect.split('.pth')[0]
+    
+        return title
+
+
+    for i, autoencoder in enumerate(autoencoders):
+        dataset = get_dataset(dataset_types[i])
+        visualize_peformance_AE(pathlib.Path(autoencoders[i]), autoencoder_type[i], dataset, (16, 16) if dataset_types[i] == DatasetType.USPS else (28,28), 5, 0, get_title(autoencoders[i]))
+ 
+
 
 
 def load_results():
